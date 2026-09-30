@@ -3,6 +3,7 @@ import './style.css';
 import { Game } from './game/Game';
 import { Elf } from './player/elf';
 import { Crab } from './player/crab';
+import type { InputMode } from './player/controls';
 
 const CRAB_SCALE = 0.32; // companion-sized: ~1.4 m across with claws
 
@@ -16,7 +17,9 @@ async function boot(): Promise<void> {
     root.innerHTML = '<p class="error">WebGL 2 isn’t available in this browser, so the game can’t run.</p>';
     return;
   }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  // Touch-first devices get the on-screen controls and a lighter render load.
+  const mode: InputMode = matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse';
+  renderer.setPixelRatio(Math.min(devicePixelRatio, mode === 'touch' ? 1.5 : 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -25,7 +28,7 @@ async function boot(): Promise<void> {
 
   const base = import.meta.env.BASE_URL;
   const [elf, crab] = await Promise.all([Elf.load(`${base}models/elf.glb`), Crab.load(`${base}models/crab.glb`, CRAB_SCALE)]);
-  const game = new Game(renderer, root, elf, crab);
+  const game = new Game(renderer, root, elf, crab, mode);
   game.start();
 
   if (import.meta.env.DEV) {

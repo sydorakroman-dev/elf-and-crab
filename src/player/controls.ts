@@ -28,16 +28,24 @@ export interface Arena {
   obstacles: readonly Circle[];
 }
 
+const TOUCH_LOOK_SENSITIVITY = 0.006;
+
+export type InputMode = 'mouse' | 'touch';
+
 /**
- * The elf: pointer-lock mouse orbits a third-person camera, WASD moves relative to the camera,
- * Space dashes, holding the mouse button shoots (see `trigger`). Stays inside the arena.
+ * The elf and its third-person camera. Two input modes:
+ * - mouse: pointer lock; mouse orbits, WASD moves, Space dashes, hold left button to shoot.
+ * - touch: driven by the on-screen controls through setMove / look / setTouchTrigger / queueDash.
+ * Movement is relative to the camera; the elf stays inside the arena.
  */
 export class Player {
   /** Feet position. */
   readonly position = new THREE.Vector3();
   /** Model yaw (front = local +Z). */
   facing = 0;
-  onLockChange?: (locked: boolean) => void;
+  readonly mode: InputMode;
+  /** Fires when play starts or stops (pointer lock gained/lost, or touch play toggled). */
+  onActiveChange?: (active: boolean) => void;
   onDash?: () => void;
 
   private readonly camera: THREE.PerspectiveCamera;
@@ -48,8 +56,10 @@ export class Player {
   private readonly velocity = new THREE.Vector3();
   private readonly knock = new THREE.Vector3();
   private readonly target = new THREE.Vector3();
-  private locked = false;
+  private active = false;
   private mouseDown = false;
+  private touchTrigger = false;
+  private readonly moveInput = { x: 0, y: 0 }; // touch joystick: x right, y forward, length ≤ 1
   private yaw = 0;
   private pitch = 0.55;
   private distance = CAMERA_DISTANCE;
@@ -61,27 +71,23 @@ export class Player {
   private dashCooldown = 0;
   private readonly dashDir = new THREE.Vector3();
 
-  constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement, elf: Elf, arena: Arena) {
+  constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement, elf: Elf, arena: Arena, mode: InputMode) {
+    this.mode = mode;
     this.camera = camera;
     this.dom = dom;
     this.elf = elf;
     this.arena = arena;
 
     document.addEventListener('pointerlockchange', () => {
-      this.locked = document.pointerLockElement === dom;
-      if (!this.locked) {
-        this.keys.clear();
-        this.mouseDown = false;
-      }
-      this.onLockChange?.(this.locked);
+      if (this.mode === 'mouse') this.setActive(document.pointerLockElement === dom);
     });
     document.addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
+      if (!this.active || this.mode !== 'mouse') return;
       this.yaw -= e.movementX * MOUSE_SENSITIVITY;
       this.pitch = clamp(this.pitch + e.movementY * MOUSE_SENSITIVITY, MIN_PITCH, MAX_PITCH);
     });
     document.addEventListener('mousedown', (e) => {
-      if (this.locked && e.button === 0) this.mouseDown = true;
+      if (this.active && this.mode === 'mouse' && e.button === 0) this.mouseDown = true;
     });
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mouseDown = false;
@@ -95,7 +101,7 @@ export class Player {
       { passive: false },
     );
     addEventListener('keydown', (e) => {
-      if (!this.locked) return;
+      if (!this.active) return;
       this.keys.add(e.code);
       if (e.code === 'Space') {
         e.preventDefault();
@@ -105,13 +111,14 @@ export class Player {
     addEventListener('keyup', (e) => this.keys.delete(e.code));
   }
 
-  get isLocked(): boolean {
-    return this.locked;
+  /** True while the player is in control (not paused / on a menu). */
+  get isActive(): boolean {
+    return this.active;
   }
 
   /** True while the shoot button is held. */
   get trigger(): boolean {
-    return this.locked && this.mouseDown;
+    return this.active && (this.mouseDown || this.touchTrigger);
   }
 
   /** Invulnerable during a dash. */
@@ -119,9 +126,51 @@ export class Player {
     return this.dashTimer > 0;
   }
 
-  lock(): void {
+  /** Start playing: grabs the mouse (mouse mode) or just enables the touch controls. */
+  activate(): void {
+    if (this.mode === 'touch') this.setActive(true);
     // Some browsers return a promise that rejects if called too soon after Esc; that's harmless.
-    Promise.resolve(this.dom.requestPointerLock()).catch(() => {});
+    else Promise.resolve(this.dom.requestPointerLock()).catch(() => {});
+  }
+
+  /** Stop playing (pause / game over). */
+  deactivate(): void {
+    if (this.mode === 'touch') this.setActive(false);
+    else if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  /** Touch joystick: x right, y forward; clamped to length 1 (analog speed). */
+  setMove(x: number, y: number): void {
+    const len = Math.hypot(x, y);
+    const k = len > 1 ? 1 / len : 1;
+    this.moveInput.x = x * k;
+    this.moveInput.y = y * k;
+  }
+
+  /** Touch camera drag, in screen pixels. */
+  look(dxPixels: number, dyPixels: number): void {
+    if (!this.active) return;
+    this.yaw -= dxPixels * TOUCH_LOOK_SENSITIVITY;
+    this.pitch = clamp(this.pitch + dyPixels * TOUCH_LOOK_SENSITIVITY, MIN_PITCH, MAX_PITCH);
+  }
+
+  setTouchTrigger(down: boolean): void {
+    this.touchTrigger = down;
+  }
+
+  queueDash(): void {
+    if (this.active) this.dashQueued = true;
+  }
+
+  private setActive(active: boolean): void {
+    if (this.active === active) return;
+    this.active = active;
+    if (!active) {
+      this.keys.clear();
+      this.mouseDown = this.touchTrigger = false;
+      this.moveInput.x = this.moveInput.y = 0;
+    }
+    this.onActiveChange?.(active);
   }
 
   /** Horizontal direction the camera looks. */
@@ -160,25 +209,34 @@ export class Player {
     // Input relative to the camera's yaw.
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);
-    const fwd = +(k.has('KeyW') || k.has('ArrowUp')) - +(k.has('KeyS') || k.has('ArrowDown'));
-    const strafe = +(k.has('KeyD') || k.has('ArrowRight')) - +(k.has('KeyA') || k.has('ArrowLeft'));
+    let fwd = +(k.has('KeyW') || k.has('ArrowUp')) - +(k.has('KeyS') || k.has('ArrowDown'));
+    let strafe = +(k.has('KeyD') || k.has('ArrowRight')) - +(k.has('KeyA') || k.has('ArrowLeft'));
+    let magnitude = 1;
+    if (!fwd && !strafe && controlling) {
+      // Analog touch joystick.
+      fwd = this.moveInput.y;
+      strafe = this.moveInput.x;
+      magnitude = Math.hypot(fwd, strafe);
+    }
     const wx = -sin * fwd + cos * strafe;
     const wz = -cos * fwd - sin * strafe;
     const wlen = Math.hypot(wx, wz);
 
     const wantsDash = controlling && this.dashQueued;
     this.dashQueued = false;
-    if (wantsDash && this.dashCooldown === 0 && wlen > 0) {
+    if (wantsDash && this.dashCooldown === 0) {
       this.dashTimer = DASH_TIME;
       this.dashCooldown = DASH_COOLDOWN;
-      this.dashDir.set(wx / wlen, 0, wz / wlen);
+      // Dash where you're steering, or straight ahead if you aren't.
+      if (wlen > 0) this.dashDir.set(wx / wlen, 0, wz / wlen);
+      else this.dashDir.set(Math.sin(this.facing), 0, Math.cos(this.facing));
       this.onDash?.();
     }
 
     if (this.dashTimer > 0) {
       this.velocity.copy(this.dashDir).multiplyScalar(DASH_SPEED);
     } else {
-      const speed = wlen > 0 ? WALK_SPEED / wlen : 0;
+      const speed = wlen > 0 ? (WALK_SPEED * magnitude) / wlen : 0;
       const blend = 1 - Math.exp(-14 * dt);
       this.velocity.x += (wx * speed - this.velocity.x) * blend;
       this.velocity.z += (wz * speed - this.velocity.z) * blend;

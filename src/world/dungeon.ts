@@ -29,7 +29,7 @@ export class Dungeon {
   readonly fireSources: { position: THREE.Vector3; strength: number }[] = [];
   private readonly flames: Flame[] = [];
 
-  constructor(scene: THREE.Scene, rng: () => number) {
+  constructor(scene: THREE.Scene, rng: () => number, shadowMapSize = 2048) {
     scene.background = new THREE.Color(0x07060a);
     scene.fog = new THREE.Fog(0x07060a, 30, 80);
 
@@ -37,7 +37,7 @@ export class Dungeon {
     this.buildWalls(rng);
     this.buildPillars();
     this.buildRubble(rng);
-    this.buildLights();
+    this.buildLights(shadowMapSize);
 
     for (let k = 0; k < 4; k++) {
       const a = (k * Math.PI) / 2;
@@ -226,12 +226,12 @@ export class Dungeon {
     this.group.add(rocks);
   }
 
-  private buildLights(): void {
+  private buildLights(shadowMapSize: number): void {
     // Cool light falling from high above (the only shadow caster), plus faint fill.
     const moon = new THREE.DirectionalLight(0x9fb0ff, 0.9);
     moon.position.set(12, 40, 18);
     moon.castShadow = true;
-    moon.shadow.mapSize.set(2048, 2048);
+    moon.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     const sc = moon.shadow.camera;
     sc.left = sc.bottom = -ARENA_HALF - 4;
     sc.right = sc.top = ARENA_HALF + 4;

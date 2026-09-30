@@ -14,7 +14,12 @@ An elf archer and her crab companion hold off waves of slimes pouring out of a d
 | Click (hold) | Shoot |
 | Space | Dash (invulnerable while dashing) |
 | Scroll | Zoom |
+| M | Mute |
 | Esc | Pause |
+
+On phones and tablets (touch-first devices) the game shows on-screen controls instead:
+left thumb moves (floating joystick), right thumb drags the camera, hold 🏹 to shoot, tap 💨 to dash.
+Aim assist is wider on touch.
 
 ## Development
 
@@ -32,6 +37,7 @@ npm run balance  # difficulty simulator: bots play headlessly (needs `npm run de
 - `src/world/dungeon.ts` — the arena: instanced floor tiles and wall bricks, gates, pillars, torches.
 - `src/player/elf.ts`, `src/player/crab.ts` — the two glTF models (`public/models/`). They're static, unrigged
   meshes, so `src/player/rig.ts` groups their named parts under pivots and the classes animate them in code.
-- `src/player/controls.ts` — third-person camera and movement.
-- `src/game/` — the game loop, slimes, arrows, crab companion AI, particles, sound (WebAudio, no files),
-  and pure combat helpers in `combat.ts` (unit tested).
+- `src/player/controls.ts` — third-person camera and movement (mouse or touch input); `src/ui/touch.ts` — on-screen touch controls.
+- `src/game/` — the game loop, slimes (small, big, spitter), arrows and spitter globs, crab companion AI,
+  particles, sound (WebAudio, no files: effects plus positional fire ambience), high score, and pure
+  combat helpers in `combat.ts` including the wave difficulty curve (unit tested).

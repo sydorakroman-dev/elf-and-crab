@@ -19,7 +19,7 @@ const results = await page.evaluate(({ TRIALS }) => {
   const run = (style) => {
     g.newGame();
     const p = g.player;
-    p.locked = true;
+    p.active = true;
     p.mouseDown = true;
     const maxSteps = 60 * 600; // 10 minutes of game time
     const firstHitWave = { v: null };

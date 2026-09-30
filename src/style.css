@@ -5,15 +5,17 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+canvas { touch-action: none; }
 canvas { display: block; }
 [hidden] { display: none !important; }
 
 .hud {
   position: fixed;
-  top: 16px;
-  left: 16px;
-  right: 16px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: calc(16px + env(safe-area-inset-left, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -110,3 +112,64 @@ kbd {
 }
 .best { margin-top: 18px; font-size: 14px; color: #ffd36e; opacity: 0.85; }
 .error { padding: 24px; text-align: center; }
+
+/* Touch controls */
+.touch { position: fixed; inset: 0; touch-action: none; }
+.touch-zone { position: absolute; top: 0; bottom: 0; }
+.touch-zone.move { left: 0; width: 50%; }
+.touch-zone.look { right: 0; width: 50%; }
+.stick {
+  position: fixed;
+  left: -60px;
+  top: -60px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+.knob {
+  position: absolute;
+  left: 32px;
+  top: 32px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+}
+.tbtn {
+  position: fixed;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(10, 8, 16, 0.45);
+  color: #fff;
+  font: inherit;
+  touch-action: none;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.tbtn.shoot {
+  right: calc(24px + env(safe-area-inset-right, 0px));
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  width: 92px;
+  height: 92px;
+  font-size: 38px;
+  border-color: rgba(255, 180, 94, 0.7);
+}
+.tbtn.shoot.down { background: rgba(255, 180, 94, 0.35); transform: scale(0.94); }
+.tbtn.dash {
+  right: calc(128px + env(safe-area-inset-right, 0px));
+  bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+  width: 64px;
+  height: 64px;
+  font-size: 26px;
+}
+.tbtn.pause {
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  top: calc(60px + env(safe-area-inset-top, 0px));
+  width: 44px;
+  height: 44px;
+}

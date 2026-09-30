@@ -1,4 +1,9 @@
 import type { Best } from '../game/highscore';
+import type { InputMode } from '../player/controls';
+
+const KEYS_MOUSE =
+  '<kbd>W A S D</kbd> move · <kbd>Mouse</kbd> aim · <kbd>Click</kbd> shoot (hold) · <kbd>Space</kbd> dash · <kbd>Scroll</kbd> zoom · <kbd>M</kbd> mute · <kbd>Esc</kbd> pause';
+const KEYS_TOUCH = 'Left thumb: move · Right thumb: look · Hold 🏹 to shoot · 💨 to dash';
 
 /** DOM overlay: hearts, wave and score, wave banners, hurt flash, and the title / pause / game-over screen. */
 export class Hud {
@@ -17,7 +22,7 @@ export class Hud {
   private readonly maxHealth: number;
   private bannerTimer = 0;
 
-  constructor(root: HTMLElement, maxHealth: number, onPlay: () => void) {
+  constructor(root: HTMLElement, maxHealth: number, mode: InputMode, onPlay: () => void) {
     this.maxHealth = maxHealth;
     root.insertAdjacentHTML(
       'beforeend',
@@ -35,7 +40,7 @@ export class Hud {
          <div class="card">
            <h1 data-title>Elf &amp; Crab</h1>
            <p data-message>Slimes are pouring out of the dungeon gates.<br/>Hold them off with your bow — your crab has your back.</p>
-           <p class="keys"><kbd>W A S D</kbd> move · <kbd>Mouse</kbd> aim · <kbd>Click</kbd> shoot (hold) · <kbd>Space</kbd> dash · <kbd>Scroll</kbd> zoom · <kbd>M</kbd> mute · <kbd>Esc</kbd> pause</p>
+           <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
            <button type="button">Enter the dungeon</button>
            <p class="best" data-best hidden></p>
          </div>

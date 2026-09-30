@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../util/rng';
 import { ARENA_HALF, Dungeon, WALL_HEIGHT } from '../world/dungeon';
-import { Player } from '../player/controls';
+import { Player, type InputMode } from '../player/controls';
+import { TouchControls } from '../ui/touch';
 import type { Elf } from '../player/elf';
 import type { Crab } from '../player/crab';
 import { Enemies, type Slime } from './enemies';
@@ -22,6 +23,7 @@ const FIRE_INTERVAL = 0.36;
 const HURT_INVULNERABLE = 1.1;
 const WAVE_BREAK = 2.5;
 const AIM_ASSIST_ANGLE = 0.3; // radians
+const TOUCH_AIM_ASSIST_ANGLE = 0.65; // aiming with a thumb is much harder
 const AIM_ASSIST_RANGE = 32;
 const PLAYER_RADIUS = 0.5;
 
@@ -41,6 +43,8 @@ export class Game {
   private readonly globs = new Globs();
   private readonly effects = new Effects();
   private readonly hud: Hud;
+  private readonly touch: TouchControls | null = null;
+  private readonly mode: InputMode;
   private readonly sfx = new Sfx();
   private readonly aim = new THREE.Vector3();
   private readonly cameraRight = new THREE.Vector3();
@@ -55,26 +59,37 @@ export class Game {
   private invulnerable = 0;
   private onFrame?: () => void;
 
-  constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, crab: Crab) {
+  constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, crab: Crab, mode: InputMode) {
     this.renderer = renderer;
     this.elf = elf;
-    this.dungeon = new Dungeon(this.scene, mulberry32(1337));
+    this.mode = mode;
+    this.dungeon = new Dungeon(this.scene, mulberry32(1337), mode === 'touch' ? 1024 : 2048);
     this.enemies = new Enemies(this.dungeon.gates);
     this.companion = new Companion(crab);
     this.scene.add(elf.group, crab.group, this.enemies.group, this.arrows.group, this.globs.group, this.effects.mesh);
 
-    this.player = new Player(this.camera, renderer.domElement, elf, {
-      half: ARENA_HALF,
-      wallHeight: WALL_HEIGHT,
-      obstacles: this.dungeon.obstacles,
-    });
+    this.player = new Player(
+      this.camera,
+      renderer.domElement,
+      elf,
+      { half: ARENA_HALF, wallHeight: WALL_HEIGHT, obstacles: this.dungeon.obstacles },
+      mode,
+    );
 
-    this.hud = new Hud(root, MAX_HEALTH, () => {
+    this.hud = new Hud(root, MAX_HEALTH, mode, () => {
       this.sfx.unlock();
       if (this.state !== 'playing') this.newGame();
-      this.player.lock();
+      this.player.activate();
     });
-    this.player.onLockChange = (locked) => this.hud.setPaused(!locked, this.state === 'playing');
+    if (mode === 'touch') this.touch = new TouchControls(root, this.player);
+    this.player.onActiveChange = (active) => {
+      this.hud.setPaused(!active, this.state === 'playing');
+      this.touch?.setVisible(active);
+    };
+    // Phones: pause when the app goes to the background (mouse mode loses pointer lock anyway).
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.player.deactivate();
+    });
     this.player.onDash = () => this.sfx.whoosh();
     elf.onStep = (strength) => this.sfx.footstep(strength);
     crab.onStep = (strength) => this.sfx.scuttle(strength);
@@ -135,7 +150,7 @@ export class Game {
     this.time += dt;
     this.dungeon.update(this.time);
     this.updateAmbience(dt);
-    const running = this.state === 'playing' && this.player.isLocked;
+    const running = this.state === 'playing' && this.player.isActive;
     if (!running) {
       // Paused / title / game over: keep the scene alive but frozen.
       this.player.update(0, false);
@@ -194,7 +209,8 @@ export class Game {
     const dir = this.player.aimDirection(this.aim);
     // Gentle aim assist: snap to a slime near the crosshair line.
     const alive = this.enemies.slimes.filter((s) => s.alive);
-    const i = pickAimTarget(p, dir.x, dir.z, alive, AIM_ASSIST_ANGLE, AIM_ASSIST_RANGE);
+    const assist = this.mode === 'touch' ? TOUCH_AIM_ASSIST_ANGLE : AIM_ASSIST_ANGLE;
+    const i = pickAimTarget(p, dir.x, dir.z, alive, assist, AIM_ASSIST_RANGE);
     if (i >= 0) dir.set(alive[i].x - p.x, 0, alive[i].z - p.z).normalize();
 
     this.player.faceShot(dir);
@@ -286,7 +302,7 @@ export class Game {
     const isBest = recordRun(run);
     this.hud.showGameOver(this.wave, this.score, isBest);
     this.hud.setBest(loadBest() ?? run);
-    document.exitPointerLock();
+    this.player.deactivate();
   }
 
   private resize(): void {
