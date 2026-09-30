@@ -59,6 +59,12 @@ export class Sfx {
     this.tone('sine', big ? 160 : 240, 50, big ? 0.25 : 0.15, 0.15);
   }
 
+  /** Wet "ptoo" from a spitter. */
+  spit(): void {
+    this.tone('sine', 520, 180, 0.14, 0.09);
+    this.hiss(0.08, 0.06, 1800, 'bandpass');
+  }
+
   hurt(): void {
     this.tone('sawtooth', 200, 60, 0.3, 0.12);
   }

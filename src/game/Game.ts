@@ -6,9 +6,10 @@ import type { Elf } from '../player/elf';
 import type { Crab } from '../player/crab';
 import { Enemies, type Slime } from './enemies';
 import { Arrows } from './arrows';
+import { GLOB_COLOR, Globs } from './globs';
 import { Effects } from './effects';
 import { Companion } from './companion';
-import { pickAimTarget } from './combat';
+import { pickAimTarget, waveSpec } from './combat';
 import { fireAmbience } from './ambience';
 import { Hud } from '../ui/hud';
 import { Sfx } from './audio';
@@ -36,6 +37,7 @@ export class Game {
   private readonly companion: Companion;
   private readonly enemies: Enemies;
   private readonly arrows = new Arrows();
+  private readonly globs = new Globs();
   private readonly effects = new Effects();
   private readonly hud: Hud;
   private readonly sfx = new Sfx();
@@ -58,7 +60,7 @@ export class Game {
     this.dungeon = new Dungeon(this.scene, mulberry32(1337));
     this.enemies = new Enemies(this.dungeon.gates);
     this.companion = new Companion(crab);
-    this.scene.add(elf.group, crab.group, this.enemies.group, this.arrows.group, this.effects.mesh);
+    this.scene.add(elf.group, crab.group, this.enemies.group, this.arrows.group, this.globs.group, this.effects.mesh);
 
     this.player = new Player(this.camera, renderer.domElement, elf, {
       half: ARENA_HALF,
@@ -96,6 +98,7 @@ export class Game {
   private resetWorld(): void {
     this.enemies.clear();
     this.arrows.clear();
+    this.globs.clear();
     this.effects.clear();
     // Start just south of the brazier, looking north across the arena.
     this.player.spawn(0, 8, 0);
@@ -142,7 +145,11 @@ export class Game {
     this.elf.group.visible = this.invulnerable === 0 || Math.floor(this.time * 16) % 2 === 0;
 
     this.shoot(dt);
-    this.enemies.update(dt, this.player.position, this.dungeon.obstacles, ARENA_HALF);
+    for (const spit of this.enemies.update(dt, this.player.position, this.dungeon.obstacles, ARENA_HALF)) {
+      this.globs.fire(spit);
+      this.sfx.spit();
+    }
+    this.updateGlobs(dt);
 
     for (const hit of this.arrows.update(dt, this.enemies.slimes, this.dungeon.obstacles, ARENA_HALF)) {
       this.damage(hit.slime, hit.dirX, hit.dirZ);
@@ -196,11 +203,12 @@ export class Game {
   private damage(slime: Slime, dirX: number, dirZ: number): void {
     const killed = slime.hurt(1, dirX, dirZ);
     const y = slime.radius;
+    const big = slime.kind === 'big';
     if (killed) {
       this.score += slime.score;
       this.hud.setScore(this.score);
-      this.effects.burst(slime.x, y, slime.z, slime.color, slime.big ? 40 : 22, slime.big ? 8 : 6);
-      this.sfx.splat(slime.big);
+      this.effects.burst(slime.x, y, slime.z, slime.color, big ? 40 : 22, big ? 8 : 6);
+      this.sfx.splat(big);
     } else {
       this.effects.burst(slime.x, y, slime.z, slime.color, 6, 4, 0.12);
       this.sfx.hit();
@@ -217,15 +225,33 @@ export class Game {
       const d = Math.hypot(dx, dz);
       if (d > s.radius + PLAYER_RADIUS) continue;
 
-      this.health -= s.big ? 2 : 1;
-      this.invulnerable = HURT_INVULNERABLE;
-      this.player.knockback(dx / (d || 1), dz / (d || 1), 16);
-      this.hud.setHealth(Math.max(0, this.health));
-      this.hud.flashHurt();
-      this.sfx.hurt();
-      if (this.health <= 0) this.gameOver();
+      this.hurtPlayer(s.kind === 'big' ? 2 : 1, dx / (d || 1), dz / (d || 1));
       return;
     }
+  }
+
+  private updateGlobs(dt: number): void {
+    const p = this.player.position;
+    const canBeHit = this.invulnerable === 0 && !this.player.dashing;
+    const target = canBeHit ? { x: p.x, z: p.z, radius: PLAYER_RADIUS } : null;
+    for (const hit of this.globs.update(dt, this.time, target, this.dungeon.obstacles, ARENA_HALF)) {
+      this.effects.burst(hit.x, 1, hit.z, GLOB_COLOR, 10, 4, 0.12);
+      if (!hit.hitPlayer) continue;
+      const dx = p.x - hit.x;
+      const dz = p.z - hit.z;
+      const d = Math.hypot(dx, dz) || 1;
+      this.hurtPlayer(1, dx / d, dz / d);
+    }
+  }
+
+  private hurtPlayer(amount: number, dirX: number, dirZ: number): void {
+    this.health -= amount;
+    this.invulnerable = HURT_INVULNERABLE;
+    this.player.knockback(dirX, dirZ, 16);
+    this.hud.setHealth(Math.max(0, this.health));
+    this.hud.flashHurt();
+    this.sfx.hurt();
+    if (this.health <= 0) this.gameOver();
   }
 
   private updateWaves(dt: number): void {
@@ -245,7 +271,8 @@ export class Game {
     if (this.waveBreak <= 0) {
       this.wave++;
       this.enemies.startWave(this.wave);
-      this.hud.banner(`Wave ${this.wave}`);
+      const newSpitters = waveSpec(this.wave).spitters > 0 && waveSpec(this.wave - 1).spitters === 0;
+      this.hud.banner(newSpitters ? `Wave ${this.wave} · Spitters!` : `Wave ${this.wave}`);
       this.sfx.wave();
     }
   }

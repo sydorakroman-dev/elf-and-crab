@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampToArena, pickAimTarget, pushOutOfCircles, segmentCircleHit, waveSpec } from './combat';
+import { clampToArena, pickAimTarget, pushOutOfCircles, rangeIntent, segmentCircleHit, waveSpec } from './combat';
 
 describe('pushOutOfCircles', () => {
   it('moves a point out to the touching distance', () => {
@@ -71,20 +71,30 @@ describe('pickAimTarget', () => {
 
 describe('waveSpec', () => {
   it('starts gently', () => {
-    expect(waveSpec(1)).toMatchObject({ small: 6, big: 0, speedBonus: 0, smallHp: 1, packSize: 1 });
+    expect(waveSpec(1)).toMatchObject({ small: 6, big: 0, spitters: 0, speedBonus: 0, smallHp: 1, packSize: 1 });
+    expect(waveSpec(2).spitters).toBe(0);
+    expect(waveSpec(3).spitters).toBe(1);
   });
 
   it('gets harder every wave', () => {
     for (let w = 1; w < 12; w++) {
       const a = waveSpec(w);
       const b = waveSpec(w + 1);
-      expect(b.small + b.big).toBeGreaterThanOrEqual(a.small + a.big);
+      expect(b.small + b.big + b.spitters).toBeGreaterThanOrEqual(a.small + a.big + a.spitters);
       expect(b.speedBonus).toBeGreaterThanOrEqual(a.speedBonus);
       expect(b.spawnInterval).toBeLessThanOrEqual(a.spawnInterval);
     }
   });
 
   it('is capped', () => {
-    expect(waveSpec(1000)).toMatchObject({ small: 30, big: 12, speedBonus: 3, packSize: 5, spawnInterval: 0.7 });
+    expect(waveSpec(1000)).toMatchObject({ small: 30, big: 12, spitters: 8, speedBonus: 3, packSize: 5, spawnInterval: 0.7 });
+  });
+});
+
+describe('rangeIntent', () => {
+  it('closes in, backs off, or circles', () => {
+    expect(rangeIntent(20, 9, 14)).toBe(1);
+    expect(rangeIntent(5, 9, 14)).toBe(-1);
+    expect(rangeIntent(11, 9, 14)).toBe(0);
   });
 });

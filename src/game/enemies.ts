@@ -1,19 +1,38 @@
 import * as THREE from 'three';
-import { clampToArena, pushOutOfCircles, waveSpec, type Circle, type WaveSpec } from './combat';
+import { clampToArena, pushOutOfCircles, rangeIntent, waveSpec, type Circle, type WaveSpec } from './combat';
 
-const SMALL = { radius: 0.7, speed: 3.6, color: 0x62d46a, score: 10 };
-const BIG = { radius: 1.25, speed: 2.6, color: 0xa35ee0, score: 40 };
+export type SlimeKind = 'small' | 'big' | 'spitter';
+
+const KINDS: Record<SlimeKind, { radius: number; speed: number; color: number; score: number; hopRate: number; push: number }> = {
+  small: { radius: 0.7, speed: 3.6, color: 0x62d46a, score: 10, hopRate: 1.8, push: 9 },
+  big: { radius: 1.25, speed: 2.6, color: 0xa35ee0, score: 40, hopRate: 1.3, push: 5 },
+  spitter: { radius: 0.85, speed: 3.2, color: 0x4fb3ff, score: 25, hopRate: 1.6, push: 7 },
+};
+
+// Spitter tuning.
+const SPIT_RANGE_MIN = 9;
+const SPIT_RANGE_MAX = 14;
+const SPIT_INTERVAL = 3.0;
+const SPIT_WINDUP = 0.7;
 
 const bodyGeo = new THREE.SphereGeometry(1, 12, 8).translate(0, 1, 0);
 const eyeGeo = new THREE.SphereGeometry(0.2, 8, 6);
 const pupilGeo = new THREE.SphereGeometry(0.11, 8, 6);
+const mouthGeo = new THREE.TorusGeometry(0.16, 0.05, 6, 10);
 const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
 const pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
 
+export interface Spit {
+  x: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+}
+
 export class Slime {
   readonly group = new THREE.Group();
+  readonly kind: SlimeKind;
   readonly radius: number;
-  readonly big: boolean;
   readonly score: number;
   readonly color: THREE.Color;
   hp: number;
@@ -21,23 +40,30 @@ export class Slime {
   dying = false;
   removed = false;
   private readonly speed: number;
+  private readonly hopRate: number;
+  private readonly push: number;
   private readonly body: THREE.Mesh;
   private readonly material: THREE.MeshStandardMaterial;
   private readonly knock = new THREE.Vector2();
   private hopPhase = Math.random();
   private flash = 0;
   private deathTimer = 0;
+  private spitTimer = SPIT_INTERVAL * (0.5 + Math.random() * 0.5);
+  private windup = 0; // > 0 while swelling up to spit
+  private strafeSign = Math.random() < 0.5 ? -1 : 1;
 
-  constructor(big: boolean, x: number, z: number, speedBonus: number, hp: number) {
-    const kind = big ? BIG : SMALL;
-    this.big = big;
-    this.radius = kind.radius;
+  constructor(kind: SlimeKind, x: number, z: number, speedBonus: number, hp: number) {
+    const k = KINDS[kind];
+    this.kind = kind;
+    this.radius = k.radius;
     this.hp = hp;
-    this.score = kind.score;
-    this.speed = kind.speed + speedBonus;
-    this.color = new THREE.Color(kind.color);
+    this.score = k.score;
+    this.speed = k.speed + speedBonus;
+    this.hopRate = k.hopRate;
+    this.push = k.push;
+    this.color = new THREE.Color(k.color);
     this.material = new THREE.MeshStandardMaterial({
-      color: kind.color,
+      color: k.color,
       roughness: 0.35,
       flatShading: true,
       emissive: 0xff2020,
@@ -51,6 +77,12 @@ export class Slime {
       const pupil = new THREE.Mesh(pupilGeo, pupilMat);
       pupil.position.set(side * 0.35, 1.25, 0.98);
       this.body.add(eye, pupil);
+    }
+    if (kind === 'spitter') {
+      // A little round "o" mouth, for spitting.
+      const mouth = new THREE.Mesh(mouthGeo, pupilMat);
+      mouth.position.set(0, 0.85, 0.97);
+      this.body.add(mouth);
     }
     this.group.add(this.body);
     this.group.scale.setScalar(this.radius);
@@ -74,13 +106,13 @@ export class Slime {
     if (this.dying) return false;
     this.hp -= amount;
     this.flash = 1;
-    const push = this.big ? 5 : 9;
-    this.knock.set(dirX * push, dirZ * push);
+    this.knock.set(dirX * this.push, dirZ * this.push);
     if (this.hp <= 0) this.dying = true;
     return this.dying;
   }
 
-  update(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): void {
+  /** Moves the slime; returns a spit when a spitter lets one fly this step. */
+  update(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit | null {
     this.flash = Math.max(0, this.flash - dt * 5);
     this.material.emissiveIntensity = this.flash * 1.5;
 
@@ -89,22 +121,59 @@ export class Slime {
       const s = Math.max(0, 1 - this.deathTimer / 0.18);
       this.group.scale.set(this.radius * (1 + (1 - s) * 0.6), this.radius * s, this.radius * (1 + (1 - s) * 0.6));
       if (s === 0) this.removed = true;
-      return;
+      return null;
     }
 
-    // Hop toward the target: fast while airborne, slow while squashed on the ground.
-    this.hopPhase = (this.hopPhase + dt * (this.big ? 1.3 : 1.8)) % 1;
+    const p = this.group.position;
+    let tx = target.x - p.x;
+    let tz = target.z - p.z;
+    const dist = Math.hypot(tx, tz) || 1;
+    tx /= dist;
+    tz /= dist;
+
+    // Spitters freeze and swell up, then spit at where the target is now.
+    let spit: Spit | null = null;
+    if (this.kind === 'spitter') {
+      if (this.windup > 0) {
+        this.windup -= dt;
+        const swell = 1 - this.windup / SPIT_WINDUP;
+        this.body.position.y = 0;
+        this.body.scale.set(1 + swell * 0.25, 1 + swell * 0.35, 1 + swell * 0.25);
+        this.group.rotation.y = Math.atan2(tx, tz);
+        if (this.windup <= 0) {
+          spit = { x: p.x + tx * this.radius, z: p.z + tz * this.radius, dirX: tx, dirZ: tz };
+          this.spitTimer = SPIT_INTERVAL * (0.8 + Math.random() * 0.4);
+        }
+        return spit;
+      }
+      this.spitTimer -= dt;
+      if (this.spitTimer <= 0 && dist < SPIT_RANGE_MAX + 4) {
+        this.windup = SPIT_WINDUP;
+        return null;
+      }
+    }
+
+    // Hop: fast while airborne, slow while squashed on the ground.
+    this.hopPhase = (this.hopPhase + dt * this.hopRate) % 1;
     const t = this.hopPhase;
     const airborne = t < 0.6;
     const air = airborne ? Math.sin((t / 0.6) * Math.PI) : 0;
     const squash = airborne ? 0 : Math.sin(((t - 0.6) / 0.4) * Math.PI);
 
-    const p = this.group.position;
-    let dx = target.x - p.x;
-    let dz = target.z - p.z;
-    const dist = Math.hypot(dx, dz) || 1;
-    dx /= dist;
-    dz /= dist;
+    // Melee slimes chase; spitters hold a distance band and circle inside it.
+    let dx = tx;
+    let dz = tz;
+    if (this.kind === 'spitter') {
+      const intent = rangeIntent(dist, SPIT_RANGE_MIN, SPIT_RANGE_MAX);
+      if (intent === 0) {
+        dx = -tz * this.strafeSign;
+        dz = tx * this.strafeSign;
+        if (Math.random() < dt * 0.3) this.strafeSign *= -1;
+      } else {
+        dx = tx * intent;
+        dz = tz * intent;
+      }
+    }
     // Keep slimes from stacking up on each other.
     for (const o of others) {
       if (o === this || o.dying) continue;
@@ -128,6 +197,7 @@ export class Slime {
     this.group.rotation.y = Math.atan2(target.x - p.x, target.z - p.z);
     this.body.position.y = air * 0.7;
     this.body.scale.set(1 + squash * 0.25 - air * 0.08, 1 - squash * 0.3 + air * 0.12, 1 + squash * 0.25 - air * 0.08);
+    return null;
   }
 }
 
@@ -135,7 +205,7 @@ export class Slime {
 export class Enemies {
   readonly group = new THREE.Group();
   readonly slimes: Slime[] = [];
-  private queue: boolean[] = []; // true = big slime
+  private queue: SlimeKind[] = [];
   private spawnTimer = 0;
   private spec: WaveSpec = waveSpec(1);
   private readonly gates: THREE.Vector3[];
@@ -151,8 +221,12 @@ export class Enemies {
 
   startWave(wave: number): void {
     this.spec = waveSpec(wave);
-    const { small, big } = this.spec;
-    this.queue = [...Array(small).fill(false), ...Array(big).fill(true)].sort(() => Math.random() - 0.5);
+    const { small, big, spitters } = this.spec;
+    this.queue = [
+      ...Array<SlimeKind>(small).fill('small'),
+      ...Array<SlimeKind>(big).fill('big'),
+      ...Array<SlimeKind>(spitters).fill('spitter'),
+    ].sort(() => Math.random() - 0.5);
     this.spawnTimer = 0.3;
   }
 
@@ -162,7 +236,8 @@ export class Enemies {
     this.queue = [];
   }
 
-  update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], half: number): void {
+  /** Updates all slimes; returns the spits launched this step. */
+  update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], half: number): Spit[] {
     this.spawnTimer -= dt;
     if (this.queue.length && this.spawnTimer <= 0) {
       // A pack pours out of one gate at a time.
@@ -174,17 +249,23 @@ export class Enemies {
         const inward = n * 0.8; // stagger the pack so it doesn't spawn overlapping
         const x = gate.x + (alongX ? jitter : -Math.sign(gate.x) * inward);
         const z = gate.z + (alongX ? -Math.sign(gate.z) * inward : jitter);
-        const big = this.queue.pop()!;
-        const s = new Slime(big, x, z, this.spec.speedBonus, big ? this.spec.bigHp : this.spec.smallHp);
+        const kind = this.queue.pop()!;
+        const hp = kind === 'big' ? this.spec.bigHp : kind === 'spitter' ? this.spec.spitterHp : this.spec.smallHp;
+        const s = new Slime(kind, x, z, this.spec.speedBonus, hp);
         this.slimes.push(s);
         this.group.add(s.group);
       }
     }
-    for (const s of this.slimes) s.update(dt, target, this.slimes, obstacles, half);
+    const spits: Spit[] = [];
+    for (const s of this.slimes) {
+      const spit = s.update(dt, target, this.slimes, obstacles, half);
+      if (spit) spits.push(spit);
+    }
     for (let i = this.slimes.length - 1; i >= 0; i--) {
       if (!this.slimes[i].removed) continue;
       this.group.remove(this.slimes[i].group);
       this.slimes.splice(i, 1);
     }
+    return spits;
   }
 }

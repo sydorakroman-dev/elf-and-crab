@@ -2,7 +2,8 @@
 // and reports which wave they die on. Needs `npm run dev` running and Google Chrome installed.
 //   npm run balance            # 6 runs per bot
 //   npm run balance -- 10      # 10 runs per bot
-// Bots: "stand" never moves (a weak player); "kite" strafes, backs off and dashes (a decent one).
+// Bots: "stand" never moves (a weak player); "kite" strafes, backs off, dashes out of melee and
+// through incoming globs (a decent one).
 // Both aim perfectly at the nearest slime, so real players will take hits earlier.
 import { chromium } from 'playwright-core';
 const TRIALS = +(process.argv[2] ?? 6);
@@ -37,6 +38,14 @@ const results = await page.evaluate(({ TRIALS }) => {
           p.keys.add('KeyA');
           if (d < 7) p.keys.add('KeyS');
           if (d < 3) p.keys.add('Space');
+          // Dash through globs that are about to hit.
+          for (const gl of g.globs.globs) {
+            if (!gl.active) continue;
+            const gx = pos.x - gl.mesh.position.x;
+            const gz = pos.z - gl.mesh.position.z;
+            const gd = Math.hypot(gx, gz);
+            if (gd < 4 && (gx * gl.dirX + gz * gl.dirZ) / gd > 0.8) p.dashQueued = true;
+          }
           // Steer back toward the middle when near a wall.
           if (Math.max(Math.abs(pos.x), Math.abs(pos.z)) > 22) p.keys.add('KeyW');
         }
