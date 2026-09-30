@@ -13,6 +13,7 @@ import { pickAimTarget, waveSpec } from './combat';
 import { fireAmbience } from './ambience';
 import { Hud } from '../ui/hud';
 import { Sfx } from './audio';
+import { loadBest, recordRun } from './highscore';
 
 const STEP = 1 / 60; // fixed simulation step
 const MAX_FRAME = 0.1; // clamp long frames (tab switches) so physics doesn't explode
@@ -81,6 +82,7 @@ export class Game {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
     });
 
+    this.hud.setBest(loadBest());
     this.resetWorld();
     addEventListener('resize', () => this.resize());
     this.resize();
@@ -280,7 +282,10 @@ export class Game {
   private gameOver(): void {
     this.state = 'over';
     this.elf.group.visible = true;
-    this.hud.showGameOver(this.wave, this.score);
+    const run = { score: this.score, wave: this.wave };
+    const isBest = recordRun(run);
+    this.hud.showGameOver(this.wave, this.score, isBest);
+    this.hud.setBest(loadBest() ?? run);
     document.exitPointerLock();
   }
 

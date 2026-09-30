@@ -108,4 +108,5 @@ kbd {
   cursor: pointer;
   box-shadow: 0 0 24px rgba(255, 150, 60, 0.5);
 }
+.best { margin-top: 18px; font-size: 14px; color: #ffd36e; opacity: 0.85; }
 .error { padding: 24px; text-align: center; }
