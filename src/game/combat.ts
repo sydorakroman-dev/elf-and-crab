@@ -85,10 +85,29 @@ export function pickAimTarget(origin: Point, dx: number, dz: number, targets: re
   return best;
 }
 
-/** How many small and big slimes a wave contains. Grows each wave, capped. */
-export function waveComposition(wave: number): { small: number; big: number } {
+export interface WaveSpec {
+  small: number;
+  big: number;
+  /** Added to every slime's base speed (player walks at 7.5). */
+  speedBonus: number;
+  smallHp: number;
+  bigHp: number;
+  /** Slimes that come through a gate together. */
+  packSize: number;
+  /** Seconds between packs. */
+  spawnInterval: number;
+}
+
+/** Everything that makes a wave harder. Tuned with the bot simulator (`npm run balance`); all values capped. */
+export function waveSpec(wave: number): WaveSpec {
+  const w = Math.max(1, wave);
   return {
-    small: Math.min(16, 2 + wave * 2),
-    big: Math.min(8, Math.max(0, wave - 2)),
+    small: Math.min(30, 3 + w * 3),
+    big: Math.min(12, Math.floor(w * 0.8)),
+    speedBonus: Math.min(3, (w - 1) * 0.35),
+    smallHp: 1 + Math.floor((w - 1) / 5),
+    bigHp: 4 + Math.floor((w - 1) / 3),
+    packSize: Math.min(5, 1 + Math.floor(w / 2)),
+    spawnInterval: Math.max(0.7, 1.6 - w * 0.1),
   };
 }

@@ -1,9 +1,8 @@
 import * as THREE from 'three';
-import { clampToArena, pushOutOfCircles, waveComposition, type Circle } from './combat';
+import { clampToArena, pushOutOfCircles, waveSpec, type Circle, type WaveSpec } from './combat';
 
-const SMALL = { radius: 0.7, hp: 1, speed: 3.4, color: 0x62d46a, score: 10 };
-const BIG = { radius: 1.25, hp: 4, speed: 2.5, color: 0xa35ee0, score: 40 };
-const SPAWN_INTERVAL = 0.55;
+const SMALL = { radius: 0.7, speed: 3.6, color: 0x62d46a, score: 10 };
+const BIG = { radius: 1.25, speed: 2.6, color: 0xa35ee0, score: 40 };
 
 const bodyGeo = new THREE.SphereGeometry(1, 12, 8).translate(0, 1, 0);
 const eyeGeo = new THREE.SphereGeometry(0.2, 8, 6);
@@ -29,11 +28,11 @@ export class Slime {
   private flash = 0;
   private deathTimer = 0;
 
-  constructor(big: boolean, x: number, z: number, speedBonus: number) {
+  constructor(big: boolean, x: number, z: number, speedBonus: number, hp: number) {
     const kind = big ? BIG : SMALL;
     this.big = big;
     this.radius = kind.radius;
-    this.hp = kind.hp;
+    this.hp = hp;
     this.score = kind.score;
     this.speed = kind.speed + speedBonus;
     this.color = new THREE.Color(kind.color);
@@ -138,7 +137,7 @@ export class Enemies {
   readonly slimes: Slime[] = [];
   private queue: boolean[] = []; // true = big slime
   private spawnTimer = 0;
-  private speedBonus = 0;
+  private spec: WaveSpec = waveSpec(1);
   private readonly gates: THREE.Vector3[];
 
   constructor(gates: THREE.Vector3[]) {
@@ -151,9 +150,9 @@ export class Enemies {
   }
 
   startWave(wave: number): void {
-    const { small, big } = waveComposition(wave);
+    this.spec = waveSpec(wave);
+    const { small, big } = this.spec;
     this.queue = [...Array(small).fill(false), ...Array(big).fill(true)].sort(() => Math.random() - 0.5);
-    this.speedBonus = Math.min(1.5, (wave - 1) * 0.15);
     this.spawnTimer = 0.3;
   }
 
@@ -166,13 +165,20 @@ export class Enemies {
   update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], half: number): void {
     this.spawnTimer -= dt;
     if (this.queue.length && this.spawnTimer <= 0) {
-      this.spawnTimer = SPAWN_INTERVAL;
+      // A pack pours out of one gate at a time.
+      this.spawnTimer = this.spec.spawnInterval;
       const gate = this.gates[Math.floor(Math.random() * this.gates.length)];
-      const jitter = (Math.random() - 0.5) * 2.5;
       const alongX = Math.abs(gate.z) > Math.abs(gate.x);
-      const s = new Slime(this.queue.pop()!, gate.x + (alongX ? jitter : 0), gate.z + (alongX ? 0 : jitter), this.speedBonus);
-      this.slimes.push(s);
-      this.group.add(s.group);
+      for (let n = 0; n < this.spec.packSize && this.queue.length; n++) {
+        const jitter = (Math.random() - 0.5) * 3.5;
+        const inward = n * 0.8; // stagger the pack so it doesn't spawn overlapping
+        const x = gate.x + (alongX ? jitter : -Math.sign(gate.x) * inward);
+        const z = gate.z + (alongX ? -Math.sign(gate.z) * inward : jitter);
+        const big = this.queue.pop()!;
+        const s = new Slime(big, x, z, this.spec.speedBonus, big ? this.spec.bigHp : this.spec.smallHp);
+        this.slimes.push(s);
+        this.group.add(s.group);
+      }
     }
     for (const s of this.slimes) s.update(dt, target, this.slimes, obstacles, half);
     for (let i = this.slimes.length - 1; i >= 0; i--) {

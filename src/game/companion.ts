@@ -9,7 +9,7 @@ const CHARGE_SPEED = 10;
 const AGGRO_RANGE = 7; // from the crab
 const LEASH = 12; // won't chase slimes further than this from the elf
 const PINCH_RANGE = 0.5;
-const PINCH_COOLDOWN = 0.9;
+const PINCH_COOLDOWN = 1.5;
 const TURN_RATE = 10;
 
 /** The crab: trots after the elf and pinches slimes that come near. */

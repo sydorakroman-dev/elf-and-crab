@@ -24,6 +24,7 @@ npm run dev      # http://localhost:5173
 npm test         # unit tests (Vitest)
 npm run build    # production build in dist/
 npm run deploy   # build and publish to GitHub Pages (gh-pages branch)
+npm run balance  # difficulty simulator: bots play headlessly (needs `npm run dev` + Chrome)
 ```
 
 ## How it's put together

@@ -15,7 +15,7 @@ import { Sfx } from './audio';
 const STEP = 1 / 60; // fixed simulation step
 const MAX_FRAME = 0.1; // clamp long frames (tab switches) so physics doesn't explode
 const MAX_HEALTH = 5;
-const FIRE_INTERVAL = 0.32;
+const FIRE_INTERVAL = 0.36;
 const HURT_INVULNERABLE = 1.1;
 const WAVE_BREAK = 2.5;
 const AIM_ASSIST_ANGLE = 0.3; // radians
