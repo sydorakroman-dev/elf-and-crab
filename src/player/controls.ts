@@ -187,6 +187,7 @@ export class Player {
 
   knockback(dirX: number, dirZ: number, strength: number): void {
     this.knock.set(dirX * strength, 0, dirZ * strength);
+    this.elf.flinch();
   }
 
   spawn(x: number, z: number, yaw: number): void {
@@ -261,7 +262,13 @@ export class Player {
     const g = this.elf.group;
     g.position.copy(pos);
     g.rotation.y = this.facing;
-    this.elf.update(dt, Math.min(groundSpeed, WALK_SPEED), aiming);
+    this.elf.update(dt, {
+      speed: Math.min(groundSpeed, WALK_SPEED),
+      moveYaw: groundSpeed > 0.3 ? Math.atan2(this.velocity.x, this.velocity.z) : this.facing,
+      facing: this.facing,
+      aiming,
+      dashing: this.dashTimer > 0,
+    });
 
     this.updateCamera(dt);
   }
