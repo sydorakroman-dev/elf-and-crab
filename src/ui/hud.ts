@@ -3,6 +3,7 @@ export class Hud {
   private readonly hearts: HTMLElement;
   private readonly wave: HTMLElement;
   private readonly score: HTMLElement;
+  private readonly muted: HTMLElement;
   private readonly bannerEl: HTMLElement;
   private readonly hurt: HTMLElement;
   private readonly hud: HTMLElement;
@@ -21,14 +22,17 @@ export class Hud {
        <div class="hud" hidden>
          <div class="hearts" data-hearts></div>
          <div class="wave" data-wave></div>
-         <div class="score" data-score>0</div>
+         <div class="right">
+           <span class="muted" data-muted hidden>🔇</span>
+           <div class="score" data-score>0</div>
+         </div>
        </div>
        <div class="banner" data-banner></div>
        <div class="overlay">
          <div class="card">
            <h1 data-title>Elf &amp; Crab</h1>
            <p data-message>Slimes are pouring out of the dungeon gates.<br/>Hold them off with your bow — your crab has your back.</p>
-           <p class="keys"><kbd>W A S D</kbd> move · <kbd>Mouse</kbd> aim · <kbd>Click</kbd> shoot (hold) · <kbd>Space</kbd> dash · <kbd>Scroll</kbd> zoom · <kbd>Esc</kbd> pause</p>
+           <p class="keys"><kbd>W A S D</kbd> move · <kbd>Mouse</kbd> aim · <kbd>Click</kbd> shoot (hold) · <kbd>Space</kbd> dash · <kbd>Scroll</kbd> zoom · <kbd>M</kbd> mute · <kbd>Esc</kbd> pause</p>
            <button type="button">Enter the dungeon</button>
          </div>
        </div>`,
@@ -36,6 +40,7 @@ export class Hud {
     this.hearts = root.querySelector('[data-hearts]')!;
     this.wave = root.querySelector('[data-wave]')!;
     this.score = root.querySelector('[data-score]')!;
+    this.muted = root.querySelector('[data-muted]')!;
     this.bannerEl = root.querySelector('[data-banner]')!;
     this.hurt = root.querySelector('.hurt')!;
     this.hud = root.querySelector('.hud')!;
@@ -59,6 +64,10 @@ export class Hud {
 
   setHealth(health: number): void {
     this.hearts.innerHTML = Array.from({ length: this.maxHealth }, (_, i) => `<span class="${i < health ? 'full' : ''}">♥</span>`).join('');
+  }
+
+  setMuted(muted: boolean): void {
+    this.muted.hidden = !muted;
   }
 
   setScore(score: number): void {

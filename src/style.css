@@ -33,6 +33,8 @@ canvas { display: block; }
   font-variant-numeric: tabular-nums;
 }
 .score { font-size: 20px; color: #ffd36e; }
+.right { display: flex; align-items: center; gap: 10px; }
+.muted { font-size: 20px; opacity: 0.8; }
 
 .banner {
   position: fixed;

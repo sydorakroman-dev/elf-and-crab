@@ -25,6 +25,8 @@ export class Dungeon {
   readonly obstacles: Circle[] = [];
   /** Just inside each gate — where enemies enter. */
   readonly gates: THREE.Vector3[] = [];
+  /** Fire positions and loudness (torches 1, brazier 2), for positional ambience. */
+  readonly fireSources: { position: THREE.Vector3; strength: number }[] = [];
   private readonly flames: Flame[] = [];
 
   constructor(scene: THREE.Scene, rng: () => number) {
@@ -258,6 +260,7 @@ export class Dungeon {
       sprite.scale.setScalar(size);
       this.group.add(light, sprite);
       this.flames.push({ light, sprite, base: intensity, seed: this.flames.length * 1.7 });
+      this.fireSources.push({ position: sprite.position, strength: size > 2 ? 2 : 1 });
     };
 
     // Two torches per wall.

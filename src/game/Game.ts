@@ -9,6 +9,7 @@ import { Arrows } from './arrows';
 import { Effects } from './effects';
 import { Companion } from './companion';
 import { pickAimTarget } from './combat';
+import { fireAmbience } from './ambience';
 import { Hud } from '../ui/hud';
 import { Sfx } from './audio';
 
@@ -39,6 +40,7 @@ export class Game {
   private readonly hud: Hud;
   private readonly sfx = new Sfx();
   private readonly aim = new THREE.Vector3();
+  private readonly cameraRight = new THREE.Vector3();
   private accumulator = 0;
   private time = 0;
   private state: State = 'ready';
@@ -70,6 +72,12 @@ export class Game {
       this.player.lock();
     });
     this.player.onLockChange = (locked) => this.hud.setPaused(!locked, this.state === 'playing');
+    this.player.onDash = () => this.sfx.whoosh();
+    elf.onStep = (strength) => this.sfx.footstep(strength);
+    crab.onStep = (strength) => this.sfx.scuttle(strength);
+    addEventListener('keydown', (e) => {
+      if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
+    });
 
     this.resetWorld();
     addEventListener('resize', () => this.resize());
@@ -121,6 +129,7 @@ export class Game {
   private update(dt: number): void {
     this.time += dt;
     this.dungeon.update(this.time);
+    this.updateAmbience(dt);
     const running = this.state === 'playing' && this.player.isLocked;
     if (!running) {
       // Paused / title / game over: keep the scene alive but frozen.
@@ -158,6 +167,13 @@ export class Game {
     this.checkContacts();
     this.effects.update(dt);
     this.updateWaves(dt);
+  }
+
+  /** Fire crackle follows the elf: louder near torches, panned by where they are on screen. */
+  private updateAmbience(dt: number): void {
+    this.cameraRight.setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const { level, pan } = fireAmbience(this.player.position, this.cameraRight.x, this.cameraRight.z, this.dungeon.fireSources);
+    this.sfx.setAmbience(level, pan, dt);
   }
 
   private shoot(dt: number): void {

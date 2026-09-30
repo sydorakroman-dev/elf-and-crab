@@ -19,6 +19,8 @@ export class Crab {
   private readonly arms: Limb[] = [];
   private readonly pincers: Limb[] = [];
   private readonly magic: THREE.Object3D[] = [];
+  /** Called on each scuttle step while moving; `strength` 0..1 follows speed. */
+  onStep?: (strength: number) => void;
   private walkPhase = 0;
   private time = 0;
   private pinchTimer = 0;
@@ -84,7 +86,9 @@ export class Crab {
     this.time += dt;
     this.pinchTimer = Math.max(0, this.pinchTimer - dt);
     const move = Math.min(1, speed / 6);
+    const before = Math.floor(this.walkPhase / Math.PI);
     this.walkPhase += dt * (3 + speed * 2.4);
+    if (move > 0.15 && !airborne && Math.floor(this.walkPhase / Math.PI) !== before) this.onStep?.(move);
 
     for (const leg of this.legs) {
       const cycle = this.walkPhase + leg.phase;

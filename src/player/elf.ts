@@ -22,6 +22,8 @@ export class Elf {
   private readonly drawArm: THREE.Group;
   private readonly cloak: THREE.Group;
   private readonly ponytail: THREE.Group;
+  /** Called when a foot lands while walking; `strength` 0..1 follows speed. */
+  onStep?: (strength: number) => void;
   private walkPhase = 0;
   private time = 0;
   private aim = 0; // 0 relaxed → 1 bow raised
@@ -76,7 +78,10 @@ export class Elf {
   update(dt: number, speed: number, aiming: boolean): void {
     this.time += dt;
     const move = Math.min(1, speed / 6);
+    const before = Math.floor(this.walkPhase / Math.PI);
     this.walkPhase += dt * (2 + speed * 1.5);
+    // Legs cross (a foot plants) every half cycle.
+    if (move > 0.15 && Math.floor(this.walkPhase / Math.PI) !== before) this.onStep?.(move);
     this.aim += ((aiming ? 1 : 0) - this.aim) * (1 - Math.exp(-14 * dt));
     this.recoil = Math.max(0, this.recoil - dt * 6);
 

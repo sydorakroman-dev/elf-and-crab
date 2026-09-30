@@ -38,6 +38,7 @@ export class Player {
   /** Model yaw (front = local +Z). */
   facing = 0;
   onLockChange?: (locked: boolean) => void;
+  onDash?: () => void;
 
   private readonly camera: THREE.PerspectiveCamera;
   private readonly dom: HTMLElement;
@@ -56,6 +57,7 @@ export class Player {
   private aimTimer = 0;
   private aimFacing = 0;
   private dashTimer = 0;
+  private dashQueued = false; // set on key-down so even a very quick tap dashes
   private dashCooldown = 0;
   private readonly dashDir = new THREE.Vector3();
 
@@ -95,7 +97,10 @@ export class Player {
     addEventListener('keydown', (e) => {
       if (!this.locked) return;
       this.keys.add(e.code);
-      if (e.code === 'Space') e.preventDefault();
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!e.repeat) this.dashQueued = true;
+      }
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
   }
@@ -161,10 +166,13 @@ export class Player {
     const wz = -cos * fwd - sin * strafe;
     const wlen = Math.hypot(wx, wz);
 
-    if (k.has('Space') && this.dashCooldown === 0 && wlen > 0) {
+    const wantsDash = controlling && this.dashQueued;
+    this.dashQueued = false;
+    if (wantsDash && this.dashCooldown === 0 && wlen > 0) {
       this.dashTimer = DASH_TIME;
       this.dashCooldown = DASH_COOLDOWN;
       this.dashDir.set(wx / wlen, 0, wz / wlen);
+      this.onDash?.();
     }
 
     if (this.dashTimer > 0) {
