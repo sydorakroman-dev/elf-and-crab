@@ -1,0 +1,147 @@
+import * as THREE from 'three';
+import { segmentCircleHit, type Circle } from './combat';
+import type { Slime } from './enemies';
+
+const SPEED = 42;
+const LIFETIME = 1.4;
+const STUCK_TIME = 4;
+const HEIGHT = 1.3;
+const POOL = 40;
+
+interface Arrow {
+  mesh: THREE.Group;
+  dir: THREE.Vector3;
+  life: number;
+  stuck: number; // > 0 while embedded in a wall or pillar
+  active: boolean;
+}
+
+export interface ArrowHit {
+  slime: Slime;
+  dirX: number;
+  dirZ: number;
+}
+
+/** Pooled arrows that fly flat at chest height, hit slimes, and stick in walls and pillars. */
+export class Arrows {
+  readonly group = new THREE.Group();
+  private readonly arrows: Arrow[] = [];
+
+  constructor() {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a2b, flatShading: true });
+    const steel = new THREE.MeshStandardMaterial({ color: 0xd8dde2, metalness: 0.6, roughness: 0.3, flatShading: true });
+    const feather = new THREE.MeshStandardMaterial({ color: 0xf1ead8, side: THREE.DoubleSide });
+    const shaftGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.1, 5).rotateX(Math.PI / 2);
+    const headGeo = new THREE.ConeGeometry(0.07, 0.22, 5).rotateX(Math.PI / 2).translate(0, 0, 0.64);
+    const fletchGeo = new THREE.PlaneGeometry(0.16, 0.26).rotateX(Math.PI / 2).translate(0, 0, -0.42);
+    for (let i = 0; i < POOL; i++) {
+      const mesh = new THREE.Group();
+      const f1 = new THREE.Mesh(fletchGeo, feather);
+      const f2 = new THREE.Mesh(fletchGeo, feather);
+      f2.rotation.z = Math.PI / 2;
+      mesh.add(new THREE.Mesh(shaftGeo, wood), new THREE.Mesh(headGeo, steel), f1, f2);
+      mesh.traverse((o) => (o.castShadow = true));
+      mesh.visible = false;
+      this.group.add(mesh);
+      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false });
+    }
+  }
+
+  fire(x: number, z: number, dir: THREE.Vector3): void {
+    // Reuse a free arrow, or the oldest stuck one.
+    const a = this.arrows.find((a) => !a.active) ?? this.arrows.reduce((o, a) => (a.stuck && a.stuck < o.stuck ? a : o));
+    a.active = true;
+    a.life = LIFETIME;
+    a.stuck = 0;
+    a.dir.copy(dir).setY(0).normalize();
+    a.mesh.position.set(x, HEIGHT, z);
+    a.mesh.rotation.set(0, Math.atan2(a.dir.x, a.dir.z), 0);
+    a.mesh.visible = true;
+  }
+
+  clear(): void {
+    for (const a of this.arrows) {
+      a.active = false;
+      a.mesh.visible = false;
+    }
+  }
+
+  /** Moves arrows and returns the slimes they hit this step. */
+  update(dt: number, slimes: readonly Slime[], obstacles: readonly Circle[], half: number): ArrowHit[] {
+    const hits: ArrowHit[] = [];
+    for (const a of this.arrows) {
+      if (!a.active) continue;
+      if (a.stuck > 0) {
+        a.stuck -= dt;
+        if (a.stuck <= 0) {
+          a.active = false;
+          a.mesh.visible = false;
+        }
+        continue;
+      }
+      a.life -= dt;
+      const p = a.mesh.position;
+      const bx = p.x + a.dir.x * SPEED * dt;
+      const bz = p.z + a.dir.z * SPEED * dt;
+
+      // Nearest thing along this step: a slime, a pillar, or the wall.
+      let bestT = Infinity;
+      let hitSlime: Slime | null = null;
+      for (const s of slimes) {
+        if (!s.alive) continue;
+        const t = segmentCircleHit(p.x, p.z, bx, bz, { x: s.x, z: s.z, radius: s.radius + 0.15 });
+        if (t !== null && t < bestT) {
+          bestT = t;
+          hitSlime = s;
+        }
+      }
+      let solid = false;
+      for (const o of obstacles) {
+        const t = segmentCircleHit(p.x, p.z, bx, bz, o);
+        if (t !== null && t < bestT) {
+          bestT = t;
+          hitSlime = null;
+          solid = true;
+        }
+      }
+      const wallT = wallHit(p.x, p.z, bx, bz, half);
+      if (wallT !== null && wallT < bestT) {
+        bestT = wallT;
+        hitSlime = null;
+        solid = true;
+      }
+
+      if (hitSlime) {
+        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z });
+        a.active = false;
+        a.mesh.visible = false;
+      } else if (solid) {
+        // Embed the tip a little way into whatever it hit.
+        p.x += (bx - p.x) * bestT + a.dir.x * 0.35;
+        p.z += (bz - p.z) * bestT + a.dir.z * 0.35;
+        a.stuck = STUCK_TIME;
+      } else if (a.life <= 0) {
+        a.active = false;
+        a.mesh.visible = false;
+      } else {
+        p.x = bx;
+        p.z = bz;
+      }
+    }
+    return hits;
+  }
+}
+
+/** Fraction along A→B where it leaves the square [-half, half]², or null if it stays inside. */
+function wallHit(ax: number, az: number, bx: number, bz: number, half: number): number | null {
+  let t: number | null = null;
+  const check = (a: number, b: number) => {
+    if (Math.abs(b) <= half) return;
+    const edge = b > 0 ? half : -half;
+    const tt = (edge - a) / (b - a);
+    if (t === null || tt < t) t = tt;
+  };
+  check(ax, bx);
+  check(az, bz);
+  return t;
+}
