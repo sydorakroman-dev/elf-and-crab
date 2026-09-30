@@ -23,7 +23,45 @@ canvas { display: block; }
   pointer-events: none;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
+.left { display: flex; flex-direction: column; gap: 8px; align-self: flex-start; }
 .hearts { font-size: 26px; letter-spacing: 2px; color: rgba(255, 255, 255, 0.18); }
+.powers { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--c);
+  background: rgba(10, 8, 16, 0.6);
+  font-size: 13px;
+  overflow: hidden;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c) 45%, transparent);
+}
+.chip b { color: var(--c); font-variant-numeric: tabular-nums; min-width: 1.2em; }
+.chip i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c); }
+.chip.low { animation: chipblink 0.4s steps(2) infinite; }
+@keyframes chipblink { 50% { opacity: 0.45; } }
+.toast {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 22%;
+  text-align: center;
+  font-size: clamp(20px, 4vw, 30px);
+  font-weight: 800;
+  text-shadow: 0 0 18px currentColor, 0 2px 4px rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  pointer-events: none;
+}
+.toast.show { animation: toast 1.4s ease-out forwards; }
+@keyframes toast {
+  0% { opacity: 0; transform: translateY(12px) scale(0.9); }
+  15% { opacity: 1; transform: translateY(0) scale(1.05); }
+  70% { opacity: 1; transform: translateY(-6px) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px); }
+}
 .hearts .full { color: #ff4d5e; text-shadow: 0 0 10px rgba(255, 60, 80, 0.7); }
 .wave,
 .score {

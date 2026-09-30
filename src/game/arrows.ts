@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { segmentCircleHit, type Circle } from './combat';
 import type { Slime } from './enemies';
+import { glowTexture } from '../util/glow';
 
 const SPEED = 42;
 const LIFETIME = 1.4;
 const STUCK_TIME = 4;
 const HEIGHT = 1.3;
-const POOL = 40;
+const POOL = 90; // rapid fire + multishot keeps a lot in the air
 
 interface Arrow {
   mesh: THREE.Group;
@@ -14,6 +15,9 @@ interface Arrow {
   life: number;
   stuck: number; // > 0 while embedded in a wall or pillar
   active: boolean;
+  /** Piercing arrows fly through slimes, hitting each one once. */
+  pierce: boolean;
+  hitSlimes: Set<Slime>;
 }
 
 export interface ArrowHit {
@@ -33,6 +37,13 @@ export class Arrows {
     const feather = new THREE.MeshStandardMaterial({ color: 0xf1ead8, side: THREE.DoubleSide });
     const shaftGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.1, 5).rotateX(Math.PI / 2);
     const headGeo = new THREE.ConeGeometry(0.07, 0.22, 5).rotateX(Math.PI / 2).translate(0, 0, 0.64);
+    const pierceGlow = new THREE.SpriteMaterial({
+      map: glowTexture(),
+      color: 0xc77dff,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      transparent: true,
+    });
     const fletchGeo = new THREE.PlaneGeometry(0.16, 0.26).rotateX(Math.PI / 2).translate(0, 0, -0.42);
     for (let i = 0; i < POOL; i++) {
       const mesh = new THREE.Group();
@@ -41,19 +52,28 @@ export class Arrows {
       f2.rotation.z = Math.PI / 2;
       mesh.add(new THREE.Mesh(shaftGeo, wood), new THREE.Mesh(headGeo, steel), f1, f2);
       mesh.traverse((o) => (o.castShadow = true));
+      const glow = new THREE.Sprite(pierceGlow);
+      glow.scale.set(0.9, 0.9, 1);
+      glow.position.z = 0.5;
+      glow.visible = false;
+      mesh.add(glow);
+      mesh.userData.glow = glow;
       mesh.visible = false;
       this.group.add(mesh);
-      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false });
+      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false, pierce: false, hitSlimes: new Set() });
     }
   }
 
-  fire(x: number, z: number, dir: THREE.Vector3): void {
+  fire(x: number, z: number, dir: { x: number; z: number }, pierce = false): void {
     // Reuse a free arrow, or the oldest stuck one.
     const a = this.arrows.find((a) => !a.active) ?? this.arrows.reduce((o, a) => (a.stuck && a.stuck < o.stuck ? a : o));
     a.active = true;
     a.life = LIFETIME;
     a.stuck = 0;
-    a.dir.copy(dir).setY(0).normalize();
+    a.pierce = pierce;
+    a.hitSlimes.clear();
+    a.dir.set(dir.x, 0, dir.z).normalize();
+    a.mesh.userData.glow.visible = pierce;
     a.mesh.position.set(x, HEIGHT, z);
     a.mesh.rotation.set(0, Math.atan2(a.dir.x, a.dir.z), 0);
     a.mesh.visible = true;
@@ -88,7 +108,7 @@ export class Arrows {
       let bestT = Infinity;
       let hitSlime: Slime | null = null;
       for (const s of slimes) {
-        if (!s.alive) continue;
+        if (!s.alive || a.hitSlimes.has(s)) continue;
         const t = segmentCircleHit(p.x, p.z, bx, bz, { x: s.x, z: s.z, radius: s.radius + 0.15 });
         if (t !== null && t < bestT) {
           bestT = t;
@@ -111,7 +131,13 @@ export class Arrows {
         solid = true;
       }
 
-      if (hitSlime) {
+      if (hitSlime && a.pierce) {
+        // Punch through: register the hit and keep flying from here this step.
+        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z });
+        a.hitSlimes.add(hitSlime);
+        p.x += (bx - p.x) * bestT;
+        p.z += (bz - p.z) * bestT;
+      } else if (hitSlime) {
         hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z });
         a.active = false;
         a.mesh.visible = false;

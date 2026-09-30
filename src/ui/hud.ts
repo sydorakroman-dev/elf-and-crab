@@ -1,5 +1,6 @@
 import type { Best } from '../game/highscore';
 import type { InputMode } from '../player/controls';
+import { POWER_UPS, type PowerUpType } from '../game/powerups';
 
 const KEYS_MOUSE =
   '<kbd>W A S D</kbd> move · <kbd>Mouse</kbd> aim · <kbd>Click</kbd> shoot (hold) · <kbd>Space</kbd> dash · <kbd>Scroll</kbd> zoom · <kbd>M</kbd> mute · <kbd>Esc</kbd> pause';
@@ -11,6 +12,10 @@ export class Hud {
   private readonly wave: HTMLElement;
   private readonly score: HTMLElement;
   private readonly muted: HTMLElement;
+  private readonly powers: HTMLElement;
+  private readonly toastEl: HTMLElement;
+  private powersKey = '';
+  private toastTimer = 0;
   private readonly bannerEl: HTMLElement;
   private readonly hurt: HTMLElement;
   private readonly hud: HTMLElement;
@@ -28,7 +33,10 @@ export class Hud {
       'beforeend',
       `<div class="hurt"></div>
        <div class="hud" hidden>
-         <div class="hearts" data-hearts></div>
+         <div class="left">
+           <div class="hearts" data-hearts></div>
+           <div class="powers" data-powers></div>
+         </div>
          <div class="wave" data-wave></div>
          <div class="right">
            <span class="muted" data-muted hidden>🔇</span>
@@ -36,6 +44,7 @@ export class Hud {
          </div>
        </div>
        <div class="banner" data-banner></div>
+       <div class="toast" data-toast></div>
        <div class="overlay">
          <div class="card">
            <h1 data-title>Elf &amp; Crab</h1>
@@ -50,6 +59,8 @@ export class Hud {
     this.wave = root.querySelector('[data-wave]')!;
     this.score = root.querySelector('[data-score]')!;
     this.muted = root.querySelector('[data-muted]')!;
+    this.powers = root.querySelector('[data-powers]')!;
+    this.toastEl = root.querySelector('[data-toast]')!;
     this.bannerEl = root.querySelector('[data-banner]')!;
     this.hurt = root.querySelector('.hurt')!;
     this.hud = root.querySelector('.hud')!;
@@ -74,6 +85,32 @@ export class Hud {
 
   setHealth(health: number): void {
     this.hearts.innerHTML = Array.from({ length: this.maxHealth }, (_, i) => `<span class="${i < health ? 'full' : ''}">♥</span>`).join('');
+  }
+
+  /** Active power-up chips with a countdown bar; only touches the DOM when something visible changes. */
+  setPowers(list: { type: PowerUpType; remaining: number }[]): void {
+    const key = list.map((p) => `${p.type}:${Math.ceil(p.remaining * 4)}`).join('|');
+    if (key === this.powersKey) return;
+    this.powersKey = key;
+    this.powers.innerHTML = list
+      .map(({ type, remaining }) => {
+        const def = POWER_UPS[type];
+        const color = `#${def.color.toString(16).padStart(6, '0')}`;
+        const pct = Math.min(100, (remaining / def.duration) * 100);
+        const low = remaining < 3 ? ' low' : '';
+        return `<div class="chip${low}" style="--c:${color}" title="${def.label}"><span>${def.icon}</span><b>${Math.ceil(remaining)}</b><i style="width:${pct}%"></i></div>`;
+      })
+      .join('');
+  }
+
+  toast(text: string, color: number): void {
+    this.toastEl.textContent = text;
+    this.toastEl.style.color = `#${color.toString(16).padStart(6, '0')}`;
+    this.toastEl.classList.remove('show');
+    void this.toastEl.offsetWidth;
+    this.toastEl.classList.add('show');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('show'), 1400);
   }
 
   setMuted(muted: boolean): void {

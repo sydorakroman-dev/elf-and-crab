@@ -103,6 +103,20 @@ export class Sfx {
     src.stop(t + 0.26);
   }
 
+  /** Bright rising sparkle when grabbing a power-up. */
+  powerUp(): void {
+    [0, 7, 12, 19].forEach((semi, i) => {
+      const f = 660 * Math.pow(2, semi / 12);
+      this.tone('triangle', f, f * 1.01, 0.18, 0.08, i * 0.05);
+    });
+  }
+
+  /** Glassy crack when the shield absorbs a hit. */
+  shieldBreak(): void {
+    this.hiss(0.25, 0.18, 4000, 'highpass');
+    this.tone('sine', 900, 200, 0.3, 0.1);
+  }
+
   /** Rising arpeggio at the start of a wave. */
   wave(): void {
     [0, 4, 7, 12].forEach((semi, i) => {
