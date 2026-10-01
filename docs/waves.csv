@@ -1,0 +1,19 @@
+room,room_name,wave,enemies,difficulty_level,small,big,spitters,beetles,snakes,dire_wolves,boars,boss,speed_bonus,small_hp,big_hp,spitter_hp,pack_size,seconds_between_packs
+1,The Woodland,1,beasts,,,,,8,2,0,0,,,,,,2,1.4
+1,The Woodland,2,beasts,,,,,8,4,2,1,,,,,,2,1.4
+1,The Woodland,3,beasts,,,,,6,0,2,0,The Crystal Bear,,,,,2,3
+2,The Crypt,1,slimes,2.3,9,1,0,,,,,,0.45,10,40,20,2,1.37
+2,The Crypt,2,slimes,2.95,11,2,0,,,,,,0.68,10,40,20,2,1.31
+2,The Crypt,3,slimes,3.6,13,2,1,,,,,,0.91,10,40,20,2,1.24
+3,The Flooded Hall,1,slimes,3.6,13,2,1,,,,,,0.91,10,40,20,2,1.24
+3,The Flooded Hall,2,slimes,4.25,15,3,1,,,,,,1.14,10,50,20,3,1.18
+3,The Flooded Hall,3,slimes,4.9,17,3,1,,,,,,1.36,10,50,20,3,1.11
+4,The Lava Chamber,1,slimes,4.9,17,3,1,,,,,,1.36,10,50,20,3,1.11
+4,The Lava Chamber,2,slimes,5.55,19,4,1,,,,,,1.59,10,50,30,3,1.04
+4,The Lava Chamber,3,slimes,6.2,21,4,2,,,,,,1.82,20,50,30,4,0.98
+5,The Crystal Cave,1,slimes,6.2,21,4,2,,,,,,1.82,20,50,30,4,0.98
+5,The Crystal Cave,2,slimes,6.85,23,5,2,,,,,,2.05,20,50,30,4,0.92
+5,The Crystal Cave,3,slimes,7.5,25,6,2,,,,,,2.27,20,60,30,4,0.85
+6,The Throne Room,1,slimes,7.5,25,6,2,,,,,,2.27,20,60,30,4,0.85
+6,The Throne Room,2,slimes,8.15,27,6,2,,,,,,2.5,20,60,30,5,0.79
+6,The Throne Room,3,slimes,8.8,6,0,0,,,,,The King Slime,2.73,20,,,5,0.72

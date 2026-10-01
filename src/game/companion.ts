@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { angleDelta, sidewaysHeading } from '../player/crab';
 import type { FamiliarBody } from '../player/beasts';
 import { clampToArena, pushOutOfCircles, type Circle } from './combat';
-import type { Slime } from './enemies';
+import type { Enemy } from './enemies';
 import type { FamiliarCommand } from '../net/protocol';
 import { FAMILIARS, POUNCE_WIDTH, SPELLS, SpellCooldowns, distanceToSegment, pounceLanding, type FamiliarKind, type SpellId } from './familiars';
 
@@ -11,13 +11,13 @@ const TURN_RATE = 10;
 const LEAP_HEIGHT = 1.3;
 
 export interface CompanionResult {
-  /** Slime bitten / pinched this step, and how hard. */
-  bitten: Slime | null;
+  /** Enemy bitten / pinched this step, and how hard. */
+  bitten: Enemy | null;
   biteDamage: number;
   /** Spells that went off this step (cooldowns already started). */
   cast: SpellId[];
   /** Slimes struck by an in-progress pounce this step (each once per pounce). */
-  pounceHits: Slime[];
+  pounceHits: Enemy[];
   /** True on the step a pounce lands. */
   landed: boolean;
 }
@@ -41,7 +41,7 @@ export class Companion {
   private biteCooldown = 0;
   private queued: SpellId[] = [];
   private _kind: FamiliarKind | null = null;
-  private leap: { from: THREE.Vector3; to: THREE.Vector3; t: number; hit: Set<Slime> } | null = null;
+  private leap: { from: THREE.Vector3; to: THREE.Vector3; t: number; hit: Set<Enemy> } | null = null;
   private _height = 0;
 
   constructor(bodies: Record<FamiliarKind, FamiliarBody>) {
@@ -117,7 +117,7 @@ export class Companion {
     this.lastTap = { x: this.target.x, z: this.target.z };
   }
 
-  update(dt: number, slimes: readonly Slime[], obstacles: readonly Circle[], half: number): CompanionResult {
+  update(dt: number, slimes: readonly Enemy[], obstacles: readonly Circle[], half: number): CompanionResult {
     const result: CompanionResult = { bitten: null, biteDamage: 0, cast: [], pounceHits: [], landed: false };
     const kind = this._kind;
     if (!kind) return result;
@@ -143,7 +143,7 @@ export class Companion {
     }
 
     // Bite whatever's within reach, even on the move (not mid-leap).
-    let prey: Slime | null = null;
+    let prey: Enemy | null = null;
     if (!this.leap) {
       let best = BITE_REACH;
       for (const s of slimes) {
@@ -210,7 +210,7 @@ export class Companion {
     this.velocity.set(0, 0, 0);
   }
 
-  private updateLeap(dt: number, slimes: readonly Slime[], radius: number, half: number, obstacles: readonly Circle[], result: CompanionResult): void {
+  private updateLeap(dt: number, slimes: readonly Enemy[], radius: number, half: number, obstacles: readonly Circle[], result: CompanionResult): void {
     const leap = this.leap!;
     const prev = { x: this.position.x, z: this.position.z };
     leap.t = Math.min(1, leap.t + dt / SPELLS.pounce.duration);

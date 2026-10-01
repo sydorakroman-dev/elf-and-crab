@@ -1,18 +1,26 @@
 import * as THREE from 'three';
 import { clampToArena, pushOutOfCircles, rangeIntent, waveSpec, type Circle, type WaveSpec } from './combat';
 import { glowTexture } from '../util/glow';
+import { SLIME_ATTACKS } from './balance';
+import { q } from '../net/snapshot';
+import { ENEMY_KIND_LIST } from './enemyKinds';
+import { Beast } from './beasts';
 
 export type SlimeKind = 'small' | 'big' | 'spitter' | 'boss';
+export type BeastKind = 'beetle' | 'snake' | 'direwolf' | 'boar' | 'bear';
+export type EnemyKind = SlimeKind | BeastKind;
+export const SLIME_KIND_LIST: SlimeKind[] = ['small', 'big', 'spitter', 'boss'];
 
-export const SLIME_KINDS: Record<SlimeKind, { radius: number; speed: number; color: number; score: number; hopRate: number; push: number }> = {
-  small: { radius: 0.7, speed: 3.6, color: 0x62d46a, score: 10, hopRate: 1.8, push: 9 },
-  big: { radius: 1.25, speed: 2.6, color: 0xa35ee0, score: 40, hopRate: 1.3, push: 5 },
-  spitter: { radius: 0.85, speed: 3.2, color: 0x4fb3ff, score: 25, hopRate: 1.6, push: 7 },
-  boss: { radius: 2.8, speed: 2.2, color: 0xc0303a, score: 500, hopRate: 0.9, push: 0.6 },
+/** `touch`: damage to the hero (of 100 HP) on contact. */
+export const SLIME_KINDS: Record<SlimeKind, { radius: number; speed: number; color: number; score: number; hopRate: number; push: number; touch: number }> = {
+  small: { radius: 0.7, speed: 3.6, color: 0x62d46a, score: 10, hopRate: 1.8, push: 9, touch: 20 },
+  big: { radius: 1.25, speed: 2.6, color: 0xa35ee0, score: 40, hopRate: 1.3, push: 5, touch: 35 },
+  spitter: { radius: 0.85, speed: 3.2, color: 0x4fb3ff, score: 25, hopRate: 1.6, push: 7, touch: 15 },
+  boss: { radius: 2.8, speed: 2.2, color: 0xc0303a, score: 500, hopRate: 0.9, push: 0.6, touch: 30 },
 };
 
 // King Slime (boss) tuning.
-export const BOSS_HP = 90;
+export const BOSS_HP = 900;
 const BOSS_FIRST_ACTION = 3;
 const BOSS_ACTION_GAP = 3.2; // seconds of chasing between attacks
 const SLAM_WINDUP = 0.9;
@@ -155,11 +163,69 @@ export interface Spit {
   dirZ: number;
 }
 
-/** The King Slime landing a slam: everything within `r` of (x, z) is hit. */
-export interface Slam {
+/** An area attack landing this step (a slam, a pounce, a swipe): the hero is hit if within `r` of (x, z). */
+export interface Strike {
   x: number;
   z: number;
   r: number;
+  damage: number;
+  knock: number;
+}
+
+/** An enemy calling in reinforcements (the King splitting, the bear roaring). */
+export interface Summon {
+  kind: EnemyKind;
+  count: number;
+}
+
+/**
+ * Network form of any enemy: [id, kind, x, z, yaw, y, a, b, c, flash, stun, death, calm].
+ * Slimes put their squash (sx, sy, sz) in a/b/c; beasts put speed, attack progress and mode.
+ */
+export type EnemyTuple = [number, number, number, number, number, number, number, number, number, number, number, number, number];
+
+/** What the game needs from any enemy, slime or beast. */
+export interface Enemy {
+  readonly id: number;
+  readonly kind: EnemyKind;
+  readonly radius: number;
+  readonly score: number;
+  readonly color: THREE.Color;
+  readonly maxHp: number;
+  hp: number;
+  readonly group: THREE.Group;
+  readonly x: number;
+  readonly z: number;
+  readonly alive: boolean;
+  dying: boolean;
+  removed: boolean;
+  readonly stunned: boolean;
+  readonly calmed: boolean;
+  /** No contact damage right now (stunned, calmed…). */
+  readonly harmless: boolean;
+  /** Damage to the hero on contact right now (a charging boar hits harder). */
+  readonly touchDamage: number;
+  /** Knockback strength when it hits the hero by contact. */
+  readonly touchKnock: number;
+  /** Speed multiplier for this step, set by area effects (resets after each update). */
+  slow: number;
+  /** Mini-bosses and bosses get a health bar. */
+  readonly bossName: string | null;
+  /** Where an attack is about to land (warning ring), if any. */
+  readonly telegraph: Telegraph | null;
+  /** Set during update(): an area attack that landed this step. */
+  strike: Strike | null;
+  /** Set during update(): reinforcements to spawn. */
+  summon: Summon | null;
+  hurt(amount: number, dirX: number, dirZ: number): boolean;
+  stun(seconds: number): void;
+  calm(seconds: number): void;
+  setPosition(x: number, z: number): void;
+  /** Called when its contact hit the hero (e.g. the wolf backs off). */
+  onHitTarget(): void;
+  /** Moves / attacks; returns any globs it spits this step. */
+  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): Spit[];
+  tuple(): EnemyTuple;
 }
 
 /** Where a boss attack will land, for the warning ring: progress 0 → 1 until impact. */
@@ -174,21 +240,23 @@ type BossPhase = 'chase' | 'slam-windup' | 'slam-leap' | 'slam-recover' | 'volle
 
 let nextSlimeId = 1;
 
-export class Slime {
+export class Slime implements Enemy {
   readonly id = nextSlimeId++;
   readonly visual: SlimeVisual;
   readonly kind: SlimeKind;
   readonly radius: number;
   readonly score: number;
+  /** Damage to the hero on contact. */
+  readonly touchDamage: number;
   readonly color: THREE.Color;
   readonly pose: SlimePose;
   readonly maxHp: number;
   hp: number;
   /** Boss only: where its current attack will land (for the warning ring). */
   telegraph: Telegraph | null = null;
-  /** Boss only: a slam that landed this step, and how many small slimes to split off. */
-  slam: Slam | null = null;
-  splitRequest = 0;
+  strike: Strike | null = null;
+  summon: Summon | null = null;
+  readonly touchKnock = 16;
   /** Set once hp hits 0; the slime shrinks away, then `removed` is set. */
   dying = false;
   removed = false;
@@ -221,6 +289,7 @@ export class Slime {
     this.hp = hp;
     this.maxHp = hp;
     this.score = k.score;
+    this.touchDamage = k.touch;
     this.speed = k.speed + speedBonus;
     this.hopRate = k.hopRate;
     this.push = k.push;
@@ -279,7 +348,7 @@ export class Slime {
       // Split off small slimes as health drops past each threshold.
       while (this.splitsDone < SPLIT_AT.length && this.hp <= this.maxHp * SPLIT_AT[this.splitsDone]) {
         this.splitsDone++;
-        this.splitRequest += SPLIT_COUNT;
+        this.summon = { kind: 'small', count: (this.summon?.count ?? 0) + SPLIT_COUNT };
       }
     }
     return this.dying;
@@ -307,9 +376,19 @@ export class Slime {
   }
 
   /** Moves the slime; returns any globs it spits this step. */
-  update(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit[] {
+  get bossName(): string | null {
+    return this.kind === 'boss' ? 'The King Slime' : null;
+  }
+
+  onHitTarget(): void {}
+
+  tuple(): EnemyTuple {
+    const o = this.pose;
+    return [this.id, ENEMY_KIND_LIST.indexOf(this.kind), q(o.x), q(o.z), q(o.yaw), q(o.y), q(o.sx), q(o.sy), q(o.sz), q(o.flash), o.stun, q(o.death), o.calm];
+  }
+
+  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): Spit[] {
     this.time += dt;
-    this.slam = null;
     const spit = this.kind === 'boss' && !this.dying && this.stunTimer <= 0 ? this.bossStep(dt, target, others, obstacles, half) : this.step(dt, target, others, obstacles, half);
     this.pose.flash = this.flash;
     this.pose.stun = this.stunTimer > 0 ? 1 : 0;
@@ -326,7 +405,7 @@ export class Slime {
   }
 
   /** The King Slime: lumbers after the elf, then alternates a leaping slam and a spit volley. */
-  private bossStep(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit[] | null {
+  private bossStep(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): Spit[] | null {
     if (this.bossPhase !== 'chase') this.flash = Math.max(0, this.flash - dt * 5); // step() fades it while chasing
     const p = this.pose;
     this.bossTimer -= dt;
@@ -380,7 +459,7 @@ export class Slime {
           p.z = t.z;
           p.y = 0;
           pushOutOfCircles(p, this.radius, obstacles);
-          this.slam = { x: p.x, z: p.z, r: SLAM_RADIUS };
+          this.strike = { x: p.x, z: p.z, r: SLAM_RADIUS, damage: SLIME_ATTACKS.kingSlam, knock: 16 };
           this.telegraph = null;
           this.bossPhase = 'slam-recover';
           this.bossTimer = SLAM_RECOVER;
@@ -415,7 +494,7 @@ export class Slime {
     }
   }
 
-  private step(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit | null {
+  private step(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): Spit | null {
     this.flash = Math.max(0, this.flash - dt * 5);
     const p = this.pose;
 
@@ -541,13 +620,33 @@ export class Slime {
   }
 }
 
-/** Spawns slimes wave by wave through the dungeon gates and updates them. */
+/** A beast wave in the forest: which beasts, and (wave 3) the mini-boss. */
+export interface BeastWave {
+  beetle: number;
+  snake: number;
+  direwolf: number;
+  boar: number;
+  /** Spawns the Crystal Bear at the north end, with the rest as escorts. */
+  bear: boolean;
+}
+
+/** The Woodland's three waves: beetles and snakes, then wolves and a boar, then the Crystal Bear. */
+export const WOODLAND_WAVES: BeastWave[] = [
+  { beetle: 8, snake: 2, direwolf: 0, boar: 0, bear: false },
+  { beetle: 8, snake: 4, direwolf: 2, boar: 1, bear: false },
+  { beetle: 6, snake: 0, direwolf: 2, boar: 0, bear: true },
+];
+
+/** Spawns enemies wave by wave through the gates (slimes in the dungeon, beasts in the forest) and updates them. */
 export class Enemies {
   readonly group = new THREE.Group();
-  readonly slimes: Slime[] = [];
-  private queue: SlimeKind[] = [];
+  /** Every enemy currently in the room. */
+  readonly all: Enemy[] = [];
+  private queue: EnemyKind[] = [];
   private spawnTimer = 0;
   private spec: WaveSpec = waveSpec(1);
+  private packSize = 1;
+  private spawnInterval = 1.5;
   private gates: THREE.Vector3[];
 
   constructor(gates: THREE.Vector3[]) {
@@ -559,105 +658,142 @@ export class Enemies {
     this.gates = gates;
   }
 
-  /** Slimes still to beat this wave (alive + not yet spawned). */
+  /** Enemies still to beat this wave (alive + not yet spawned). */
   get remaining(): number {
-    return this.queue.length + this.slimes.filter((s) => s.alive).length;
+    return this.queue.length + this.all.filter((s) => s.alive).length;
   }
 
+  /** The current boss or mini-boss, while it's alive. */
+  get boss(): Enemy | null {
+    return this.all.find((s) => s.bossName !== null && s.alive) ?? null;
+  }
+
+  /** Warning rings for every attack about to land. */
+  get telegraphs(): Telegraph[] {
+    return this.all.filter((s) => s.alive && s.telegraph).map((s) => s.telegraph!);
+  }
+
+  /** A slime wave at difficulty level `wave`. */
   startWave(wave: number): void {
     this.spec = waveSpec(wave);
     const { small, big, spitters } = this.spec;
-    this.queue = [
-      ...Array<SlimeKind>(small).fill('small'),
-      ...Array<SlimeKind>(big).fill('big'),
-      ...Array<SlimeKind>(spitters).fill('spitter'),
-    ].sort(() => Math.random() - 0.5);
+    this.queue = shuffle([...Array<EnemyKind>(small).fill('small'), ...Array<EnemyKind>(big).fill('big'), ...Array<EnemyKind>(spitters).fill('spitter')]);
+    this.packSize = this.spec.packSize;
+    this.spawnInterval = this.spec.spawnInterval;
     this.spawnTimer = 0.3;
   }
 
+  /** A forest wave; with `bear`, the Crystal Bear appears at (bossX, bossZ). */
+  startBeastWave(w: BeastWave, bossX: number, bossZ: number): void {
+    this.queue = shuffle([
+      ...Array<EnemyKind>(w.beetle).fill('beetle'),
+      ...Array<EnemyKind>(w.snake).fill('snake'),
+      ...Array<EnemyKind>(w.direwolf).fill('direwolf'),
+      ...Array<EnemyKind>(w.boar).fill('boar'),
+    ]);
+    this.packSize = 2;
+    this.spawnInterval = w.bear ? 3 : 1.4;
+    this.spawnTimer = w.bear ? 4 : 0.3;
+    if (w.bear) this.add(new Beast('bear', bossX, bossZ));
+  }
+
+  /** The King Slime at (x, z), with a few small slimes trickling in as escorts. */
+  startBossWave(wave: number, x: number, z: number): Enemy {
+    this.spec = waveSpec(wave);
+    this.queue = Array<EnemyKind>(6).fill('small');
+    this.packSize = this.spec.packSize;
+    this.spawnInterval = this.spec.spawnInterval;
+    this.spawnTimer = 4;
+    return this.add(new Slime('boss', x, z, 0, BOSS_HP));
+  }
+
   clear(): void {
-    for (const s of this.slimes) this.group.remove(s.group);
-    this.slimes.length = 0;
+    for (const s of this.all) this.group.remove(s.group);
+    this.all.length = 0;
     this.queue = [];
   }
 
-  /** Stuns every living slime within `radius` of (x, z); returns the slimes hit. */
-  stunAround(x: number, z: number, radius: number, seconds: number): Slime[] {
-    const hit = this.slimes.filter((s) => s.alive && Math.hypot(s.x - x, s.z - z) <= radius + s.radius);
+  /** Stuns every living enemy within `radius` of (x, z); returns those hit. */
+  stunAround(x: number, z: number, radius: number, seconds: number): Enemy[] {
+    const hit = this.all.filter((s) => s.alive && Math.hypot(s.x - x, s.z - z) <= radius + s.radius);
     for (const s of hit) s.stun(seconds);
     return hit;
   }
 
-  /** Calms every living slime within `radius` of (x, z); returns the slimes affected. */
-  calmAround(x: number, z: number, radius: number, seconds: number): Slime[] {
-    const hit = this.slimes.filter((s) => s.alive && Math.hypot(s.x - x, s.z - z) <= radius + s.radius);
+  /** Calms every living enemy within `radius` of (x, z); returns those affected. */
+  calmAround(x: number, z: number, radius: number, seconds: number): Enemy[] {
+    const hit = this.all.filter((s) => s.alive && Math.hypot(s.x - x, s.z - z) <= radius + s.radius);
     for (const s of hit) s.calm(seconds);
     return hit;
   }
 
-  /** The King Slime, while it's alive. */
-  get boss(): Slime | null {
-    return this.slimes.find((s) => s.kind === 'boss' && s.alive) ?? null;
+  private add<T extends Enemy>(e: T): T {
+    this.all.push(e);
+    this.group.add(e.group);
+    return e;
   }
 
-  /** Brings in the King Slime at (x, z), with a few small slimes trickling in as escorts. */
-  startBossWave(wave: number, x: number, z: number): Slime {
-    this.spec = waveSpec(wave);
-    this.queue = Array<SlimeKind>(6).fill('small');
-    this.spawnTimer = 4;
-    const boss = new Slime('boss', x, z, 0, BOSS_HP);
-    this.slimes.push(boss);
-    this.group.add(boss.group);
-    return boss;
+  private create(kind: EnemyKind, x: number, z: number): Enemy {
+    if ((SLIME_KIND_LIST as EnemyKind[]).includes(kind)) {
+      const sk = kind as SlimeKind;
+      const hp = sk === 'big' ? this.spec.bigHp : sk === 'spitter' ? this.spec.spitterHp : this.spec.smallHp;
+      return new Slime(sk, x, z, this.spec.speedBonus, hp);
+    }
+    return new Beast(kind as BeastKind, x, z);
   }
 
-  /** Spawns small slimes in a ring around (x, z) (the King splitting). */
-  private split(x: number, z: number, count: number, obstacles: readonly Circle[], half: number): void {
+  /** Spawns reinforcements in a ring around (x, z) (the King splitting, the bear roaring). */
+  private summon(kind: EnemyKind, x: number, z: number, count: number, obstacles: readonly Circle[], half: number): void {
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random();
-      const s = new Slime('small', x + Math.cos(a) * 3.5, z + Math.sin(a) * 3.5, this.spec.speedBonus, this.spec.smallHp);
-      pushOutOfCircles(s.pose, s.radius, obstacles);
-      clampToArena(s.pose, half, s.radius);
-      this.slimes.push(s);
-      this.group.add(s.group);
+      const e = this.create(kind, x + Math.cos(a) * 3.5, z + Math.sin(a) * 3.5);
+      const pos = { x: e.x, z: e.z };
+      pushOutOfCircles(pos, e.radius, obstacles);
+      clampToArena(pos, half, e.radius);
+      e.setPosition(pos.x, pos.z);
+      this.add(e);
     }
   }
 
-  /** Updates all slimes; returns globs spat and boss slams landed this step. */
-  update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], half: number): { spits: Spit[]; slams: Slam[] } {
+  /** Updates every enemy; returns globs spat and area attacks landed this step. */
+  update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], half: number): { spits: Spit[]; strikes: Strike[] } {
     this.spawnTimer -= dt;
-    if (this.queue.length && this.spawnTimer <= 0) {
+    if (this.queue.length && this.spawnTimer <= 0 && this.gates.length) {
       // A pack pours out of one gate at a time.
-      this.spawnTimer = this.spec.spawnInterval;
+      this.spawnTimer = this.spawnInterval;
       const gate = this.gates[Math.floor(Math.random() * this.gates.length)];
       const alongX = Math.abs(gate.z) > Math.abs(gate.x);
-      for (let n = 0; n < this.spec.packSize && this.queue.length; n++) {
+      for (let n = 0; n < this.packSize && this.queue.length; n++) {
         const jitter = (Math.random() - 0.5) * 3.5;
         const inward = n * 0.8; // stagger the pack so it doesn't spawn overlapping
         const x = gate.x + (alongX ? jitter : -Math.sign(gate.x) * inward);
         const z = gate.z + (alongX ? -Math.sign(gate.z) * inward : jitter);
-        const kind = this.queue.pop()!;
-        const hp = kind === 'big' ? this.spec.bigHp : kind === 'spitter' ? this.spec.spitterHp : this.spec.smallHp;
-        const s = new Slime(kind, x, z, this.spec.speedBonus, hp);
-        this.slimes.push(s);
-        this.group.add(s.group);
+        this.add(this.create(this.queue.pop()!, x, z));
       }
     }
     const spits: Spit[] = [];
-    const slams: Slam[] = [];
-    for (const s of [...this.slimes]) {
-      spits.push(...s.update(dt, target, this.slimes, obstacles, half));
-      if (s.slam) slams.push(s.slam);
-      if (s.splitRequest > 0) {
-        this.split(s.x, s.z, s.splitRequest, obstacles, half);
-        s.splitRequest = 0;
+    const strikes: Strike[] = [];
+    for (const s of [...this.all]) {
+      spits.push(...s.update(dt, target, this.all, obstacles, half));
+      if (s.strike) strikes.push(s.strike);
+      if (s.summon) {
+        this.summon(s.summon.kind, s.x, s.z, s.summon.count, obstacles, half);
+        s.summon = null;
       }
     }
-    for (let i = this.slimes.length - 1; i >= 0; i--) {
-      if (!this.slimes[i].removed) continue;
-      this.group.remove(this.slimes[i].group);
-      this.slimes.splice(i, 1);
+    for (let i = this.all.length - 1; i >= 0; i--) {
+      if (!this.all[i].removed) continue;
+      this.group.remove(this.all[i].group);
+      this.all.splice(i, 1);
     }
-    return { spits, slams };
+    return { spits, strikes };
   }
+}
+
+function shuffle<T>(list: T[]): T[] {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
 }

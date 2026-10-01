@@ -13,7 +13,8 @@
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=server/dist/index.js",
-    "start": "node server/dist/index.js"
+    "start": "node server/dist/index.js",
+    "stats": "tsx scripts/export-stats.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",

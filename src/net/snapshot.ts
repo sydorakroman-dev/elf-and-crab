@@ -10,10 +10,10 @@ import type { RunPhase } from '../world/rooms';
 
 export type GameState = 'ready' | 'playing' | 'paused' | 'over' | 'won';
 
-export const SLIME_KIND_CODES = ['small', 'big', 'spitter', 'boss'] as const;
+export { ENEMY_KIND_LIST as SLIME_KIND_CODES } from '../game/enemyKinds';
 export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart'] as const;
 
-/** [id, kind, x, z, yaw, y, sx, sy, sz, flash, stun, death, calm] */
+/** Any enemy: see EnemyTuple in game/enemies.ts. */
 export type SlimeTuple = [number, number, number, number, number, number, number, number, number, number, number, number, number];
 /** [poolIndex, x, z, yaw, pierce(0/1)] */
 export type ArrowTuple = [number, number, number, number, number];
@@ -87,8 +87,10 @@ export interface Snapshot {
   room: number;
   rw: number;
   phase: RunPhase;
-  /** The King Slime, while it lives: health and its slam warning. */
-  boss: { hp: number; max: number; tel: TelegraphTuple | null } | null;
+  /** The current boss or mini-boss, while it lives. */
+  boss: { hp: number; max: number; name: string } | null;
+  /** Warning rings for attacks about to land. */
+  tels: TelegraphTuple[];
   wave: number;
   remaining: number;
   health: number;

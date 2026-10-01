@@ -111,9 +111,9 @@ export function waveSpec(wave: number): WaveSpec {
     big: Math.min(12, Math.floor(w * 0.8)),
     spitters: Math.min(8, Math.floor(w / 3)),
     speedBonus: Math.min(3, (w - 1) * 0.35),
-    smallHp: 1 + Math.floor((w - 1) / 5),
-    bigHp: 4 + Math.floor((w - 1) / 3),
-    spitterHp: 2 + Math.floor((w - 1) / 4),
+    smallHp: 10 * (1 + Math.floor((w - 1) / 5)),
+    bigHp: 10 * (4 + Math.floor((w - 1) / 3)),
+    spitterHp: 10 * (2 + Math.floor((w - 1) / 4)),
     packSize: Math.min(5, 1 + Math.floor(w / 2)),
     spawnInterval: Math.max(0.7, 1.6 - w * 0.1),
   };

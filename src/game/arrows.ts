@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { segmentCircleHit, type Circle } from './combat';
-import type { Slime } from './enemies';
+import type { Enemy } from './enemies';
 import { glowTexture } from '../util/glow';
 import { q, type ArrowTuple } from '../net/snapshot';
 
@@ -18,11 +18,11 @@ interface Arrow {
   active: boolean;
   /** Piercing arrows fly through slimes, hitting each one once. */
   pierce: boolean;
-  hitSlimes: Set<Slime>;
+  hitSlimes: Set<Enemy>;
 }
 
 export interface ArrowHit {
-  slime: Slime;
+  slime: Enemy;
   dirX: number;
   dirZ: number;
 }
@@ -114,7 +114,7 @@ export class Arrows {
   }
 
   /** Moves arrows and returns the slimes they hit this step. */
-  update(dt: number, slimes: readonly Slime[], obstacles: readonly Circle[], half: number): ArrowHit[] {
+  update(dt: number, slimes: readonly Enemy[], obstacles: readonly Circle[], half: number): ArrowHit[] {
     const hits: ArrowHit[] = [];
     for (const a of this.arrows) {
       if (!a.active) continue;
@@ -133,7 +133,7 @@ export class Arrows {
 
       // Nearest thing along this step: a slime, a pillar, or the wall.
       let bestT = Infinity;
-      let hitSlime: Slime | null = null;
+      let hitSlime: Enemy | null = null;
       for (const s of slimes) {
         if (!s.alive || a.hitSlimes.has(s)) continue;
         const t = segmentCircleHit(p.x, p.z, bx, bz, { x: s.x, z: s.z, radius: s.radius + 0.15 });

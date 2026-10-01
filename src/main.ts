@@ -3,6 +3,7 @@ import './style.css';
 import { Game } from './game/Game';
 import { Elf } from './player/elf';
 import { loadFamiliarBodies } from './player/beasts';
+import { loadBeastTemplates } from './game/beastVisual';
 import type { InputMode } from './player/controls';
 import { FamiliarGame } from './familiar/FamiliarGame';
 import { FamiliarSession, HeroSession } from './net/client';
@@ -32,7 +33,11 @@ async function boot(): Promise<void> {
   root.appendChild(renderer.domElement);
 
   const base = import.meta.env.BASE_URL;
-  const [elf, familiars] = await Promise.all([Elf.load(`${base}models/elf.glb`), loadFamiliarBodies(base, CRAB_SCALE)]);
+  const [elf, familiars] = await Promise.all([
+    Elf.load(`${base}models/elf.glb`),
+    loadFamiliarBodies(base, CRAB_SCALE),
+    loadBeastTemplates(base),
+  ]);
   const game = joinCode
     ? new FamiliarGame(renderer, root, elf, familiars, new FamiliarSession(joinCode))
     : new Game(renderer, root, elf, familiars, mode, multiplayerAvailable() ? new HeroSession() : null);

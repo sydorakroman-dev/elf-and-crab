@@ -1,7 +1,7 @@
 import type { Best } from '../game/highscore';
 import type { InputMode } from '../player/controls';
 import type { PowerUpType } from '../game/powerups';
-import { BossBar, Fade, Popups, heartsHtml, powerChipsHtml, powerChipsKey } from './shared';
+import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey } from './shared';
 import { normalizeCode } from '../net/protocol';
 import type { ConnStatus } from '../net/client';
 import QRCode from 'qrcode';
@@ -127,7 +127,7 @@ export class Hud {
   }
 
   setHealth(health: number): void {
-    this.hearts.innerHTML = heartsHtml(health, this.maxHealth);
+    this.hearts.innerHTML = hpBarHtml(health, this.maxHealth);
   }
 
   /** Active power-up chips with a countdown bar; only touches the DOM when something visible changes. */

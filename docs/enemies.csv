@@ -1,0 +1,12 @@
+enemy,found_in,type,tier,hp,speed_mps,radius_m,touch_damage,special_attack,special_damage,special_details,score,drop_chance,stun,calm
+Small slime,dungeon rooms,melee,weak,10+,3.6,0.7,20,,,HP grows +10 every 5 difficulty levels; hops,10,4%,full,yes
+Big slime,dungeon rooms,melee,tough,40+,2.6,1.25,35,,,HP grows +10 every 3 levels,40,25%,full,yes
+Spitter,dungeon rooms,ranged,normal,20+,3.2,0.85,15,glob,20,keeps 9-14 m away; spits every ~3 s after a 0.7 s swell; globs 11 m/s,25,10%,full,yes
+King Slime,Throne Room (boss),melee + ranged,boss,900,2.2,2.8,30,leaping slam / 5-glob volley,30 / 20 each,slam radius 4.5 m with warning ring; splits 4 small slimes at 2/3 and 1/3 HP,500,0%,35% duration,immune
+Armored Beetle,The Woodland,melee,weak,10,4.2,0.6,8,,,comes in swarms,8,3%,full,yes
+Venomous Snake,The Woodland,melee,normal,25,3.2,0.7,10,coil + lunge,18,strikes within 3.4 m after a 0.45 s coil; every 1.8 s,15,6%,full,yes
+Dire Wolf,The Woodland,melee,tough,45,6,0.8,15,hit and run,,backs off for 0.9 s after each bite (harmless while retreating),30,12%,full,yes
+Thorn Boar,The Woodland,melee,elite,80,3.8,1,15,paw + charge,30,charges at 15 m/s from 5-16 m after a 0.8 s paw; dazed 1.2 s if it hits a wall or tree,60,25%,full,yes
+The Crystal Bear,The Woodland,melee,mini-boss,300,2.8,1.7,20,swipe / ground pound / roar,25 / 25,pound radius 4.5 m every 6 s with warning ring; roars 4 beetles in at half HP,300,0%,50% duration,immune
+
+HERO (elf),,,,100,7.5,0.5,,arrow,10,"invulnerable 1.1 s after a hit; heals +20 per wave, full per room, +25 heart pickup, +25 spring",,,,

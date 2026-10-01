@@ -16,6 +16,7 @@ function snap(t: number, over: Partial<Snapshot> = {}): Snapshot {
     rw: 1,
     phase: 'fight',
     boss: null,
+    tels: [],
     wave: 1,
     remaining: 3,
     health: 5,

@@ -71,7 +71,7 @@ describe('pickAimTarget', () => {
 
 describe('waveSpec', () => {
   it('starts gently', () => {
-    expect(waveSpec(1)).toMatchObject({ small: 6, big: 0, spitters: 0, speedBonus: 0, smallHp: 1, packSize: 1 });
+    expect(waveSpec(1)).toMatchObject({ small: 6, big: 0, spitters: 0, speedBonus: 0, smallHp: 10, bigHp: 40, spitterHp: 20, packSize: 1 });
     expect(waveSpec(2).spitters).toBe(0);
     expect(waveSpec(3).spitters).toBe(1);
   });

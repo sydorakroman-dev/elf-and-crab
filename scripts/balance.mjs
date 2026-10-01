@@ -28,7 +28,7 @@ const results = await page.evaluate(({ TRIALS }) => {
     let step = 0;
     for (; step < maxSteps && g.state === 'playing'; step++) {
       const pos = p.position;
-      const alive = g.enemies.slimes.filter((s) => s.alive);
+      const alive = g.enemies.all.filter((s) => s.alive);
       p.keys.clear();
       if (g.phase === 'cleared') {
         // Room cleared: walk to the north door — around anything in the middle of the room.

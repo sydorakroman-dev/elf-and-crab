@@ -36,7 +36,7 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     color: 0x6fe8d6,
     speed: 8,
     gait: 'sideways',
-    biteDamage: 1,
+    biteDamage: 10,
     biteCooldown: 1.0,
     radius: 0.6,
     spells: ['burst', 'shell'],
@@ -49,7 +49,7 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     color: 0x8fe39a,
     speed: 6,
     gait: 'forward',
-    biteDamage: 1,
+    biteDamage: 8,
     biteCooldown: 1.6,
     radius: 0.7,
     spells: ['spring', 'calm'],
@@ -62,7 +62,7 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     color: 0x9fd4ff,
     speed: 11,
     gait: 'forward',
-    biteDamage: 1,
+    biteDamage: 12,
     biteCooldown: 0.7,
     radius: 0.6,
     spells: ['pounce'],
@@ -92,7 +92,7 @@ export const SPELLS: Record<SpellId, SpellDef> = {
 /** Soothing Spring: slimes inside move at this fraction of their speed (60% slower). */
 export const SPRING_SLOW = 0.4;
 export const POUNCE_RANGE = 10;
-export const POUNCE_DAMAGE = 2;
+export const POUNCE_DAMAGE = 25;
 /** How close (beyond body radii) a slime must be to the pounce path to get hit. */
 export const POUNCE_WIDTH = 0.8;
 

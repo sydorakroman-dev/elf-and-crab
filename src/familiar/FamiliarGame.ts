@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 import { Dungeon } from '../world/dungeon';
 import { ROOMS } from '../world/rooms';
-import { TelegraphRing } from '../game/telegraph';
+import { TelegraphRings } from '../game/telegraph';
+import { BeastVisual } from '../game/beastVisual';
 import type { Elf } from '../player/elf';
 import type { FamiliarBody } from '../player/beasts';
-import { SlimeVisual, type SlimePose } from '../game/enemies';
+import { SLIME_KIND_LIST, SlimeVisual, type BeastKind, type SlimeKind, type SlimePose } from '../game/enemies';
 import { Arrows } from '../game/arrows';
 import { GLOB_COLOR, Globs } from '../game/globs';
 import { Pickups } from '../game/pickups';
 import { Effects } from '../game/effects';
 import { Sfx } from '../game/audio';
 import { SpringPools } from '../game/zones';
+import { HEALING } from '../game/balance';
 import { POWER_UPS } from '../game/powerups';
 import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, pounceLanding, type FamiliarKind } from '../game/familiars';
 import { POWER_CODES, SLIME_KIND_CODES, SnapshotBuffer, type GameEvent, type Snapshot } from '../net/snapshot';
@@ -37,13 +39,14 @@ export class FamiliarGame {
   private readonly camera = new THREE.PerspectiveCamera(FOV, innerWidth / innerHeight, 0.5, 400);
   private readonly timer = new THREE.Timer();
   private dungeon: Dungeon;
-  private readonly telegraph = new TelegraphRing();
+  private readonly telegraph = new TelegraphRings();
   private readonly elf: Elf;
   private readonly bodies: Record<FamiliarKind, FamiliarBody>;
   private readonly session: FamiliarSession;
   private readonly hud: FamiliarHud;
   private readonly buffer = new SnapshotBuffer(0.1);
-  private readonly slimes = new Map<number, SlimeVisual>();
+  /** Every enemy on screen, keyed by id: slimes and beasts draw differently. */
+  private readonly slimes = new Map<number, SlimeVisual | BeastVisual>();
   private readonly arrows = new Arrows();
   private readonly globs = new Globs();
   private readonly pickups = new Pickups();
@@ -196,7 +199,7 @@ export class FamiliarGame {
           break;
         case 'heal':
           this.effects.burst(ev.x, 1.2, ev.z, new THREE.Color(0xff4d5e), 14, 4, 0.12);
-          this.hud.popups.toast('♨️ +1 heart', 0x8fe8f5);
+          this.hud.popups.toast(`♨️ +${HEALING.spring} HP`, 0x8fe8f5);
           this.sfx.powerUp();
           break;
         case 'poof':
@@ -315,19 +318,24 @@ export class FamiliarGame {
 
     this.applyFamiliar(s, dt);
 
-    // Slimes, keyed by id.
+    // Enemies, keyed by id.
     const seen = new Set<number>();
     for (const t of s.slimes) {
-      const [id, kind] = t;
+      const [id, code] = t;
+      const kind = SLIME_KIND_CODES[code] ?? 'small';
       seen.add(id);
       let v = this.slimes.get(id);
       if (!v) {
-        v = new SlimeVisual(SLIME_KIND_CODES[kind] ?? 'small');
+        v = (SLIME_KIND_LIST as string[]).includes(kind) ? new SlimeVisual(kind as SlimeKind) : new BeastVisual(kind as BeastKind);
         this.slimes.set(id, v);
         this.scene.add(v.group);
       }
-      const pose: SlimePose = { x: t[2], z: t[3], yaw: t[4], y: t[5], sx: t[6], sy: t[7], sz: t[8], flash: t[9], stun: t[10], death: t[11], calm: t[12] ?? 0 };
-      v.apply(pose, this.time);
+      if (v instanceof SlimeVisual) {
+        const pose: SlimePose = { x: t[2], z: t[3], yaw: t[4], y: t[5], sx: t[6], sy: t[7], sz: t[8], flash: t[9], stun: t[10], death: t[11], calm: t[12] ?? 0 };
+        v.apply(pose, this.time);
+      } else {
+        v.apply({ x: t[2], z: t[3], yaw: t[4], y: t[5], speed: t[6], act: t[7], mode: t[8], flash: t[9], stun: t[10], death: t[11], calm: t[12] ?? 0 }, dt, this.time);
+      }
     }
     for (const [id, v] of this.slimes) {
       if (seen.has(id)) continue;
@@ -339,7 +347,7 @@ export class FamiliarGame {
     this.globs.sync(s.globs, this.time);
     this.pickups.sync(s.pickups, dt, this.time);
     this.pools.sync(s.zones, dt, this.time);
-    this.telegraph.sync(s.boss?.tel ?? null, this.time);
+    this.telegraph.sync(s.tels ?? [], this.time);
     this.dungeon.setExitOpen(s.phase !== 'fight');
   }
 

@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 import { Dungeon, WALL_HEIGHT } from '../world/dungeon';
 import { ROOMS, WAVES_PER_ROOM, isBossWave, roomWaveDifficulty, runLabel, type RunPhase } from '../world/rooms';
-import { TelegraphRing } from './telegraph';
+import { TelegraphRings } from './telegraph';
 import { Player, type Arena, type InputMode } from '../player/controls';
 import { TouchControls } from '../ui/touch';
 import type { Elf } from '../player/elf';
 import type { FamiliarBody } from '../player/beasts';
-import { Enemies, type Slime } from './enemies';
+import { Enemies, WOODLAND_WAVES, type Enemy, type Strike } from './enemies';
+import { Beast } from './beasts';
 import { Arrows } from './arrows';
 import { GLOB_COLOR, Globs } from './globs';
 import { Effects } from './effects';
 import { Companion } from './companion';
+import { HEALING, HERO, SLIME_ATTACKS, VICTORY_SCORE_PER_HP } from './balance';
 import { FAMILIARS, FAMILIAR_KINDS, POUNCE_DAMAGE, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
 import { SpringPools, type ZoneTuple } from './zones';
 import type { FamiliarCommand } from '../net/protocol';
@@ -22,13 +24,12 @@ import { loadBest, recordRun } from './highscore';
 import { ActivePowers, POWER_UPS, pickPowerUp, randomSpawnPoint, spreadDirections, type PowerUpType } from './powerups';
 import { Pickups } from './pickups';
 import type { HeroSession } from '../net/client';
-import { POWER_CODES, SLIME_KIND_CODES, q, type GameEvent, type Snapshot } from '../net/snapshot';
+import { POWER_CODES, q, type GameEvent, type Snapshot } from '../net/snapshot';
 
 const STEP = 1 / 60; // fixed simulation step
 const MAX_FRAME = 0.1; // clamp long frames (tab switches) so physics doesn't explode
-const MAX_HEALTH = 5;
+const MAX_HEALTH = HERO.maxHp;
 const FIRE_INTERVAL = 0.36;
-const HURT_INVULNERABLE = 1.1;
 const WAVE_BREAK = 2.5;
 const AIM_ASSIST_ANGLE = 0.3; // radians
 const TOUCH_AIM_ASSIST_ANGLE = 0.65; // aiming with a thumb is much harder
@@ -40,7 +41,8 @@ const PICKUP_INTERVAL_MIN = 10; // seconds between random floor spawns
 const PICKUP_INTERVAL_MAX = 18;
 const MAX_PICKUPS = 2;
 /** Chance a killed slime drops a power-up. */
-const DROP_CHANCE: Record<Slime['kind'], number> = { small: 0.04, spitter: 0.1, big: 0.25, boss: 0 };
+/** Chance a killed slime drops a power-up (beasts carry their own in BEASTS). */
+const SLIME_DROP_CHANCE: Record<string, number> = { small: 0.04, spitter: 0.1, big: 0.25, boss: 0 };
 const SNAPSHOT_EVERY = 3; // steps → 20 Hz while playing
 const IDLE_SNAPSHOT_EVERY = 12; // 5 Hz on menus / pause
 const STUN_STAR = new THREE.Color(0xfff27a);
@@ -59,7 +61,7 @@ export class Game {
   private dungeon: Dungeon;
   private readonly arena: Arena;
   private readonly shadowSize: number;
-  private readonly telegraph = new TelegraphRing();
+  private readonly telegraph = new TelegraphRings();
   private room = 0;
   private waveInRoom = 0;
   private phase: RunPhase = 'fight';
@@ -196,7 +198,7 @@ export class Game {
     const e = this.dungeon.entry;
     this.player.spawn(e.x, e.z, 0);
     this.companion.reset(e.x + 2.5, e.z + 0.5);
-    this.telegraph.sync(null, 0);
+    this.telegraph.sync([], 0);
     this.hud.bossBar.set(null);
     this.zones = [];
     this.springPools.sync([], 0, 0);
@@ -264,17 +266,17 @@ export class Game {
     this.shoot(dt);
     this.updateZones(dt);
     const half = this.dungeon.half;
-    const { spits, slams } = this.enemies.update(dt, this.player.position, this.dungeon.obstacles, half);
+    const { spits, strikes } = this.enemies.update(dt, this.player.position, this.dungeon.obstacles, half);
     for (const spit of spits) {
       this.globs.fire(spit);
       this.sfx.spit();
       this.events.push({ e: 'spit' });
     }
-    for (const slam of slams) this.bossSlam(slam.x, slam.z, slam.r);
+    for (const strike of strikes) this.enemyStrike(strike);
     this.syncBoss();
     this.updateGlobs(dt);
 
-    for (const hit of this.arrows.update(dt, this.enemies.slimes, this.dungeon.obstacles, half)) {
+    for (const hit of this.arrows.update(dt, this.enemies.all, this.dungeon.obstacles, half)) {
       this.damage(hit.slime, hit.dirX, hit.dirZ);
     }
 
@@ -301,7 +303,7 @@ export class Game {
     const p = this.player.position;
     const dir = this.player.aimDirection(this.aim);
     // Gentle aim assist: snap to a slime near the crosshair line.
-    const alive = this.enemies.slimes.filter((s) => s.alive);
+    const alive = this.enemies.all.filter((s) => s.alive);
     const assist = this.mode === 'touch' ? TOUCH_AIM_ASSIST_ANGLE : AIM_ASSIST_ANGLE;
     const i = pickAimTarget(p, dir.x, dir.z, alive, assist, AIM_ASSIST_RANGE);
     if (i >= 0) dir.set(alive[i].x - p.x, 0, alive[i].z - p.z).normalize();
@@ -318,9 +320,9 @@ export class Game {
 
   /** The familiar's creature: walking, biting, and whatever spells went off this step. */
   private updateFamiliar(dt: number): void {
-    const r = this.companion.update(dt, this.enemies.slimes, this.dungeon.obstacles, this.dungeon.half);
+    const r = this.companion.update(dt, this.enemies.all, this.dungeon.obstacles, this.dungeon.half);
     const c = this.companion.position;
-    const push = (s: Slime, amount: number) => {
+    const push = (s: Enemy, amount: number) => {
       const dx = s.x - c.x;
       const dz = s.z - c.z;
       const d = Math.hypot(dx, dz) || 1;
@@ -389,14 +391,13 @@ export class Game {
     const p = this.player.position;
     for (const z of this.zones) {
       z.t -= dt;
-      for (const s of this.enemies.slimes) {
+      for (const s of this.enemies.all) {
         if (Math.hypot(s.x - z.x, s.z - z.z) <= z.r + s.radius * 0.5) s.slow = Math.min(s.slow, SPRING_SLOW);
       }
       if (!z.healed && this.health < MAX_HEALTH && Math.hypot(p.x - z.x, p.z - z.z) <= z.r) {
         z.healed = true;
-        this.health++;
-        this.hud.setHealth(this.health);
-        this.hud.toast('♨️ +1 heart', 0x8fe8f5);
+        this.heal(HEALING.spring);
+        this.hud.toast(`♨️ +${HEALING.spring} HP`, 0x8fe8f5);
         this.effects.burst(p.x, 1.2, p.z, new THREE.Color(0xff4d5e), 14, 4, 0.12);
         this.sfx.powerUp();
         this.events.push({ e: 'heal', x: q(p.x), z: q(p.z) });
@@ -460,10 +461,7 @@ export class Game {
       fam: c.kind
         ? { k: FAMILIAR_KINDS.indexOf(c.kind), x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed), y: q(c.height) }
         : null,
-      slimes: this.enemies.slimes.map((s) => {
-        const o = s.pose;
-        return [s.id, SLIME_KIND_CODES.indexOf(s.kind), q(o.x), q(o.z), q(o.yaw), q(o.y), q(o.sx), q(o.sy), q(o.sz), q(o.flash), o.stun, q(o.death), o.calm];
-      }),
+      slimes: this.enemies.all.map((s) => s.tuple()),
       arrows: this.arrows.snapshot(),
       globs: this.globs.snapshot(),
       pickups: this.pickups.snapshot(),
@@ -472,6 +470,7 @@ export class Game {
       rw: this.waveInRoom,
       phase: this.phase,
       boss: this.bossState(),
+      tels: this.telegraphTuples(),
       wave: this.wave,
       remaining: this.enemies.remaining,
       health: Math.max(0, this.health),
@@ -491,7 +490,7 @@ export class Game {
     this.events.push({ e: 'banner', text });
   }
 
-  private damage(slime: Slime, dirX: number, dirZ: number, amount = 1): void {
+  private damage(slime: Enemy, dirX: number, dirZ: number, amount = HERO.arrowDamage): void {
     const killed = slime.hurt(amount, dirX, dirZ);
     const y = slime.radius;
     const big = slime.kind === 'big';
@@ -501,7 +500,8 @@ export class Game {
       this.effects.burst(slime.x, y, slime.z, slime.color, big ? 40 : 22, big ? 8 : 6);
       this.sfx.splat(big);
       this.events.push({ e: 'splat', x: q(slime.x), z: q(slime.z), c: slime.color.getHex(), big });
-      if (Math.random() < DROP_CHANCE[slime.kind] && this.pickups.count < MAX_PICKUPS + 1) {
+      const drop = slime instanceof Beast ? slime.def.drop : (SLIME_DROP_CHANCE[slime.kind] ?? 0);
+      if (Math.random() < drop && this.pickups.count < MAX_PICKUPS + 1) {
         this.pickups.spawn(pickPowerUp(Math.random, this.health, MAX_HEALTH), slime.x, slime.z);
       }
     } else {
@@ -514,14 +514,15 @@ export class Game {
   private checkContacts(): void {
     if (this.invulnerable > 0 || this.player.dashing) return;
     const p = this.player.position;
-    for (const s of this.enemies.slimes) {
+    for (const s of this.enemies.all) {
       if (!s.alive || s.harmless) continue; // stunned or calmed slimes don't hurt
       const dx = p.x - s.x;
       const dz = p.z - s.z;
       const d = Math.hypot(dx, dz);
       if (d > s.radius + PLAYER_RADIUS) continue;
 
-      this.hurtPlayer(s.kind === 'big' ? 2 : 1, dx / (d || 1), dz / (d || 1));
+      this.hurtPlayer(s.touchDamage, dx / (d || 1), dz / (d || 1), s.touchKnock);
+      s.onHitTarget();
       return;
     }
   }
@@ -559,7 +560,7 @@ export class Game {
     const def = POWER_UPS[type];
     const p = this.player.position;
     if (type === 'heart') {
-      if (this.health < MAX_HEALTH) this.health++;
+      if (this.health < MAX_HEALTH) this.health = Math.min(MAX_HEALTH, this.health + HEALING.heartPickup);
       else this.score += 25; // full health: a little score instead
       this.hud.setHealth(this.health);
       this.hud.setScore(this.score);
@@ -583,11 +584,11 @@ export class Game {
       const dx = p.x - hit.x;
       const dz = p.z - hit.z;
       const d = Math.hypot(dx, dz) || 1;
-      this.hurtPlayer(1, dx / d, dz / d);
+      this.hurtPlayer(SLIME_ATTACKS.glob, dx / d, dz / d);
     }
   }
 
-  private hurtPlayer(amount: number, dirX: number, dirZ: number): void {
+  private hurtPlayer(amount: number, dirX: number, dirZ: number, knock = 16): void {
     const p = this.player.position;
     if (this.powers.has('shield')) {
       // The shield takes the hit instead.
@@ -600,8 +601,8 @@ export class Game {
       return;
     }
     this.health -= amount;
-    this.invulnerable = HURT_INVULNERABLE;
-    this.player.knockback(dirX, dirZ, 16);
+    this.invulnerable = HERO.hurtInvulnerable;
+    this.player.knockback(dirX, dirZ, knock);
     this.hud.setHealth(Math.max(0, this.health));
     this.hud.flashHurt();
     this.sfx.hurt();
@@ -611,7 +612,7 @@ export class Game {
 
   /** Waves within a room; when all three are done, the north door opens (or, in the last room, you win). */
   private updateWaves(dt: number): void {
-    this.hud.setWave(runLabel(this.room, this.waveInRoom, this.enemies.remaining, this.phase, this.enemies.boss !== null));
+    this.hud.setWave(runLabel(this.room, this.waveInRoom, this.enemies.remaining, this.phase, this.enemies.boss?.bossName ?? null));
     if (this.phase === 'transition') {
       this.updateDoor(dt);
       return;
@@ -626,7 +627,7 @@ export class Game {
       // Wave cleared: breather, and a heart back.
       this.waveBreak = WAVE_BREAK;
       if (this.waveInRoom > 0) {
-        this.heal(1);
+        this.heal(HEALING.waveClear);
         if (this.waveInRoom >= WAVES_PER_ROOM) {
           if (!ROOMS[this.room].hasExit) {
             this.victory();
@@ -652,7 +653,19 @@ export class Game {
     this.waveInRoom++;
     this.wave++;
     const d = roomWaveDifficulty(this.room, this.waveInRoom);
-    if (isBossWave(this.room, this.waveInRoom)) {
+    if (ROOMS[this.room].enemies === 'beasts') {
+      const w = WOODLAND_WAVES[Math.min(this.waveInRoom, WOODLAND_WAVES.length) - 1];
+      const at = { x: 0, z: -this.dungeon.half + 8 };
+      this.enemies.startBeastWave(w, at.x, at.z);
+      if (w.bear) {
+        this.effects.ring(at.x, at.z, 0xb08aff, 4);
+        this.effects.burst(at.x, 2, at.z, new THREE.Color(0xb08aff), 40, 8, 0.18);
+        this.banner('🐻 The Crystal Bear!');
+        this.sfx.burst();
+      } else {
+        this.banner(`Wave ${this.waveInRoom}/${WAVES_PER_ROOM}`);
+      }
+    } else if (isBossWave(this.room, this.waveInRoom)) {
       const at = { x: 0, z: -this.dungeon.half + 8 };
       this.enemies.startBossWave(d, at.x, at.z);
       this.effects.ring(at.x, at.z, 0xc0303a, 5);
@@ -708,36 +721,43 @@ export class Game {
     }
   }
 
-  /** The King Slime lands: everything near the impact is hit (the elf can dash through it). */
-  private bossSlam(x: number, z: number, r: number): void {
+  /** An enemy's area attack lands (a slam, a pound, a lunge, a swipe): the elf is hit if inside (dashing dodges it). */
+  private enemyStrike(s: Strike): void {
+    const big = s.r >= 3;
     const red = new THREE.Color(0xc0303a);
-    this.effects.ring(x, z, red, r);
-    this.effects.burst(x, 0.4, z, red, 40, 8, 0.18);
-    this.sfx.land();
-    this.sfx.hurt();
-    this.events.push({ e: 'slam', x: q(x), z: q(z), r });
+    if (big) {
+      this.effects.ring(s.x, s.z, red, s.r);
+      this.effects.burst(s.x, 0.4, s.z, red, 40, 8, 0.18);
+      this.sfx.land();
+    } else {
+      this.effects.burst(s.x, 0.6, s.z, new THREE.Color(0xffffff), 8, 3, 0.1);
+    }
+    this.events.push({ e: 'slam', x: q(s.x), z: q(s.z), r: s.r });
     const p = this.player.position;
-    const d = Math.hypot(p.x - x, p.z - z);
-    if (d <= r + PLAYER_RADIUS && this.invulnerable === 0 && !this.player.dashing) this.hurtPlayer(1, (p.x - x) / (d || 1), (p.z - z) / (d || 1));
+    const d = Math.hypot(p.x - s.x, p.z - s.z);
+    if (d <= s.r + PLAYER_RADIUS && this.invulnerable === 0 && !this.player.dashing) {
+      this.hurtPlayer(s.damage, (p.x - s.x) / (d || 1), (p.z - s.z) / (d || 1), s.knock);
+    }
   }
 
   private bossState(): Snapshot['boss'] {
     const b = this.enemies.boss;
-    if (!b) return null;
-    const t = b.telegraph;
-    return { hp: Math.max(0, b.hp), max: b.maxHp, tel: t ? [q(t.x), q(t.z), t.r, q(t.p)] : null };
+    return b ? { hp: Math.max(0, b.hp), max: b.maxHp, name: b.bossName! } : null;
+  }
+
+  private telegraphTuples(): Snapshot['tels'] {
+    return this.enemies.telegraphs.map((t) => [q(t.x), q(t.z), t.r, q(t.p)]);
   }
 
   private syncBoss(): void {
-    const b = this.bossState();
-    this.hud.bossBar.set(b);
-    this.telegraph.sync(b?.tel ?? null, this.time);
+    this.hud.bossBar.set(this.bossState());
+    this.telegraph.sync(this.telegraphTuples(), this.time);
   }
 
   private victory(): void {
     this.state = 'won';
     this.elf.group.visible = true;
-    this.score += this.health * 100; // a bonus for every heart left
+    this.score += Math.max(0, this.health) * VICTORY_SCORE_PER_HP; // a bonus for health left
     this.hud.setScore(this.score);
     const run = { score: this.score, wave: this.wave };
     const isBest = recordRun(run);

@@ -2,8 +2,12 @@ import { POWER_UPS, type PowerUpType } from '../game/powerups';
 
 /** HUD pieces shared by the hero's screen and the familiar's tablet. */
 
-export function heartsHtml(health: number, max: number): string {
-  return Array.from({ length: max }, (_, i) => `<span class="${i < health ? 'full' : ''}">♥</span>`).join('');
+/** The hero's health bar (HP out of max), shaded by how much is left. */
+export function hpBarHtml(health: number, max: number): string {
+  const hp = Math.max(0, Math.ceil(health));
+  const pct = Math.max(0, Math.min(100, (hp / max) * 100));
+  const tone = pct > 50 ? 'ok' : pct > 25 ? 'warn' : 'low';
+  return `<div class="hp ${tone}"><span class="hp-heart">♥</span><div class="hp-track"><div class="hp-fill" style="width:${pct}%"></div></div><b>${hp}</b></div>`;
 }
 
 export function powerChipsHtml(list: { type: PowerUpType; remaining: number }[]): string {
@@ -78,15 +82,20 @@ export class BossBar {
   private readonly fill: HTMLElement;
 
   constructor(root: HTMLElement) {
-    root.insertAdjacentHTML('beforeend', '<div class="boss-bar" hidden><span>👑 The King Slime</span><div class="boss-track"><div class="boss-fill"></div></div></div>');
+    root.insertAdjacentHTML('beforeend', '<div class="boss-bar" hidden><span data-boss-name></span><div class="boss-track"><div class="boss-fill"></div></div></div>');
     this.el = root.querySelector('.boss-bar')!;
     this.fill = this.el.querySelector('.boss-fill')!;
+    this.name = this.el.querySelector('[data-boss-name]')!;
   }
+  private readonly name: HTMLElement;
 
-  /** Shows the bar at hp/max, or hides it (null). */
-  set(boss: { hp: number; max: number } | null): void {
+  /** Shows the bar at hp/max with the boss's name, or hides it (null). */
+  set(boss: { hp: number; max: number; name: string } | null): void {
     this.el.hidden = !boss;
-    if (boss) this.fill.style.width = `${Math.max(0, (boss.hp / boss.max) * 100)}%`;
+    if (!boss) return;
+    this.fill.style.width = `${Math.max(0, (boss.hp / boss.max) * 100)}%`;
+    const label = `${boss.name.includes('Bear') ? '🐻' : '👑'} ${boss.name}`;
+    if (this.name.textContent !== label) this.name.textContent = label;
   }
 }
 

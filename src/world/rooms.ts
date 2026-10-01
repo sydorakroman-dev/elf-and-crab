@@ -21,6 +21,8 @@ export interface RoomDef {
   trees?: [number, number][];
   /** Outdoors: hedge walls with wooden gates, daylight and open sky instead of brick and torches. */
   outdoor?: boolean;
+  /** Who lives here: forest beasts or (default) slimes. */
+  enemies?: 'beasts' | 'slimes';
   torchLight: number;
   torchFlame: number;
   floor: Hsl;
@@ -43,6 +45,7 @@ export const ROOMS: RoomDef[] = [
     feature: 'woodland',
     trees: [[-12, -12], [11, -14], [-15, 2], [15, -2], [-8, 4], [9, 5], [-13, 15], [14, 14], [0, -6]],
     outdoor: true,
+    enemies: 'beasts',
     torchLight: 0xffe7b0,
     torchFlame: 0xfff3c0,
     floor: { h: 0.27, s: 0.42, l: 0.3 },
@@ -159,11 +162,12 @@ export function isBossWave(room: number, wave: number): boolean {
 export type RunPhase = 'fight' | 'cleared' | 'transition';
 
 /** Top-of-screen label for where the run is. */
-export function runLabel(room: number, wave: number, remaining: number, phase: RunPhase, bossAlive: boolean): string {
+export function runLabel(room: number, wave: number, remaining: number, phase: RunPhase, bossName: string | null): string {
   const name = ROOMS[room]?.name ?? '';
   if (phase === 'cleared') return `${name} cleared — through the north door ↑`;
   if (phase === 'transition') return 'Onward…';
   if (wave === 0) return `${name} · get ready…`;
-  if (bossAlive) return `${name} · The King Slime`;
-  return `${name} · Wave ${wave}/${WAVES_PER_ROOM} · ${remaining} slime${remaining === 1 ? '' : 's'} left`;
+  if (bossName) return `${name} · ${bossName}`;
+  const foes = ROOMS[room]?.enemies === 'beasts' ? (remaining === 1 ? 'beast' : 'beasts') : remaining === 1 ? 'slime' : 'slimes';
+  return `${name} · Wave ${wave}/${WAVES_PER_ROOM} · ${remaining} ${foes} left`;
 }

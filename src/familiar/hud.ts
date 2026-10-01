@@ -1,7 +1,7 @@
 import { POWER_CODES } from '../net/snapshot';
 import type { Snapshot } from '../net/snapshot';
 import { normalizeCode } from '../net/protocol';
-import { BossBar, Fade, Popups, cssColor, heartsHtml, powerChipsHtml, powerChipsKey } from '../ui/shared';
+import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey } from '../ui/shared';
 import { runLabel } from '../world/rooms';
 import type { PowerUpType } from '../game/powerups';
 import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, type FamiliarKind, type SpellId } from '../game/familiars';
@@ -201,14 +201,14 @@ export class FamiliarHud {
   }
 
   update(s: Snapshot): void {
-    this.hearts.innerHTML = heartsHtml(s.health, s.maxHealth);
+    this.hearts.innerHTML = hpBarHtml(s.health, s.maxHealth);
     const list = s.powers.map(([code, remaining]) => ({ type: POWER_CODES[code] as PowerUpType, remaining }));
     const key = powerChipsKey(list);
     if (key !== this.powersKey) {
       this.powersKey = key;
       this.powers.innerHTML = powerChipsHtml(list);
     }
-    const w = runLabel(s.room, s.rw, s.remaining, s.phase, s.boss !== null);
+    const w = runLabel(s.room, s.rw, s.remaining, s.phase, s.boss?.name ?? null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
     this.bossBar.set(s.boss);

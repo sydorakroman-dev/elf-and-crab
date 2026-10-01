@@ -29,7 +29,7 @@ comes along, and you're healed to full). The last room ends with the **King Slim
 
 | Room | |
 | --- | --- |
-| 1 · The Woodland | a sunny clearing: grass, low-poly trees, hedge walls, fireflies |
+| 1 · The Woodland | a sunny clearing: grass, low-poly trees, hedge walls, fireflies; forest beasts and the Crystal Bear |
 | 2 · The Crypt | warm torches, a central brazier, four pillars |
 | 3 · The Flooded Hall | two rows of pillars, cold blue light, puddles |
 | 4 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it), a ring of pillars |
@@ -38,14 +38,31 @@ comes along, and you're healed to full). The last room ends with the **King Slim
 
 ## Enemies
 
-| | Small slime | Big slime | Spitter | 👑 King Slime |
-| --- | --- | --- | --- | --- |
-| HP | 1 (+1 every 5 levels) | 4 (+1 every 3) | 2 (+1 every 4) | 90 |
-| Touch damage | 1 ♥ | 2 ♥ | 1 ♥ | 1 ♥ (slam) |
-| Special | — | — | keeps 9–14 m away, spits globs (1 ♥) | leaping slam with a warning ring, 5-glob volleys, splits off 4 small slimes at ⅔ and ⅓ health, resists stun, can't be calmed |
+Full tables with every number: [`docs/enemies.csv`](docs/enemies.csv) and [`docs/waves.csv`](docs/waves.csv),
+generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 10.
 
-Waves get bigger, faster and tougher across the run (`roomWaveDifficulty` in `src/world/rooms.ts` feeds `waveSpec`
-in `src/game/combat.ts`).
+**The Woodland** — forest beasts (all melee):
+
+| | Tier | HP | Damage | Special |
+| --- | --- | --- | --- | --- |
+| Armored Beetle | weak | 10 | 8 | swarms |
+| Venomous Snake | normal | 25 | 10 | coils, then lunges (18) |
+| Dire Wolf | tough | 45 | 15 | very fast; bites, backs off, comes again |
+| Thorn Boar | elite | 80 | 15 | paws the ground, then charges (30); dazed if it hits a tree or wall |
+| Crystal Bear | mini-boss | 300 | 20 | swipe (25), ground pound with warning ring (25), roars in beetles at half health |
+
+**The dungeon** — slimes:
+
+| | HP | Damage | Special |
+| --- | --- | --- | --- |
+| Small slime | 10+ | 20 | — |
+| Big slime | 40+ | 35 | — |
+| Spitter | 20+ | 15 | keeps its distance and spits globs (20) |
+| 👑 King Slime | 900 | 30 | leaping slam with warning ring (30), 5-glob volleys, splits off small slimes |
+
+Waves get bigger, faster and tougher room by room (`roomWaveDifficulty` in `src/world/rooms.ts` feeds `waveSpec` in
+`src/game/combat.ts`). Health and damage numbers live in `src/game/balance.ts`, `SLIME_KINDS` (`enemies.ts`) and
+`BEASTS` (`beasts.ts`).
 
 ## Playing together (asymmetric co-op)
 
@@ -94,6 +111,7 @@ npm test         # unit tests (Vitest)
 npm run build    # production build: dist/ (game) + server/dist/ (server)
 npm start        # run the built server: serves the game and /ws on $PORT (default 8787)
 npm run deploy   # build and publish to GitHub Pages (gh-pages branch)
+npm run stats    # regenerate docs/enemies.csv and docs/waves.csv from the code
 npm run balance  # difficulty simulator: bots play headlessly (needs `npm run dev` + Chrome)
 ```
 
