@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampToArena, pickAimTarget, pushOutOfCircles, rangeIntent, segmentCircleHit } from './combat';
+import { arenaExit, clampToArena, insideArena, pickAimTarget, pushOutOfCircles, rangeIntent, segmentCircleHit } from './combat';
 
 describe('pushOutOfCircles', () => {
   it('moves a point out to the touching distance', () => {
@@ -74,5 +74,28 @@ describe('rangeIntent', () => {
     expect(rangeIntent(20, 9, 14)).toBe(1);
     expect(rangeIntent(5, 9, 14)).toBe(-1);
     expect(rangeIntent(11, 9, 14)).toBe(0);
+  });
+});
+
+describe('arena shapes', () => {
+  it('keeps things inside a round room', () => {
+    const p = { x: 30, z: 30 };
+    expect(clampToArena(p, 20, 1, 'circle')).toBe(true);
+    expect(Math.hypot(p.x, p.z)).toBeCloseTo(19);
+  });
+
+  it('cuts the corners of an eight-sided room', () => {
+    expect(insideArena(19, 19, 20, 0, 'square')).toBe(true);
+    expect(insideArena(19, 19, 20, 0, 'octagon')).toBe(false);
+    expect(insideArena(19, 0, 20, 0, 'octagon')).toBe(true); // the middle of a wall is as far as a square's
+    const p = { x: 19, z: 19 };
+    clampToArena(p, 20, 0, 'octagon');
+    expect(Math.abs(p.x) + Math.abs(p.z)).toBeCloseTo(20 * Math.SQRT2);
+  });
+
+  it('finds where a shot leaves the room', () => {
+    expect(arenaExit(0, 0, 5, 0, 20)).toBeNull();
+    const t = arenaExit(0, 0, 40, 0, 20, 0)!;
+    expect(t * 40).toBeCloseTo(20, 1);
   });
 });

@@ -32,12 +32,12 @@ Inferno**; beat it to win.
 
 | Room | Who lives there | Boss |
 | --- | --- | --- |
-| 1 · The Woodland — a sunny clearing, trees, hedges | forest beasts | 🐻 The Crystal Bear |
-| 2 · The Crystal Cave — glowing crystal clusters | goblins | ⚙️ The Scrap Boss |
-| 3 · The Crypt — torches, a brazier, four pillars | the undead | 💀 The Necromancer |
-| 4 · The Throne Room — a colonnade and a throne | orcs | 🪓 The Orc Chieftain |
-| 5 · The Flooded Hall — pillars, cold light, puddles | underworld dwellers | 🪱 The Giant Cave Worm |
-| 6 · The Lava Chamber — a lava pit (arrows fly over it) | nature elementals | 🔥 The Inferno (final boss) |
+| 1 · The Woodland — a round, sunny clearing, trees, hedges | forest beasts | 🐻 The Crystal Bear |
+| 2 · The Crystal Cave — eight-sided, glowing crystal clusters | goblins | ⚙️ The Scrap Boss |
+| 3 · The Crypt — square, torches, a brazier, four pillars | the undead | 💀 The Necromancer |
+| 4 · The Throne Room — square, a colonnade and a throne | orcs | 🪓 The Orc Chieftain |
+| 5 · The Flooded Hall — eight-sided, pillars, cold light, puddles | underworld dwellers | 🪱 The Giant Cave Worm |
+| 6 · The Lava Chamber — round, a lava pit (arrows fly over it) | nature elementals | 🔥 The Inferno (final boss) |
 
 ## Enemies
 
@@ -128,9 +128,9 @@ Two roles:
 
 | Familiar | Speed | Spells |
 | --- | --- | --- |
-| 🦀 Crab | medium | ✨ **Magic Burst** — stun every enemy within 5.5 m for 2.5 s (12 s) · 🐚 **Shell Shield** — the elf gets a bubble that blocks the next hit (18 s) |
-| 🦫 Capybara | slow | ♨️ **Soothing Spring** — a 6 m pool for 6 s: enemies in it are 60% slower, the elf heals 1 heart in it (16 s) · 🌸 **Calm Aura** — enemies within 7 m stop chasing and wander off, harmless, for 5 s (14 s) |
-| 🐺 Wolf | fast | 🐾 **Pounce** — leap up to 10 m toward where you tapped, 2 damage to every enemy on the way (8 s) |
+| 🦀 Crab | medium | ✨ **Magic Burst** — stun every enemy within 5.5 m for 2.5 s (7 s) · 🐚 **Shell Shield** — the elf gets a bubble that blocks the next hit (11 s) |
+| 🦫 Capybara | slow | ♨️ **Soothing Spring** — a 6 m pool for 6 s: enemies in it are 60% slower, the elf heals 1 heart in it (10 s) · 🌸 **Calm Aura** — enemies within 7 m stop chasing and wander off, harmless, for 5 s (8 s) |
+| 🐺 Wolf | fast | 🐾 **Pounce** — leap up to 10 m toward where you tapped, 25 damage to every enemy on the way (5 s) |
 
 Solo is just the elf; the familiar only appears while a second player is connected.
 

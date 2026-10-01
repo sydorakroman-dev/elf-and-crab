@@ -32,15 +32,70 @@ export function pushOutOfCircles(p: Point, radius: number, circles: readonly Cir
   return moved;
 }
 
-/** Keeps a circle inside the square arena [-half, half]². Returns true if it was clamped. */
-export function clampToArena(p: Point, half: number, radius: number): boolean {
+/**
+ * Room floor plans. `half` is the apothem: the distance from the centre to the middle of each wall
+ * (so the gates on the north, south, east and west walls sit at ±half on every shape).
+ */
+export type ArenaShape = 'square' | 'circle' | 'octagon';
+
+let currentShape: ArenaShape = 'square';
+
+/** The shape every arena check uses (set when a room is built). */
+export function setArenaShape(shape: ArenaShape): void {
+  currentShape = shape;
+}
+
+export function arenaShape(): ArenaShape {
+  return currentShape;
+}
+
+/** True if (x, z) is inside the arena of apothem `half`, at least `margin` from the wall. */
+export function insideArena(x: number, z: number, half: number, margin = 0, shape: ArenaShape = currentShape): boolean {
+  const a = half - margin;
+  if (shape === 'circle') return x * x + z * z <= a * a;
+  if (Math.abs(x) > a || Math.abs(z) > a) return false;
+  return shape === 'square' || Math.abs(x) + Math.abs(z) <= a * Math.SQRT2;
+}
+
+/** Keeps a circle inside the arena (square, circle or octagon of apothem `half`). Returns true if it was clamped. */
+export function clampToArena(p: Point, half: number, radius: number, shape: ArenaShape = currentShape): boolean {
   const lim = half - radius;
-  const x = Math.max(-lim, Math.min(lim, p.x));
-  const z = Math.max(-lim, Math.min(lim, p.z));
+  let { x, z } = p;
+  if (shape === 'circle') {
+    const d = Math.hypot(x, z);
+    if (d > lim) {
+      x *= lim / d;
+      z *= lim / d;
+    }
+  } else {
+    x = Math.max(-lim, Math.min(lim, x));
+    z = Math.max(-lim, Math.min(lim, z));
+    if (shape === 'octagon') {
+      // The diagonal walls: |x| + |z| ≤ lim·√2; slide along them.
+      const over = (Math.abs(x) + Math.abs(z) - lim * Math.SQRT2) / 2;
+      if (over > 0) {
+        x -= Math.sign(x) * over;
+        z -= Math.sign(z) * over;
+      }
+    }
+  }
   const clamped = x !== p.x || z !== p.z;
   p.x = x;
   p.z = z;
   return clamped;
+}
+
+/** Fraction along A→B (A inside) where it leaves the arena, `margin` in from the wall; null if B is inside too. */
+export function arenaExit(ax: number, az: number, bx: number, bz: number, half: number, margin = 0): number | null {
+  if (insideArena(bx, bz, half, margin)) return null;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 14; i++) {
+    const t = (lo + hi) / 2;
+    if (insideArena(ax + (bx - ax) * t, az + (bz - az) * t, half, margin)) lo = t;
+    else hi = t;
+  }
+  return lo;
 }
 
 /**

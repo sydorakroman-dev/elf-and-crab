@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clampToArena, pushOutOfCircles, type Circle } from '../game/combat';
+import { clampToArena, insideArena, pushOutOfCircles, type Circle } from '../game/combat';
 import type { Elf, ElfMotion } from './elf';
 import { angleDelta } from './crab';
 
@@ -309,7 +309,7 @@ export class Player {
       const x = this.target.x + dx * d;
       const y = this.target.y + dy * d;
       const z = this.target.z + dz * d;
-      const outside = Math.abs(x) > half - 0.5 || Math.abs(z) > half - 0.5;
+      const outside = !insideArena(x, z, half, 0.5);
       if (outside && y < wallHeight + 0.5) {
         allowed = Math.max(2.5, (this.distance * (i - 1)) / steps);
         break;

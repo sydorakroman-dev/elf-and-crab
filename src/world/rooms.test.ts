@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, WAVES_PER_ROOM, runLabel } from './rooms';
+import { insideArena } from '../game/combat';
 import { createEnemy, type EnemyKind, type RoomWave } from '../game/enemies';
 
 const hpOf = (k: EnemyKind) => createEnemy(k, 0, 0).maxHp;
 const waveHp = (w: RoomWave) => Object.entries(w.mix).reduce((sum, [k, n]) => sum + hpOf(k as EnemyKind) * (n ?? 0), w.boss ? hpOf(w.boss) : 0);
 
 describe('rooms', () => {
+  it('comes in different shapes', () => {
+    expect(new Set(ROOMS.map((r) => r.shape))).toEqual(new Set(['square', 'circle', 'octagon']));
+  });
+
   it('has six rooms, starting in the woodland, only the last without an exit', () => {
     expect(ROOMS).toHaveLength(6);
     expect(ROOMS.map((r) => r.name)).toEqual(['The Woodland', 'The Crystal Cave', 'The Crypt', 'The Throne Room', 'The Flooded Hall', 'The Lava Chamber']);
@@ -13,8 +18,7 @@ describe('rooms', () => {
     for (const r of ROOMS) {
       expect(Number.isInteger(r.half)).toBe(true);
       for (const [x, z] of [...r.pillars, ...(r.crystals ?? []), ...(r.trees ?? [])]) {
-        expect(Math.abs(x)).toBeLessThan(r.half - 2);
-        expect(Math.abs(z)).toBeLessThan(r.half - 2);
+        expect(insideArena(x, z, r.half, 2, r.shape)).toBe(true);
       }
     }
   });

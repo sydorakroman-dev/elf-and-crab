@@ -37,7 +37,7 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     speed: 8,
     gait: 'sideways',
     biteDamage: 10,
-    biteCooldown: 1.0,
+    biteCooldown: 0.8,
     radius: 0.6,
     spells: ['burst', 'shell'],
     blurb: 'Crowd control and protection.',
@@ -50,7 +50,7 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     speed: 6,
     gait: 'forward',
     biteDamage: 8,
-    biteCooldown: 1.6,
+    biteCooldown: 1.2,
     radius: 0.7,
     spells: ['spring', 'calm'],
     blurb: 'Slow and steady. Heals and soothes.',
@@ -63,7 +63,7 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     speed: 11,
     gait: 'forward',
     biteDamage: 12,
-    biteCooldown: 0.7,
+    biteCooldown: 0.55,
     radius: 0.6,
     spells: ['pounce'],
     blurb: 'Fast hunter. Big damage.',
@@ -82,11 +82,11 @@ export interface SpellDef {
 }
 
 export const SPELLS: Record<SpellId, SpellDef> = {
-  burst: { name: 'Magic Burst', icon: '✨', cooldown: 12, radius: 5.5, duration: 2.5, description: 'Stuns every enemy around you.' },
-  shell: { name: 'Shell Shield', icon: '🐚', cooldown: 18, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next hit.' },
-  spring: { name: 'Soothing Spring', icon: '♨️', cooldown: 16, radius: 3, duration: 6, description: 'A warm pool: enemies in it slow down, the elf heals a heart in it.' },
-  calm: { name: 'Calm Aura', icon: '🌸', cooldown: 14, radius: 7, duration: 5, description: 'Enemies near you stop chasing and wander off.' },
-  pounce: { name: 'Pounce', icon: '🐾', cooldown: 8, radius: 0, duration: 0.35, description: 'Leap toward where you tapped, hitting every enemy on the way.' },
+  burst: { name: 'Magic Burst', icon: '✨', cooldown: 7, radius: 5.5, duration: 2.5, description: 'Stuns every enemy around you.' },
+  shell: { name: 'Shell Shield', icon: '🐚', cooldown: 11, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next hit.' },
+  spring: { name: 'Soothing Spring', icon: '♨️', cooldown: 10, radius: 3, duration: 6, description: 'A warm pool: enemies in it slow down, the elf heals a heart in it.' },
+  calm: { name: 'Calm Aura', icon: '🌸', cooldown: 8, radius: 7, duration: 5, description: 'Enemies near you stop chasing and wander off.' },
+  pounce: { name: 'Pounce', icon: '🐾', cooldown: 5, radius: 0, duration: 0.35, description: 'Leap toward where you tapped, hitting every enemy on the way.' },
 };
 
 /** Soothing Spring: enemies inside move at this fraction of their speed (60% slower). */

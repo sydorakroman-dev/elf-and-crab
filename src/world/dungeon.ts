@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Circle } from '../game/combat';
+import { insideArena, setArenaShape, type ArenaShape, type Circle } from '../game/combat';
 import { glowTexture } from '../util/glow';
 import { mulberry32 } from '../util/rng';
 import type { RoomDef } from './rooms';
@@ -14,6 +14,30 @@ const WALL_DEPTH = 1.4;
 /** Walls by direction. North is the exit (−Z), south the entry (+Z). */
 type Side = 'north' | 'west' | 'south' | 'east';
 const SIDES: Side[] = ['north', 'west', 'south', 'east'];
+
+/** Wall segments per floor plan (a "circle" is a 24-sided wall, which reads as round). */
+const WALL_SIDES: Record<ArenaShape, number> = { square: 4, octagon: 8, circle: 24 };
+
+/** Distance from the centre to the wall's inner face in direction `angle` (0 = north). */
+function wallDistance(shape: ArenaShape, half: number, angle: number): number {
+  if (shape === 'circle') return half;
+  const step = (Math.PI * 2) / WALL_SIDES[shape];
+  let d = ((angle % step) + step) % step;
+  d = Math.min(d, step - d);
+  return half / Math.cos(d);
+}
+
+/** Torch spots around the wall (angles; 0 = north), clear of the gates and corners. */
+function torchAngles(shape: ArenaShape): number[] {
+  const out: number[] = [];
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 2;
+    if (shape === 'square') out.push(a - 0.4636, a + 0.4636); // halfway along each wall
+    else if (shape === 'octagon') out.push(a + Math.PI / 4 - 0.17, a + Math.PI / 4 + 0.17); // the diagonal walls
+    else out.push(a + Math.PI / 8, a + (3 * Math.PI) / 8);
+  }
+  return out;
+}
 
 interface Flame {
   light: THREE.PointLight;
@@ -53,6 +77,7 @@ export class Dungeon {
   constructor(scene: THREE.Scene, room: RoomDef, shadowMapSize = 2048) {
     this.room = room;
     this.half = room.half;
+    setArenaShape(room.shape); // every arena check (movement, arrows, bolts, camera) follows this room's shape
     const rng = mulberry32(room.half * 7919 + room.pillars.length);
     scene.background = new THREE.Color(room.fog);
     scene.fog = room.outdoor ? new THREE.Fog(room.fog, 45, 120) : new THREE.Fog(room.fog, 30, 80);
@@ -142,6 +167,7 @@ export class Dungeon {
       for (let iz = 0; iz < n; iz++) {
         const x = -h + TILE / 2 + ix * TILE;
         const z = -h + TILE / 2 + iz * TILE;
+        if (!insideArena(x, z, h, -TILE, this.room.shape)) continue; // round / eight-sided rooms
         // Grass is lumpier than flagstones.
         const bump = this.room.outdoor ? 0.1 : 0.04;
         m.makeRotationY((rng() - 0.5) * 0.03).setPosition(x, -0.15 + (rng() - 0.5) * bump, z);
@@ -150,12 +176,16 @@ export class Dungeon {
         i++;
       }
     }
+    tiles.count = i;
     tiles.receiveShadow = true;
-    // Dark grout showing between the tiles.
+    // Dark grout showing between the tiles, in the room's own shape.
+    const sides = WALL_SIDES[this.room.shape];
+    const groutR = (h + 3) / Math.cos(Math.PI / sides);
     const grout = new THREE.Mesh(
-      new THREE.BoxGeometry(h * 2 + 4, 0.2, h * 2 + 4),
+      new THREE.CylinderGeometry(groutR, groutR, 0.2, sides),
       new THREE.MeshStandardMaterial({ color: this.room.outdoor ? 0x22381a : 0x0e0c10, roughness: 1 }),
     );
+    grout.rotation.y = Math.PI / sides;
     grout.position.y = -0.25;
     this.group.add(tiles, grout);
   }
@@ -164,14 +194,16 @@ export class Dungeon {
     const h = this.half;
     const brickW = 2;
     const brickH = 1;
-    const span = h + WALL_DEPTH;
+    const sides = WALL_SIDES[this.room.shape];
+    // Half the length of each wall segment's outer face (a little extra closes the corners).
+    const span = (h + WALL_DEPTH) * Math.tan(Math.PI / sides) + (sides > 4 ? 0.5 : 0);
     const rows = WALL_HEIGHT / brickH;
     const perRow = Math.ceil((span * 2) / brickW) + 1;
     const { wall } = this.room;
     const bricks = new THREE.InstancedMesh(
       new THREE.BoxGeometry(brickW - 0.06, brickH - 0.06, WALL_DEPTH),
       new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true }),
-      4 * rows * perRow,
+      sides * rows * perRow,
     );
     const m = new THREE.Matrix4();
     const rot = new THREE.Matrix4();
@@ -184,9 +216,13 @@ export class Dungeon {
       : new THREE.MeshStandardMaterial({ color: 0x26221f, metalness: 0.6, roughness: 0.5, flatShading: true });
     const hedge = this.room.outdoor;
 
-    SIDES.forEach((side, k) => {
-      rot.makeRotationY((k * Math.PI) / 2);
-      const throneWall = (side === 'north' && !this.room.hasExit) || (side === 'west' && !!this.room.solidWest);
+    for (let k = 0; k < sides; k++) {
+      const angle = (k * Math.PI * 2) / sides;
+      rot.makeRotationY(angle);
+      // Gates are on the four walls facing north, west, south and east.
+      const gateIndex = (k * 4) % sides === 0 ? (k * 4) / sides : -1;
+      const side = gateIndex >= 0 ? SIDES[gateIndex] : null;
+      const throneWall = !side || (side === 'north' && !this.room.hasExit) || (side === 'west' && !!this.room.solidWest);
       for (let row = 0; row < rows; row++) {
         const offset = row % 2 ? brickW / 2 : 0;
         for (let b = 0; b < perRow; b++) {
@@ -209,7 +245,7 @@ export class Dungeon {
           count++;
         }
       }
-      if (throneWall) return;
+      if (throneWall) continue;
 
       // Gate: dark void behind the opening, with a stone frame.
       const gate = new THREE.Group();
@@ -248,9 +284,9 @@ export class Dungeon {
           gate.add(portal, light);
         }
       }
-      gate.rotation.y = (k * Math.PI) / 2;
+      gate.rotation.y = angle;
       this.group.add(gate);
-    });
+    }
     bricks.count = count;
     bricks.castShadow = true;
     bricks.receiveShadow = true;
@@ -287,6 +323,19 @@ export class Dungeon {
     return m;
   }
 
+  /** A random floor spot at least `margin` inside the walls (whatever the room's shape). */
+  private spot(rng: () => number, margin: number): [number, number] {
+    const lim = this.half - margin;
+    let x = 0;
+    let z = 0;
+    for (let i = 0; i < 30; i++) {
+      x = (rng() * 2 - 1) * lim;
+      z = (rng() * 2 - 1) * lim;
+      if (insideArena(x, z, this.half, margin, this.room.shape)) break;
+    }
+    return [x, z];
+  }
+
   private buildFeature(rng: () => number): void {
     const room = this.room;
     switch (room.feature) {
@@ -321,8 +370,7 @@ export class Dungeon {
         const m = new THREE.Matrix4();
         const c = new THREE.Color();
         for (let i = 0; i < tufts.count; i++) {
-          const x = (rng() * 2 - 1) * (this.half - 1);
-          const z = (rng() * 2 - 1) * (this.half - 1);
+          const [x, z] = this.spot(rng, 1);
           m.compose(new THREE.Vector3(x, 0, z), new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * 0.5, rng() * 3, (rng() - 0.5) * 0.5)), new THREE.Vector3(1, 0.6 + rng(), 1));
           tufts.setMatrixAt(i, m);
           tufts.setColorAt(i, c.setHSL(0.26 + rng() * 0.06, 0.5, 0.25 + rng() * 0.12));
@@ -332,8 +380,7 @@ export class Dungeon {
         const stemMat = new THREE.MeshStandardMaterial({ color: 0xf2e6cc, flatShading: true });
         const petal = [0xffd34d, 0xffffff, 0xd98cff].map((col) => new THREE.MeshStandardMaterial({ color: col, flatShading: true }));
         for (let i = 0; i < 26; i++) {
-          const x = (rng() * 2 - 1) * (this.half - 2);
-          const z = (rng() * 2 - 1) * (this.half - 2);
+          const [x, z] = this.spot(rng, 2);
           const bit = new THREE.Group();
           if (i % 2 === 0) {
             const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.3, 5).translate(0, 0.15, 0), stemMat);
@@ -353,7 +400,8 @@ export class Dungeon {
         for (let i = 0; i < 28; i++) {
           const sprite = new THREE.Sprite(glowMat.clone());
           sprite.scale.setScalar(0.35);
-          const base = new THREE.Vector3((rng() * 2 - 1) * (this.half - 3), 0.8 + rng() * 2.5, (rng() * 2 - 1) * (this.half - 3));
+          const [fx, fz] = this.spot(rng, 3);
+          const base = new THREE.Vector3(fx, 0.8 + rng() * 2.5, fz);
           this.fireflies.push({ sprite, base, seed: rng() * 10 });
           this.group.add(sprite);
         }
@@ -378,7 +426,8 @@ export class Dungeon {
         const water = new THREE.MeshStandardMaterial({ color: 0x0c2433, roughness: 0.05, metalness: 0.4, transparent: true, opacity: 0.85 });
         for (let i = 0; i < 14; i++) {
           const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 18).rotateX(-Math.PI / 2), water);
-          puddle.position.set((rng() * 2 - 1) * (this.half - 4), 0.02, (rng() * 2 - 1) * (this.half - 4));
+          const [px, pz] = this.spot(rng, 4);
+          puddle.position.set(px, 0.02, pz);
           puddle.scale.set(1.2 + rng() * 2.5, 1, 0.8 + rng() * 1.6);
           puddle.rotation.y = rng() * Math.PI;
           puddle.receiveShadow = true;
@@ -399,7 +448,8 @@ export class Dungeon {
         // Cracks of lava in the floor.
         for (let i = 0; i < 10; i++) {
           const crack = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 2 + rng() * 4).rotateX(-Math.PI / 2), this.glow(0x3a0a02, 0xff4a10, 1.2));
-          crack.position.set((rng() * 2 - 1) * (this.half - 5), 0.02, (rng() * 2 - 1) * (this.half - 5));
+          const [cx, cz] = this.spot(rng, 5);
+          crack.position.set(cx, 0.02, cz);
           crack.rotation.y = rng() * Math.PI;
           this.group.add(crack);
         }
@@ -498,10 +548,12 @@ export class Dungeon {
       let x: number;
       let z: number;
       if (i < 60 || pillars.length === 0) {
-        const along = (rng() * 2 - 1) * h;
-        const inset = h - 0.3 - rng() * 1.2;
-        [x, z] = [[along, -inset], [along, inset], [-inset, along], [inset, along]][i % 4];
-        if (Math.abs(along) < GATE_HALF_WIDTH + 1) x = z = 1e3; // keep gates clear
+        const a = rng() * Math.PI * 2;
+        const d = wallDistance(this.room.shape, h, a) - 0.3 - rng() * 1.2;
+        x = -Math.sin(a) * d;
+        z = -Math.cos(a) * d;
+        // Keep the gates clear.
+        if (Math.abs(x) < GATE_HALF_WIDTH + 1 || Math.abs(z) < GATE_HALF_WIDTH + 1) x = z = 1e3;
       } else {
         const p = pillars[i % pillars.length];
         const a = rng() * Math.PI * 2;
@@ -555,22 +607,16 @@ export class Dungeon {
     if (room.outdoor) return; // daylight: no torches
     const bracketMat = new THREE.MeshStandardMaterial({ color: 0x2a2626, metalness: 0.5, roughness: 0.6 });
     const bracketGeo = new THREE.BoxGeometry(0.25, 0.7, 0.5);
-    // Two torches per wall.
-    for (let k = 0; k < 4; k++) {
-      const a = (k * Math.PI) / 2;
-      for (const along of [-h * 0.5, h * 0.5]) {
-        const ox = Math.cos(a) * along;
-        const oz = Math.sin(a) * along;
-        const nx = Math.sin(a);
-        const nz = -Math.cos(a);
-        const wx = ox + nx * (h - 0.3);
-        const wz = oz + nz * (h - 0.3);
-        const bracket = new THREE.Mesh(bracketGeo, bracketMat);
-        bracket.position.set(wx, 3.2, wz);
-        bracket.rotation.y = -a;
-        this.group.add(bracket);
-        this.addFlame(wx - nx * 0.2, 3.75, wz - nz * 0.2, 1.3, 20, 26, room.torchLight, room.torchFlame, 1);
-      }
+    // Eight torches round the walls, clear of the gates.
+    for (const a of torchAngles(room.shape)) {
+      const nx = -Math.sin(a);
+      const nz = -Math.cos(a);
+      const d = wallDistance(room.shape, h, a) - 0.3;
+      const bracket = new THREE.Mesh(bracketGeo, bracketMat);
+      bracket.position.set(nx * d, 3.2, nz * d);
+      bracket.rotation.y = a;
+      this.group.add(bracket);
+      this.addFlame(nx * (d - 0.2), 3.75, nz * (d - 0.2), 1.3, 20, 26, room.torchLight, room.torchFlame, 1);
     }
   }
 }

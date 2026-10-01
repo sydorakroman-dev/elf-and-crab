@@ -1,4 +1,5 @@
 import type { RoomWave } from '../game/enemies';
+import type { ArenaShape } from '../game/combat';
 
 /** The rooms of the dungeon run, as data. The Dungeon builds whichever one is current. */
 
@@ -12,7 +13,9 @@ export interface Hsl {
 
 export interface RoomDef {
   name: string;
-  /** Playable floor is [-half, half]². Integer (tiles are 2 m). */
+  /** Floor plan: square, circle or octagon. */
+  shape: ArenaShape;
+  /** Centre to the middle of each wall, m (the gates sit at ±half). Integer (tiles are 2 m). */
   half: number;
   /** Pillar positions; every pillar blocks movement and arrows. */
   pillars: [number, number][];
@@ -47,6 +50,7 @@ export interface RoomDef {
 export const ROOMS: RoomDef[] = [
   {
     name: 'The Woodland',
+    shape: 'circle',
     group: 'Forest beasts',
     art: 'beasts',
     half: 24,
@@ -73,6 +77,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Crystal Cave',
+    shape: 'octagon',
     group: 'Goblins',
     art: 'goblins',
     waves: [
@@ -98,6 +103,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Crypt',
+    shape: 'square',
     group: 'The undead',
     art: 'undead',
     waves: [
@@ -122,6 +128,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Throne Room',
+    shape: 'square',
     group: 'Orcs',
     art: 'orcs',
     waves: [
@@ -148,6 +155,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Flooded Hall',
+    shape: 'octagon',
     group: 'Underworld dwellers',
     art: 'underworld',
     waves: [
@@ -172,6 +180,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Lava Chamber',
+    shape: 'circle',
     group: 'Nature elementals',
     art: 'elementals',
     waves: [

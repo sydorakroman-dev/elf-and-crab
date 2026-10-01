@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { segmentCircleHit, type Circle, type Point } from './combat';
+import { insideArena, segmentCircleHit, type Circle, type Point } from './combat';
 import type { Spit } from './enemies';
 import { glowTexture } from '../util/glow';
 import { q, type GlobTuple } from '../net/snapshot';
@@ -210,8 +210,7 @@ export class Globs {
           hitPlayer = false;
         }
       }
-      const lim = half - radius;
-      const outside = Math.abs(bx) > lim || Math.abs(bz) > lim;
+      const outside = !insideArena(bx, bz, half, radius);
 
       if (bestT !== Infinity || outside || g.life <= 0) {
         const t = bestT === Infinity ? 1 : bestT;

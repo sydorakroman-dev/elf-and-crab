@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { segmentCircleHit, type Circle } from './combat';
+import { arenaExit, segmentCircleHit, type Circle } from './combat';
 import type { Enemy } from './enemies';
 import { glowTexture } from '../util/glow';
 import { q, type ArrowTuple } from '../net/snapshot';
@@ -152,7 +152,7 @@ export class Arrows {
           solid = true;
         }
       }
-      const wallT = wallHit(p.x, p.z, bx, bz, half);
+      const wallT = arenaExit(p.x, p.z, bx, bz, half);
       if (wallT !== null && wallT < bestT) {
         bestT = wallT;
         hitSlime = null;
@@ -186,16 +186,3 @@ export class Arrows {
   }
 }
 
-/** Fraction along A→B where it leaves the square [-half, half]², or null if it stays inside. */
-function wallHit(ax: number, az: number, bx: number, bz: number, half: number): number | null {
-  let t: number | null = null;
-  const check = (a: number, b: number) => {
-    if (Math.abs(b) <= half) return;
-    const edge = b > 0 ? half : -half;
-    const tt = (edge - a) / (b - a);
-    if (t === null || tt < t) t = tt;
-  };
-  check(ax, bx);
-  check(az, bz);
-  return t;
-}

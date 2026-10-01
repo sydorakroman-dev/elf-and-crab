@@ -1,4 +1,4 @@
-import type { Circle, Point } from './combat';
+import { insideArena, type Circle, type Point } from './combat';
 
 /** Pure power-up rules: catalogue, timers, random choice and placement (no three.js; unit tested). */
 
@@ -93,6 +93,7 @@ export function randomSpawnPoint(
   let best: Point = { x: 0, z: half / 2 };
   for (let attempt = 0; attempt < 50; attempt++) {
     const p = { x: (rng() * 2 - 1) * (half - margin), z: (rng() * 2 - 1) * (half - margin) };
+    if (!insideArena(p.x, p.z, half, margin)) continue; // round / eight-sided rooms
     best = p;
     const blocked = obstacles.some((o) => Math.hypot(p.x - o.x, p.z - o.z) < o.radius + 1.5);
     const crowded = avoid.some((a) => Math.hypot(p.x - a.x, p.z - a.z) < avoidRadius);
