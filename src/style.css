@@ -138,6 +138,12 @@ canvas { display: block; }
   background: radial-gradient(ellipse at center, rgba(7, 6, 10, 0.35), rgba(7, 6, 10, 0.85));
   cursor: pointer;
 }
+.overlay.landing {
+  background:
+    radial-gradient(ellipse at center, rgba(7, 6, 10, 0.55), rgba(7, 6, 10, 0.25) 70%),
+    var(--landing-art) center / cover no-repeat,
+    #07060a;
+}
 .card { max-width: 480px; text-align: center; }
 .card h1 {
   margin: 0 0 12px;
