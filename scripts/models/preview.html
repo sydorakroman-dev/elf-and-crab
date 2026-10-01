@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Model preview</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html, body { margin: 0; background: #eef1ec; font: 13px system-ui, sans-serif; color: #2b3a33; }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      // Dev tool: /scripts/models/preview.html?dir=models/elementals&files=a.glb,b.glb  (front + side views in a lineup)
+      import * as THREE from 'three';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+      const params = new URLSearchParams(location.search);
+      const dir = params.get('dir') ?? 'models/elementals';
+      const files = (params.get('files') ?? 'rock-golem.glb,treant.glb,wind-elemental.glb,fire-elemental.glb,water-elemental.glb,thorn-vine.glb').split(',');
+      const cell = 300;
+      const width = cell * files.length;
+      const height = 640;
+      const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      renderer.setPixelRatio(1);
+      renderer.setSize(width, height);
+      renderer.setClearColor(0xeef1ec);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.1; // same as the game
+      document.body.appendChild(renderer.domElement);
+      renderer.setScissorTest(true);
+
+      const loader = new GLTFLoader();
+      const scenes = await Promise.all(
+        files.map(async (f) => {
+          const gltf = await loader.loadAsync(`/public/${dir}/${f}`.replace('/public/', '/'));
+          const scene = new THREE.Scene();
+          scene.add(new THREE.HemisphereLight(0xdff0ff, 0x6a7a5a, 2.2)); // roughly the Woodland's daylight
+          const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
+          sun.position.set(3, 6, 5);
+          scene.add(sun, gltf.scene);
+          let meshes = 0;
+          gltf.scene.traverse((o) => o.isMesh && meshes++);
+          return { name: f.replace('.glb', ''), scene, meshes };
+        }),
+      );
+
+      const cam = new THREE.PerspectiveCamera(30, cell / (height / 2), 0.1, 100);
+      scenes.forEach((s, i) => {
+        for (const [row, angle] of [[0, 0.35], [1, Math.PI / 2 + 0.1]]) {
+          const y = height - (row + 1) * (height / 2);
+          renderer.setViewport(i * cell, y, cell, height / 2);
+          renderer.setScissor(i * cell, y, cell, height / 2);
+          cam.position.set(Math.sin(angle) * 10, 2.4, Math.cos(angle) * 10);
+          cam.lookAt(0, 1.8, 0);
+          renderer.render(s.scene, cam);
+        }
+      });
+      // Labels.
+      const labels = document.createElement('div');
+      labels.style.cssText = `position:absolute;left:0;top:0;width:${width}px;display:flex`;
+      labels.innerHTML = scenes.map((s) => `<div style="width:${cell}px;text-align:center;padding-top:6px;font-weight:600">${s.name} <span style="opacity:.6;font-weight:400">(${s.meshes} parts)</span></div>`).join('');
+      document.body.appendChild(labels);
+      window.__done = true;
+    </script>
+  </body>
+</html>
