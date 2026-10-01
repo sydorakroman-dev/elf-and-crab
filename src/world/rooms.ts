@@ -190,6 +190,7 @@ export const ROOMS: RoomDef[] = [
     shape: 'circle',
     group: 'Nature elementals',
     art: 'elementals',
+    scene: 'scene-lava-chamber',
     waves: [
       { mix: { vine: 5, wind: 3, water: 2, fire: 2 } },
       { mix: { vine: 5, wind: 3, water: 3, fire: 3, golem: 1, treant: 1 } },
