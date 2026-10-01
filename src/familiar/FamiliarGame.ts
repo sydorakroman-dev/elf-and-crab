@@ -3,11 +3,12 @@ import { Dungeon } from '../world/dungeon';
 import { ROOMS } from '../world/rooms';
 import { TelegraphRings } from '../game/telegraph';
 import { BeastVisual } from '../game/beastVisual';
+import { ElementalVisual } from '../game/elementalVisual';
 import type { Elf } from '../player/elf';
 import type { FamiliarBody } from '../player/beasts';
-import { SLIME_KIND_LIST, SlimeVisual, type BeastKind, type SlimeKind, type SlimePose } from '../game/enemies';
+import { ELEMENTAL_KIND_LIST, SLIME_KIND_LIST, SlimeVisual, type BeastKind, type ElementalKind, type SlimeKind, type SlimePose } from '../game/enemies';
 import { Arrows } from '../game/arrows';
-import { GLOB_COLOR, Globs } from '../game/globs';
+import { Globs, PROJECTILES, PROJECTILE_KINDS } from '../game/globs';
 import { Pickups } from '../game/pickups';
 import { Effects } from '../game/effects';
 import { Sfx } from '../game/audio';
@@ -46,7 +47,7 @@ export class FamiliarGame {
   private readonly hud: FamiliarHud;
   private readonly buffer = new SnapshotBuffer(0.1);
   /** Every enemy on screen, keyed by id: slimes and beasts draw differently. */
-  private readonly slimes = new Map<number, SlimeVisual | BeastVisual>();
+  private readonly slimes = new Map<number, SlimeVisual | BeastVisual | ElementalVisual>();
   private readonly arrows = new Arrows();
   private readonly globs = new Globs();
   private readonly pickups = new Pickups();
@@ -180,7 +181,7 @@ export class FamiliarGame {
           this.effects.burst(ev.x, 0.8, ev.z, new THREE.Color(ev.c), 6, 4, 0.12);
           break;
         case 'glob':
-          this.effects.burst(ev.x, 1, ev.z, GLOB_COLOR, 10, 4, 0.12);
+          this.effects.burst(ev.x, 1, ev.z, new THREE.Color(PROJECTILES[PROJECTILE_KINDS[ev.k ?? 0] ?? 'glob'].color), 10, 4, 0.12);
           break;
         case 'spit':
           this.sfx.spit();
@@ -326,7 +327,9 @@ export class FamiliarGame {
       seen.add(id);
       let v = this.slimes.get(id);
       if (!v) {
-        v = (SLIME_KIND_LIST as string[]).includes(kind) ? new SlimeVisual(kind as SlimeKind) : new BeastVisual(kind as BeastKind);
+        if ((SLIME_KIND_LIST as string[]).includes(kind)) v = new SlimeVisual(kind as SlimeKind);
+        else if ((ELEMENTAL_KIND_LIST as string[]).includes(kind)) v = new ElementalVisual(kind as ElementalKind);
+        else v = new BeastVisual(kind as BeastKind);
         this.slimes.set(id, v);
         this.scene.add(v.group);
       }

@@ -30,11 +30,11 @@ comes along, and you're healed to full). The last room ends with the **King Slim
 | Room | |
 | --- | --- |
 | 1 · The Woodland | a sunny clearing: grass, low-poly trees, hedge walls, fireflies; forest beasts and the Crystal Bear |
-| 2 · The Crystal Cave | big, with glowing crystal clusters to fight around |
-| 3 · The Crypt | warm torches, a central brazier, four pillars |
-| 4 · The Throne Room | a colonnade, a red carpet and a throne against the west wall |
-| 5 · The Flooded Hall | two rows of pillars, cold blue light, puddles |
-| 6 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it); waves 1–2, then the King Slime |
+| 2 · The Crystal Cave | big, with glowing crystal clusters to fight around; wind elementals and rock golems |
+| 3 · The Crypt | warm torches, a central brazier, four pillars; thorn vines and treants |
+| 4 · The Throne Room | a colonnade, a red carpet and a throne against the west wall; golems, vines, wind |
+| 5 · The Flooded Hall | two rows of pillars, cold blue light, puddles; water elementals and vines |
+| 6 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it); fire elementals and golems in waves 1–2, then the King Slime |
 
 ## Enemies
 
@@ -60,9 +60,22 @@ generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 
 | Spitter | 20+ | 15 | keeps its distance and spits globs (20) |
 | 👑 King Slime | 900 | 30 | leaping slam with warning ring (30), 5-glob volleys, splits off small slimes |
 
+**Nature elementals** — mixed into the dungeon's slime waves (1 per wave at first, up to 4 later):
+
+| | Type · tier | HP | Damage | Special |
+| --- | --- | --- | --- | --- |
+| Thorn Vine | melee · normal | 30 | 10 | lashes from 3 m (15) |
+| Wind Elemental | ranged · normal | 35 | 8 | gust bolts (8) with a big shove |
+| Water Elemental | ranged · normal | 45 | 10 | water bolts (12) that slow you for 2 s |
+| Fire Elemental | ranged · tough | 60 | 15 | fireballs (15) that leave burning ground (10 HP/s) |
+| Treant | melee · elite | 120 | 15 | roots erupt where you stand, after a warning ring (22 + slow) |
+| Rock Golem | melee · elite | 140 | 15 | slow; heavy punch (30) with huge knockback |
+
+The elementals' models are built in code by `scripts/models/build-elementals.mjs` (→ `public/models/elementals/`).
+
 Waves get bigger, faster and tougher room by room (`roomWaveDifficulty` in `src/world/rooms.ts` feeds `waveSpec` in
-`src/game/combat.ts`). Health and damage numbers live in `src/game/balance.ts`, `SLIME_KINDS` (`enemies.ts`) and
-`BEASTS` (`beasts.ts`).
+`src/game/combat.ts`; elementals per wave come from `roomElementals`). Health and damage numbers live in
+`src/game/balance.ts`, `SLIME_KINDS` (`enemies.ts`), `BEASTS` (`beasts.ts`) and `ELEMENTALS` (`elementals.ts`).
 
 ## Playing together (asymmetric co-op)
 
@@ -132,7 +145,8 @@ URL; free instances sleep when idle and take ~30-60 s to wake). The GitHub Pages
 - `src/familiar/` — the familiar's tablet view: creature picker, top-down camera, tap-to-move, spell buttons, HUD.
 - `src/game/familiars.ts` — the creature roster and spells (data + pure math); `src/player/beasts.ts` — their bodies.
 - `src/player/controls.ts` — third-person camera and movement (mouse or touch input); `src/ui/touch.ts` — on-screen touch controls.
-- `src/game/` — the game loop, slimes (small, big, spitter), arrows and spitter globs, crab companion AI,
+- `src/game/` — the game loop, slimes (small, big, spitter), forest beasts (`beasts.ts`), nature elementals
+  (`elementals.ts`, rigged in `elementalVisual.ts`), arrows and enemy bolts (`globs.ts`), crab companion AI,
   particles, power-ups (`powerups.ts` rules, `pickups.ts` visuals), sound (WebAudio, no files: effects plus
   positional fire ambience), high score, and pure
   combat helpers in `combat.ts` including the wave difficulty curve (unit tested).

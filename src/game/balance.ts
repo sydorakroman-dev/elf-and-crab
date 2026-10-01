@@ -24,5 +24,15 @@ export const SLIME_ATTACKS = {
   kingSlam: 30,
 };
 
+/** What the elementals' bolts do to the hero. */
+export const ELEMENTAL_ATTACKS = {
+  /** Wind: small damage, big shove. */
+  gust: { damage: 8, knock: 28 },
+  /** Water: slows the hero (speed × factor) for a while. */
+  water: { damage: 12, slowSeconds: 2, slowFactor: 0.55 },
+  /** Fire: leaves burning ground that hurts while you stand in it. */
+  fire: { damage: 15, burnRadius: 1.8, burnSeconds: 3, burnDps: 10 },
+};
+
 /** Victory bonus: score per HP left. */
 export const VICTORY_SCORE_PER_HP = 5;

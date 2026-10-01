@@ -70,6 +70,8 @@ export class Player {
   private aimFacing = 0;
   private dashTimer = 0;
   private dashQueued = false; // set on key-down so even a very quick tap dashes
+  private slowTimer = 0;
+  private slowFactor = 1;
   private dashCooldown = 0;
   private readonly dashDir = new THREE.Vector3();
 
@@ -187,6 +189,16 @@ export class Player {
     this.elf.shoot();
   }
 
+  /** Slowed (e.g. by a water bolt): walk at `factor` of normal speed for `seconds`. */
+  slow(seconds: number, factor: number): void {
+    this.slowTimer = Math.max(this.slowTimer, seconds);
+    this.slowFactor = Math.min(this.slowTimer > 0 ? this.slowFactor : 1, factor);
+  }
+
+  get slowed(): boolean {
+    return this.slowTimer > 0;
+  }
+
   knockback(dirX: number, dirZ: number, strength: number): void {
     this.knock.set(dirX * strength, 0, dirZ * strength);
     this.elf.flinch();
@@ -199,6 +211,8 @@ export class Player {
     this.yaw = yaw;
     this.facing = yaw + Math.PI;
     this.aimTimer = this.dashTimer = this.dashCooldown = 0;
+    this.slowTimer = 0;
+    this.slowFactor = 1;
     this.cameraDistance = this.distance;
     this.update(0, false);
   }
@@ -208,6 +222,8 @@ export class Player {
     this.aimTimer = Math.max(0, this.aimTimer - dt);
     this.dashTimer = Math.max(0, this.dashTimer - dt);
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    this.slowTimer = Math.max(0, this.slowTimer - dt);
+    if (this.slowTimer === 0) this.slowFactor = 1;
 
     // Input relative to the camera's yaw.
     const sin = Math.sin(this.yaw);
@@ -239,7 +255,8 @@ export class Player {
     if (this.dashTimer > 0) {
       this.velocity.copy(this.dashDir).multiplyScalar(DASH_SPEED);
     } else {
-      const speed = wlen > 0 ? (WALK_SPEED * magnitude) / wlen : 0;
+      const slow = this.slowTimer > 0 ? this.slowFactor : 1;
+      const speed = wlen > 0 ? (WALK_SPEED * magnitude * slow) / wlen : 0;
       const blend = 1 - Math.exp(-14 * dt);
       this.velocity.x += (wx * speed - this.velocity.x) * blend;
       this.velocity.z += (wz * speed - this.velocity.z) * blend;

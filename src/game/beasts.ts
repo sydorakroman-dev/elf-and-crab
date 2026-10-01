@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clampToArena, pushOutOfCircles, type Circle } from './combat';
+import { steerMove } from './steer';
 import { BeastVisual, type BeastPose } from './beastVisual';
 import type { BeastKind, Enemy, EnemyTuple, Spit, Strike, Summon, Telegraph } from './enemies';
 import { ENEMY_KIND_LIST } from './enemyKinds';
@@ -362,36 +363,6 @@ export class Beast implements Enemy {
 
   /** Walks in direction (dx, dz), steering around obstacles and other enemies. */
   private move(dx: number, dz: number, speed: number, dt: number, others: readonly Enemy[], obstacles: readonly Circle[], half: number): void {
-    const p = this.pose;
-    for (const ob of obstacles) {
-      const ox = ob.x - p.x;
-      const oz = ob.z - p.z;
-      const d = Math.hypot(ox, oz);
-      const reach = ob.radius + this.radius + 2;
-      if (d === 0 || d > reach) continue;
-      const len0 = Math.hypot(dx, dz) || 1;
-      const ahead = (ox * dx + oz * dz) / (d * len0);
-      if (ahead < 0.35) continue;
-      const cross = dx * oz - dz * ox;
-      const side = Math.abs(cross) < 1e-3 ? this.side : Math.sign(cross);
-      const strength = ((ahead * (reach - d)) / reach) * 2.2;
-      dx += (oz / d) * side * strength;
-      dz += (-ox / d) * side * strength;
-    }
-    for (const o of others) {
-      if (o === this || o.dying) continue;
-      const ox = p.x - o.x;
-      const oz = p.z - o.z;
-      const d = Math.hypot(ox, oz);
-      const min = this.radius + o.radius + 0.2;
-      if (d > 0 && d < min) {
-        dx += (ox / d) * (min - d) * 1.5;
-        dz += (oz / d) * (min - d) * 1.5;
-      }
-    }
-    const len = Math.hypot(dx, dz) || 1;
-    p.x += (dx / len) * speed * dt;
-    p.z += (dz / len) * speed * dt;
-    clampToArena(p, half, this.radius);
+    steerMove(this.pose, dx, dz, speed, dt, this.radius, this, others, obstacles, half, this.side);
   }
 }

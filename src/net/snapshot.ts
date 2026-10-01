@@ -17,8 +17,8 @@ export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart'] a
 export type SlimeTuple = [number, number, number, number, number, number, number, number, number, number, number, number, number];
 /** [poolIndex, x, z, yaw, pierce(0/1)] */
 export type ArrowTuple = [number, number, number, number, number];
-/** [poolIndex, x, z] */
-export type GlobTuple = [number, number, number];
+/** [poolIndex, x, z, projectile kind] */
+export type GlobTuple = [number, number, number, number];
 /** [id, power, x, z, visible(0/1)] */
 export type PickupTuple = [number, number, number, number, number];
 
@@ -57,7 +57,7 @@ export type GameEvent =
   | { e: 'hit'; x: number; z: number; c: number }
   | { e: 'spit' }
   | { e: 'twang' }
-  | { e: 'glob'; x: number; z: number }
+  | { e: 'glob'; x: number; z: number; k?: number }
   /** A familiar spell went off (id: index into SPELL_IDS). */
   | { e: 'spell'; id: number; x: number; z: number }
   | { e: 'bite' }
@@ -147,7 +147,7 @@ export function interpolate(a: Snapshot, b: Snapshot, t: number): Snapshot {
   const globs = b.globs.map((g) => {
     const p = prevGlobs.get(g[0]);
     if (!p || Math.hypot(p[1] - g[1], p[2] - g[2]) > TELEPORT) return g;
-    return [g[0], lerp(p[1], g[1], k), lerp(p[2], g[2], k)] as GlobTuple;
+    return [g[0], lerp(p[1], g[1], k), lerp(p[2], g[2], k), g[3]] as GlobTuple;
   });
 
   const hero: HeroState = {

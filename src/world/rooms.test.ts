@@ -46,7 +46,7 @@ describe('rooms', () => {
 
   it('labels each phase of the run', () => {
     expect(runLabel(0, 2, 5, 'fight', null)).toBe('The Woodland · Wave 2/3 · 5 beasts left');
-    expect(runLabel(1, 2, 1, 'fight', null)).toBe('The Crystal Cave · Wave 2/3 · 1 slime left');
+    expect(runLabel(1, 2, 1, 'fight', null)).toBe('The Crystal Cave · Wave 2/3 · 1 foe left');
     expect(runLabel(1, 3, 0, 'cleared', null)).toContain('north door');
     expect(runLabel(5, 3, 7, 'fight', 'The King Slime')).toContain('King Slime');
   });

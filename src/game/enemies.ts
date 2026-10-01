@@ -5,11 +5,15 @@ import { SLIME_ATTACKS } from './balance';
 import { q } from '../net/snapshot';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import { Beast } from './beasts';
+import { Elemental } from './elementals';
+import type { ProjectileKind } from './globs';
 
 export type SlimeKind = 'small' | 'big' | 'spitter' | 'boss';
 export type BeastKind = 'beetle' | 'snake' | 'direwolf' | 'boar' | 'bear';
-export type EnemyKind = SlimeKind | BeastKind;
+export type ElementalKind = 'vine' | 'wind' | 'water' | 'fire' | 'treant' | 'golem';
+export type EnemyKind = SlimeKind | BeastKind | ElementalKind;
 export const SLIME_KIND_LIST: SlimeKind[] = ['small', 'big', 'spitter', 'boss'];
+export const ELEMENTAL_KIND_LIST: ElementalKind[] = ['vine', 'wind', 'water', 'fire', 'treant', 'golem'];
 
 /** `touch`: damage to the hero (of 100 HP) on contact. */
 export const SLIME_KINDS: Record<SlimeKind, { radius: number; speed: number; color: number; score: number; hopRate: number; push: number; touch: number }> = {
@@ -161,6 +165,8 @@ export interface Spit {
   z: number;
   dirX: number;
   dirZ: number;
+  /** What's being thrown (default: a slime glob). */
+  kind?: ProjectileKind;
 }
 
 /** An area attack landing this step (a slam, a pounce, a swipe): the hero is hit if within `r` of (x, z). */
@@ -170,6 +176,8 @@ export interface Strike {
   r: number;
   damage: number;
   knock: number;
+  /** Also slows the hero (the treant's roots). */
+  slow?: { seconds: number; factor: number };
 }
 
 /** An enemy calling in reinforcements (the King splitting, the bear roaring). */
@@ -673,11 +681,11 @@ export class Enemies {
     return this.all.filter((s) => s.alive && s.telegraph).map((s) => s.telegraph!);
   }
 
-  /** A slime wave at difficulty level `wave`. */
-  startWave(wave: number): void {
+  /** A slime wave at difficulty level `wave`, plus any elementals mixed in. */
+  startWave(wave: number, elementals: readonly ElementalKind[] = []): void {
     this.spec = waveSpec(wave);
     const { small, big, spitters } = this.spec;
-    this.queue = shuffle([...Array<EnemyKind>(small).fill('small'), ...Array<EnemyKind>(big).fill('big'), ...Array<EnemyKind>(spitters).fill('spitter')]);
+    this.queue = shuffle([...Array<EnemyKind>(small).fill('small'), ...Array<EnemyKind>(big).fill('big'), ...Array<EnemyKind>(spitters).fill('spitter'), ...elementals]);
     this.packSize = this.spec.packSize;
     this.spawnInterval = this.spec.spawnInterval;
     this.spawnTimer = 0.3;
@@ -739,6 +747,7 @@ export class Enemies {
       const hp = sk === 'big' ? this.spec.bigHp : sk === 'spitter' ? this.spec.spitterHp : this.spec.smallHp;
       return new Slime(sk, x, z, this.spec.speedBonus, hp);
     }
+    if ((ELEMENTAL_KIND_LIST as EnemyKind[]).includes(kind)) return new Elemental(kind as ElementalKind, x, z);
     return new Beast(kind as BeastKind, x, z);
   }
 

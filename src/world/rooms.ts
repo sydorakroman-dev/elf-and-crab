@@ -1,4 +1,6 @@
-/** The five rooms of the dungeon run, as data. The Dungeon builds whichever one is current. */
+import type { ElementalKind } from '../game/enemies';
+
+/** The rooms of the dungeon run, as data. The Dungeon builds whichever one is current. */
 
 export type RoomFeature = 'woodland' | 'brazier' | 'puddles' | 'lava' | 'crystals' | 'throne';
 
@@ -23,6 +25,8 @@ export interface RoomDef {
   outdoor?: boolean;
   /** Who lives here: forest beasts or (default) slimes. */
   enemies?: 'beasts' | 'slimes';
+  /** Nature elementals mixed into the slime waves (lighter ones first). */
+  elementals?: ElementalKind[];
   torchLight: number;
   torchFlame: number;
   floor: Hsl;
@@ -62,6 +66,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Crystal Cave',
+    elementals: ['wind', 'golem'],
     half: 30,
     pillars: [[-7, -14], [7, 14]], // off the centre line so the entry view is clear
     feature: 'crystals',
@@ -80,6 +85,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Crypt',
+    elementals: ['vine', 'treant'],
     half: 24,
     pillars: [[-9, -9], [9, -9], [-9, 9], [9, 9]],
     feature: 'brazier',
@@ -97,6 +103,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Throne Room',
+    elementals: ['vine', 'wind', 'golem'],
     half: 30,
     pillars: [[-13, -16], [13, -16], [-13, -4], [13, -4], [-13, 8], [13, 8], [-13, 20], [13, 20]],
     feature: 'throne',
@@ -116,6 +123,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Flooded Hall',
+    elementals: ['water', 'vine'],
     half: 28,
     pillars: [[-9, -15], [9, -15], [-9, -5], [9, -5], [-9, 5], [9, 5], [-9, 15], [9, 15]],
     feature: 'puddles',
@@ -133,6 +141,7 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Lava Chamber',
+    elementals: ['fire', 'golem'],
     half: 26,
     pillars: [[7.5, -13], [15, 0], [7.5, 13], [-7.5, 13], [-15, 0], [-7.5, -13]],
     feature: 'lava',
@@ -158,6 +167,14 @@ export function roomWaveDifficulty(room: number, wave: number): number {
   return 1 + room * 1.3 + (wave - 1) * 0.65;
 }
 
+/** Elementals joining wave `wave` (1-based) of room `room`: more of them in later rooms and waves. */
+export function roomElementals(room: number, wave: number): ElementalKind[] {
+  const kinds = ROOMS[room]?.elementals ?? [];
+  if (!kinds.length || isBossWave(room, wave)) return [];
+  const count = wave + Math.floor(room / 3);
+  return Array.from({ length: count }, (_, i) => kinds[i % kinds.length]);
+}
+
 /** The final room's last wave is the King Slime. */
 export function isBossWave(room: number, wave: number): boolean {
   return room === ROOMS.length - 1 && wave === WAVES_PER_ROOM;
@@ -172,6 +189,6 @@ export function runLabel(room: number, wave: number, remaining: number, phase: R
   if (phase === 'transition') return 'Onward…';
   if (wave === 0) return `${name} · get ready…`;
   if (bossName) return `${name} · ${bossName}`;
-  const foes = ROOMS[room]?.enemies === 'beasts' ? (remaining === 1 ? 'beast' : 'beasts') : remaining === 1 ? 'slime' : 'slimes';
+  const foes = ROOMS[room]?.enemies === 'beasts' ? (remaining === 1 ? 'beast' : 'beasts') : remaining === 1 ? 'foe' : 'foes';
   return `${name} · Wave ${wave}/${WAVES_PER_ROOM} · ${remaining} ${foes} left`;
 }
