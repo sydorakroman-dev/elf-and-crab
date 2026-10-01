@@ -53,7 +53,7 @@ the last.
 | Venomous Snake | normal | 30 | 10 | coils, then lunges (18) |
 | Dire Wolf | tough | 50 | 15 | very fast; bites, backs off, comes again |
 | Thorn Boar | elite | 90 | 15 | paws the ground, then charges (30); dazed if it hits a tree or wall |
-| **Crystal Bear** | boss | 345 | 20 | swipe (25), ground pound with warning ring (25), roars in beetles at half health |
+| **Crystal Bear** | boss | 450 | 22 | fast; swipe (28), ground pound with warning ring (25) that flings 8 crystal shards, a charge from afar (26; dazed if it hits a tree); at half health roars in 6 beetles and enrages |
 
 **Crystal Cave — underworld dwellers** (critters of the deep: poison and acid)
 
@@ -122,7 +122,8 @@ Two roles:
 
 - **Hero (the elf)** plays as usual on a computer (or phone). The title screen shows a room code and a QR code.
 - **Familiar** scans the QR code or opens the link (`…/?join=CODE`) on a tablet, or types the code under
-  "Got a code?", then **picks a creature**. Tap or drag on the floor to move — it bites any enemy it touches. Familiars
+  "Got a code?", then **picks a creature**. Tap or drag on the floor to move — it bites any enemy it touches. It can grab power-ups too — they go
+  straight to the elf. Familiars
   can't be hurt: monsters only ever go for the elf.
   Spell buttons have their own cooldowns. The creature can be changed between runs or while the elf is paused.
 

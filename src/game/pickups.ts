@@ -159,16 +159,20 @@ export class Pickups {
     this.items.length = 0;
   }
 
-  /** Animates, expires, and returns the types the player walked over this step. */
-  update(dt: number, time: number, player: Point): PowerUpType[] {
-    const collected: PowerUpType[] = [];
+  /**
+   * Animates, expires, and returns what was collected this step: the type, and which of
+   * `collectors` (the elf first, then the familiar) touched it.
+   */
+  update(dt: number, time: number, collectors: readonly Point[]): { type: PowerUpType; by: number }[] {
+    const collected: { type: PowerUpType; by: number }[] = [];
     for (let i = this.items.length - 1; i >= 0; i--) {
       const p = this.items[i];
       p.age += dt;
       p.life -= dt;
       const gp = p.group.position;
-      if (Math.hypot(gp.x - player.x, gp.z - player.z) < PICKUP_RADIUS) {
-        collected.push(p.type);
+      const by = collectors.findIndex((c) => Math.hypot(gp.x - c.x, gp.z - c.z) < PICKUP_RADIUS);
+      if (by >= 0) {
+        collected.push({ type: p.type, by });
         this.group.remove(p.group);
         this.items.splice(i, 1);
         continue;

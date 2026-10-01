@@ -210,7 +210,8 @@ export class FamiliarGame {
           break;
         case 'pickup': {
           const def = POWER_UPS[POWER_CODES[ev.p] ?? 'multishot'];
-          this.effects.burst(ev.x, 1.1, ev.z, new THREE.Color(def.color), 18, 5, 0.12);
+          this.effects.burst(ev.x, ev.fam ? 0.8 : 1.1, ev.z, new THREE.Color(def.color), 18, 5, 0.12);
+          if (ev.fam) break; // the elf's own event follows with the toast and sound
           this.hud.popups.toast(`${def.icon} ${def.label}!`, def.color);
           this.sfx.powerUp();
           break;

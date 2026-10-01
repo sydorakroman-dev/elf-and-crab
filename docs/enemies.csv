@@ -3,7 +3,7 @@ Armored Beetle,Woodland,melee,weak,10,5.3,0.6,8,,,comes in swarms,8,3%
 Venomous Snake,Woodland,melee,normal,30,3.5,0.7,10,coil + lunge,18,strikes within 3.4 m after a 0.45 s coil; every 1.8 s,15,6%
 Dire Wolf,Woodland,melee,tough,50,7.5,0.8,15,hit and run,,backs off for 0.9 s after each bite (harmless while retreating),30,12%
 Thorn Boar,Woodland,melee,elite,90,4.2,1,15,paw + charge,30,charges at 15 m/s from 5-16 m after a 0.8 s paw; dazed 1.2 s if it hits a wall or tree,60,25%
-The Crystal Bear,Woodland,melee,mini-boss,345,3.1,1.7,20,swipe / ground pound / roar,25 / 25,pound radius 4.5 m every 6 s with warning ring; roars 4 beetles in at half HP,300,0%
+The Crystal Bear,Woodland,melee,mini-boss,450,4,1.7,22,swipe / ground pound + shards / charge / roar,28 / 25 / 26,"pound radius 4.5 m every 6 s with warning ring, flinging 8 crystal shards; charges at 16 m/s from 6-18 m every 8.5 s (dazed 1.6 s if it hits a tree or wall); roars 6 beetles in at half HP and enrages (1.2x speed, attacks 33% more often)",300,0%
 Thorn Vine,Lava Chamber,melee,normal,55,4.3,0.8,10,vine lash,15,lashes within 3 m after a 0.5 s rear-back; every 2 s,20,8%
 Wind Elemental,Lava Chamber,ranged,normal,65,4.8,0.85,8,gust bolt,8,keeps 10.5-18 m away; every 2.4 s; big shove (knock 28),25,8%
 Water Elemental,Lava Chamber,ranged,normal,80,3.3,0.9,10,water bolt,12,keeps 12-19.5 m away; every 3 s; slows the hero to 55% speed for 2 s,30,10%

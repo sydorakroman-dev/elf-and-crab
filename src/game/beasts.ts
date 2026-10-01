@@ -30,7 +30,7 @@ export const BEASTS: Record<BeastKind, BeastDef> = {
   snake: { name: 'Venomous Snake', tier: 'normal', hp: 30, speed: 3.5, radius: 0.7, touch: 10, push: 7, score: 15, color: 0x2f8f3a, drop: 0.06 },
   direwolf: { name: 'Dire Wolf', tier: 'tough', hp: 50, speed: 7.5, radius: 0.8, touch: 15, push: 5, score: 30, color: 0x3a4250, drop: 0.12 },
   boar: { name: 'Thorn Boar', tier: 'elite', hp: 90, speed: 4.2, radius: 1.0, touch: 15, push: 2.5, score: 60, color: 0x7a4a26, drop: 0.25 },
-  bear: { name: 'The Crystal Bear', tier: 'mini-boss', hp: 345, speed: 3.1, radius: 1.7, touch: 20, push: 0.8, score: 300, color: 0x6b4226, drop: 0 },
+  bear: { name: 'The Crystal Bear', tier: 'mini-boss', hp: 450, speed: 4.0, radius: 1.7, touch: 22, push: 0.8, score: 300, color: 0x6b4226, drop: 0 },
 };
 
 // Snake: coils, then lunges.
@@ -39,8 +39,17 @@ export const SNAKE = { range: 3.4, coil: 0.45, lungeTime: 0.18, lungeDistance: 3
 export const DIREWOLF = { retreat: 0.9, retreatSpeed: 6.5 };
 // Thorn boar: paws the ground, then charges in a straight line; dazed if it hits something.
 export const BOAR = { minRange: 5, maxRange: 16, paw: 0.8, chargeSpeed: 15, chargeTime: 1.1, chargeDamage: 30, chargeKnock: 22, daze: 1.2, cooldown: 3.5 };
-// Crystal bear: swipes up close, ground-pounds every few seconds, roars for beetles at half health.
-export const BEAR = { swipeRange: 3.2, swipeWindup: 0.5, swipeRadius: 2.8, swipeDamage: 25, poundEvery: 6, poundWindup: 1.0, poundRadius: 4.5, poundDamage: 25, roar: 0.8, roarBeetles: 4 };
+// Crystal bear: swipes up close; ground-pounds every few seconds, flinging a ring of crystal shards;
+// charges from afar (dazed if it hits a tree or wall). At half health it roars in beetles and enrages:
+// faster, pounding and charging more often.
+export const BEAR = {
+  swipeRange: 3.2, swipeWindup: 0.4, swipeRadius: 2.8, swipeDamage: 28,
+  poundEvery: 6, poundWindup: 1.0, poundRadius: 4.5, poundDamage: 25, shards: 8,
+  chargeMin: 6, chargeMax: 18, chargeWindup: 0.7, chargeSpeed: 16, chargeTime: 1.1, chargeDamage: 26, chargeKnock: 24, chargeDaze: 1.6, chargeEvery: 8.5, chargeFirst: 4,
+  roar: 0.8, roarBeetles: 6,
+  /** After the roar: speed ×, and pound / charge timers ×. */
+  enragedSpeed: 1.2, enragedCooldown: 0.75,
+};
 
 let nextBeastId = 100000; // separate from other enemy ids
 
@@ -69,7 +78,11 @@ export class Beast implements Enemy {
   private timer = 0;
   private cooldown = 0;
   private poundTimer = BEAR.poundEvery;
+  private chargeTimer = BEAR.chargeFirst;
+  private bearMove: 'swipe' | 'pound' | 'charge' = 'swipe';
   private roared = false;
+  /** Bolts to fire this step (the bear's crystal shards). */
+  private spits: Spit[] = [];
   private lockDir = { x: 0, z: 1 };
   private flash = 0;
   private stunTimer = 0;
@@ -112,11 +125,16 @@ export class Beast implements Enemy {
   get harmless(): boolean {
     return this.stunned || this.calmed || this.mode === 'dazed' || this.mode === 'retreat';
   }
+  private get charging(): boolean {
+    return this.mode === 'attack' && (this.kind === 'boar' || (this.kind === 'bear' && this.bearMove === 'charge'));
+  }
   get touchDamage(): number {
-    return this.kind === 'boar' && this.mode === 'attack' ? BOAR.chargeDamage : this.def.touch;
+    if (!this.charging) return this.def.touch;
+    return this.kind === 'bear' ? BEAR.chargeDamage : BOAR.chargeDamage;
   }
   get touchKnock(): number {
-    return this.kind === 'boar' && this.mode === 'attack' ? BOAR.chargeKnock : 12;
+    if (!this.charging) return 12;
+    return this.kind === 'bear' ? BEAR.chargeKnock : BOAR.chargeKnock;
   }
   get bossName(): string | null {
     return this.kind === 'bear' ? this.def.name : null;
@@ -138,6 +156,7 @@ export class Beast implements Enemy {
       this.telegraph = null;
     } else if (this.kind === 'bear' && !this.roared && this.hp <= this.maxHp / 2) {
       this.roared = true;
+      this.telegraph = null; // the roar cuts off whatever it was winding up
       this.setMode('windup', BEAR.roar);
       this.pose.act = 0;
       this.roaring = true;
@@ -149,7 +168,7 @@ export class Beast implements Enemy {
   stun(seconds: number): void {
     if (this.dying) return;
     if (this.kind === 'bear') seconds *= 0.5;
-    if (this.kind === 'boar' && this.mode === 'attack') return; // a charge can't be stopped
+    if (this.charging) return; // a charge can't be stopped
     this.stunTimer = Math.max(this.stunTimer, seconds);
     this.telegraph = null;
     if (this.mode !== 'chase') this.setMode('chase', 0);
@@ -214,7 +233,9 @@ export class Beast implements Enemy {
     p.mode = this.mode === 'windup' ? 1 : this.mode === 'attack' ? 2 : this.mode === 'dazed' || this.mode === 'retreat' ? 3 : 0;
     this.visual.apply(p, dt, this.time);
     this.slow = 1;
-    return [];
+    const spits = this.spits;
+    this.spits = [];
+    return spits;
   }
 
   private setMode(mode: Mode, time: number): void {
@@ -232,10 +253,13 @@ export class Beast implements Enemy {
     const dist = Math.hypot(tx, tz) || 1;
     tx /= dist;
     tz /= dist;
-    const chase = this.def.speed * this.slow;
+    const chase = this.def.speed * this.slow * (this.roared ? BEAR.enragedSpeed : 1);
     const face = (x: number, z: number) => (p.yaw = Math.atan2(x, z));
-    // The bear's pound comes every few seconds whatever it's doing (it starts at the next chance).
-    if (this.kind === 'bear') this.poundTimer -= dt;
+    // The bear's pound and charge come every few seconds whatever it's doing (at the next chance).
+    if (this.kind === 'bear') {
+      this.poundTimer -= dt;
+      this.chargeTimer -= dt;
+    }
 
     // Bear: the roar at half health summons beetles.
     if (this.roaring) {
@@ -258,8 +282,8 @@ export class Beast implements Enemy {
       }
       case 'windup': {
         p.act = 1 - Math.max(0, this.timer) / this.windupTime();
-        if (this.kind === 'snake' || this.kind === 'bear') face(tx, tz);
-        else face(this.lockDir.x, this.lockDir.z); // the boar keeps its aim
+        if (this.kind === 'snake' || (this.kind === 'bear' && this.bearMove !== 'charge')) face(tx, tz);
+        else face(this.lockDir.x, this.lockDir.z); // a charge keeps its aim
         if (this.telegraph) this.telegraph.p = p.act;
         if (this.timer <= 0) this.release(tx, tz);
         return 0;
@@ -275,20 +299,22 @@ export class Beast implements Enemy {
           }
           return SNAKE.lungeDistance / SNAKE.lungeTime;
         }
-        if (this.kind === 'boar') {
+        if (this.charging) {
+          // Boar or bear charge: a straight rush; dazed if it smacks into something.
+          const bear = this.kind === 'bear';
+          const speed = bear ? BEAR.chargeSpeed : BOAR.chargeSpeed;
           const before = { x: p.x, z: p.z };
-          p.x += this.lockDir.x * BOAR.chargeSpeed * dt;
-          p.z += this.lockDir.z * BOAR.chargeSpeed * dt;
+          p.x += this.lockDir.x * speed * dt;
+          p.z += this.lockDir.z * speed * dt;
           const hitWall = clampToArena(p, half, this.radius);
           const hitRock = pushOutOfCircles(p, this.radius, obstacles.filter((o) => !o.low));
+          if (!bear) this.cooldown = BOAR.cooldown;
           if (hitWall || hitRock || Math.hypot(p.x - before.x, p.z - before.z) < 0.01) {
-            this.setMode('dazed', BOAR.daze); // smacked into something
-            this.cooldown = BOAR.cooldown;
+            this.setMode('dazed', bear ? BEAR.chargeDaze : BOAR.daze);
           } else if (this.timer <= 0) {
-            this.cooldown = BOAR.cooldown;
             this.setMode('recover', 0.5);
           }
-          return BOAR.chargeSpeed;
+          return speed;
         }
         this.setMode('recover', 0.4);
         return 0;
@@ -313,7 +339,7 @@ export class Beast implements Enemy {
   private windupTime(): number {
     if (this.kind === 'snake') return SNAKE.coil;
     if (this.kind === 'boar') return BOAR.paw;
-    return this.telegraph ? BEAR.poundWindup : BEAR.swipeWindup;
+    return this.bearMove === 'pound' ? BEAR.poundWindup : this.bearMove === 'charge' ? BEAR.chargeWindup : BEAR.swipeWindup;
   }
 
   /** Decides whether to start this kind's special move. */
@@ -326,11 +352,20 @@ export class Beast implements Enemy {
       this.setMode('windup', BOAR.paw);
       this.telegraph = { x: this.pose.x, z: this.pose.z, r: 1.6, p: 0 };
     } else if (this.kind === 'bear') {
+      const faster = this.roared ? BEAR.enragedCooldown : 1;
       if (this.poundTimer <= 0) {
-        this.poundTimer = BEAR.poundEvery;
+        this.poundTimer = BEAR.poundEvery * faster;
+        this.bearMove = 'pound';
         this.telegraph = { x: this.pose.x, z: this.pose.z, r: BEAR.poundRadius, p: 0 };
         this.setMode('windup', BEAR.poundWindup);
+      } else if (this.chargeTimer <= 0 && dist > BEAR.chargeMin && dist < BEAR.chargeMax) {
+        this.chargeTimer = BEAR.chargeEvery * faster;
+        this.bearMove = 'charge';
+        this.lockDir = { x: tx, z: tz };
+        this.telegraph = { x: this.pose.x, z: this.pose.z, r: 2.4, p: 0 };
+        this.setMode('windup', BEAR.chargeWindup);
       } else if (this.cooldown === 0 && dist < BEAR.swipeRange) {
+        this.bearMove = 'swipe';
         this.lockDir = { x: tx, z: tz };
         this.setMode('windup', BEAR.swipeWindup);
       }
@@ -346,10 +381,20 @@ export class Beast implements Enemy {
       this.telegraph = null;
       this.setMode('attack', BOAR.chargeTime);
     } else if (this.kind === 'bear') {
-      if (this.telegraph) {
-        // Ground pound: everything around the bear.
+      if (this.bearMove === 'charge') {
+        this.telegraph = null;
+        this.setMode('attack', BEAR.chargeTime);
+      } else if (this.bearMove === 'pound') {
+        // Ground pound: everything around the bear, and crystal shards fly out in a ring.
         this.strike = { x: p.x, z: p.z, r: BEAR.poundRadius, damage: BEAR.poundDamage, knock: 18 };
         this.telegraph = null;
+        const turn = Math.random() * Math.PI;
+        for (let i = 0; i < BEAR.shards; i++) {
+          const a = turn + (i / BEAR.shards) * Math.PI * 2;
+          const dx = Math.sin(a);
+          const dz = Math.cos(a);
+          this.spits.push({ x: p.x + dx * (this.radius + 0.6), z: p.z + dz * (this.radius + 0.6), dirX: dx, dirZ: dz, kind: 'magic' });
+        }
         this.setMode('recover', 0.6);
       } else {
         // Swipe: a big paw in front.

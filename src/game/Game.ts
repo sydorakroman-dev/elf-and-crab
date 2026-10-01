@@ -581,7 +581,9 @@ export class Game {
       }
     }
 
-    for (const type of this.pickups.update(dt, this.time, p)) this.applyPowerUp(type);
+    // The elf and the familiar can both grab power-ups; either way they go to the elf.
+    const collectors = this.companion.present && this.companion.height < 0.5 ? [p, this.companion.position] : [p];
+    for (const { type, by } of this.pickups.update(dt, this.time, collectors)) this.applyPowerUp(type, by === 1);
 
     const shielded = this.powers.has('shield');
     this.shieldBubble.visible = shielded;
@@ -596,9 +598,15 @@ export class Game {
     this.hud.setPowers(this.powers.list());
   }
 
-  private applyPowerUp(type: PowerUpType): void {
+  /** `byFamiliar`: the familiar grabbed it — a sparkle there too, and a toast saying so. */
+  private applyPowerUp(type: PowerUpType, byFamiliar = false): void {
     const def = POWER_UPS[type];
     const p = this.player.position;
+    if (byFamiliar) {
+      const f = this.companion.position;
+      this.effects.burst(f.x, 0.8, f.z, new THREE.Color(def.color), 14, 4, 0.1);
+      this.events.push({ e: 'pickup', p: POWER_CODES.indexOf(type), x: q(f.x), z: q(f.z), fam: 1 });
+    }
     if (type === 'heart') {
       if (this.health < MAX_HEALTH) this.health = Math.min(MAX_HEALTH, this.health + HEALING.heartPickup);
       else this.score += 25; // full health: a little score instead
@@ -607,7 +615,8 @@ export class Game {
     } else {
       this.powers.add(type);
     }
-    this.hud.toast(`${def.icon} ${def.label}!`, def.color);
+    const who = byFamiliar && this.companion.kind ? `${FAMILIARS[this.companion.kind].emoji} ` : '';
+    this.hud.toast(`${who}${def.icon} ${def.label}!`, def.color);
     this.effects.burst(p.x, 1.1, p.z, new THREE.Color(def.color), 18, 5, 0.12);
     this.sfx.powerUp();
     this.events.push({ e: 'pickup', p: POWER_CODES.indexOf(type), x: q(p.x), z: q(p.z) });

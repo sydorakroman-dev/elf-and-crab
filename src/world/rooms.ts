@@ -64,7 +64,7 @@ export const ROOMS: RoomDef[] = [
     waves: [
       { mix: { beetle: 8, snake: 2 } },
       { mix: { beetle: 8, snake: 4, direwolf: 2, boar: 1 } },
-      { mix: { beetle: 6, direwolf: 2 }, boss: 'bear' },
+      { mix: { beetle: 6, direwolf: 1 }, boss: 'bear' },
     ],
     torchLight: 0xffe7b0,
     torchFlame: 0xfff3c0,

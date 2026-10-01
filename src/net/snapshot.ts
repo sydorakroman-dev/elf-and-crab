@@ -65,7 +65,8 @@ export type GameEvent =
   | { e: 'heal'; x: number; z: number }
   /** The familiar creature appeared / changed / left. */
   | { e: 'poof'; x: number; z: number }
-  | { e: 'pickup'; p: number; x: number; z: number }
+  /** fam: the familiar grabbed it (at x, z); the elf's own burst comes as a second event. */
+  | { e: 'pickup'; p: number; x: number; z: number; fam?: number }
   | { e: 'hurt' }
   | { e: 'shield'; x: number; z: number }
   | { e: 'banner'; text: string }

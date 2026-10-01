@@ -80,4 +80,32 @@ describe('forest beasts', () => {
     run(b, new THREE.Vector3(0, 0, 10), 1.1);
     expect(b.stunned).toBe(false);
   });
+
+  it('the bear charges from afar, hits hard while charging, and pound flings crystal shards', () => {
+    const b = new Beast('bear', 0, 20);
+    const target = new THREE.Vector3(0, 0, -20); // 40 m off: out of charge range until it closes in
+    let maxTouch = 0;
+    run(b, target, BEAR.chargeFirst + 2 + BEAR.chargeWindup + 0.5, (s) => (maxTouch = Math.max(maxTouch, s.touchDamage)));
+    expect(maxTouch).toBe(BEAR.chargeDamage);
+
+    const p = new Beast('bear', 0, 2);
+    let shards = 0;
+    for (let i = 0; i < Math.round((BEAR.poundEvery + BEAR.poundWindup + 3) * 60); i++) shards += p.update(1 / 60, target, [p], [], HALF).length;
+    expect(shards).toBeGreaterThanOrEqual(BEAR.shards);
+  });
+
+  it('the bear enrages after its roar: faster', () => {
+    const calm = new Beast('bear', 0, 20);
+    const angry = new Beast('bear', 0, 20);
+    angry.hurt(angry.maxHp * 0.6, 0, 1);
+    run(angry, new THREE.Vector3(0, 0, 20), BEAR.roar + 0.5); // finish roaring (target on top: no charge)
+    const far = new THREE.Vector3(0, 0, -300); // beyond charge range
+    run(angry, far, 1); // settle (finish any swipe)
+    run(calm, far, 1);
+    const z0 = angry.z;
+    const c0 = calm.z;
+    run(angry, far, 1);
+    run(calm, far, 1);
+    expect(z0 - angry.z).toBeGreaterThan((c0 - calm.z) * 1.15);
+  });
 });

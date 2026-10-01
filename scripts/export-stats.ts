@@ -28,7 +28,7 @@ const special: Record<string, [string, string | number, string]> = {
   snake: ['coil + lunge', SNAKE.damage, `strikes within ${SNAKE.range} m after a ${SNAKE.coil} s coil; every ${SNAKE.cooldown} s`],
   direwolf: ['hit and run', '', `backs off for ${DIREWOLF.retreat} s after each bite (harmless while retreating)`],
   boar: ['paw + charge', BOAR.chargeDamage, `charges at ${BOAR.chargeSpeed} m/s from ${BOAR.minRange}-${BOAR.maxRange} m after a ${BOAR.paw} s paw; dazed ${BOAR.daze} s if it hits a wall or tree`],
-  bear: ['swipe / ground pound / roar', `${BEAR.swipeDamage} / ${BEAR.poundDamage}`, `pound radius ${BEAR.poundRadius} m every ${BEAR.poundEvery} s with warning ring; roars ${BEAR.roarBeetles} beetles in at half HP`],
+  bear: ['swipe / ground pound + shards / charge / roar', `${BEAR.swipeDamage} / ${BEAR.poundDamage} / ${BEAR.chargeDamage}`, `pound radius ${BEAR.poundRadius} m every ${BEAR.poundEvery} s with warning ring, flinging ${BEAR.shards} crystal shards; charges at ${BEAR.chargeSpeed} m/s from ${BEAR.chargeMin}-${BEAR.chargeMax} m every ${BEAR.chargeEvery} s (dazed ${BEAR.chargeDaze} s if it hits a tree or wall); roars ${BEAR.roarBeetles} beetles in at half HP and enrages (${BEAR.enragedSpeed}x speed, attacks ${Math.round(1 / BEAR.enragedCooldown * 100 - 100)}% more often)`],
 };
 for (const [k, d] of Object.entries(BEASTS)) {
   const [name, dmg, details] = special[k];
