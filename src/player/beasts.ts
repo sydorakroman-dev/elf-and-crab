@@ -37,7 +37,7 @@ class Quadruped implements FamiliarBody {
   private readonly body = new THREE.Group();
   private readonly head = new THREE.Group();
   private readonly legs: { pivot: THREE.Group; phase: number }[] = [];
-  private readonly cape: THREE.Mesh;
+  private readonly cape: THREE.Group;
   private readonly tail: THREE.Group | null;
   private phase = 0;
   private time = 0;
@@ -48,7 +48,7 @@ class Quadruped implements FamiliarBody {
       coat: flat(o.coat),
       belly: flat(o.belly),
       dark: flat(o.dark),
-      cape: flat(0x24432f, { side: THREE.DoubleSide }),
+      cape: flat(0x3b7a52, { side: THREE.DoubleSide, roughness: 0.9 }),
       silver: flat(0xd8dde2, { metalness: 0.6, roughness: 0.3 }),
       gem: flat(0x3fe0c5, { emissive: 0x2bb59f, emissiveIntensity: 0.6 }),
       eye: flat(0x111111, { roughness: 0.2 }),
@@ -87,10 +87,12 @@ class Quadruped implements FamiliarBody {
     o.build(this.head, this.body, m);
 
     // Cape over the shoulders and back.
-    const capeGeo = new THREE.PlaneGeometry(o.length * 0.85, o.length * 0.75, 2, 2);
-    capeGeo.rotateX(-Math.PI / 2 + 0.25);
-    this.cape = new THREE.Mesh(capeGeo, m.cape);
-    this.cape.position.set(0, o.height * 0.5, -o.length * 0.02);
+    // Draped over the back, hinged at the shoulders so it can flutter.
+    const hinge = new THREE.Vector3(0, o.height * 0.5, o.length * 0.26);
+    this.cape = new THREE.Group();
+    this.cape.position.copy(hinge);
+    const capeMesh = new THREE.Mesh(capeGeometry(o.length, o.height).translate(-hinge.x, -hinge.y, -hinge.z), m.cape);
+    this.cape.add(capeMesh);
     const clasp = new THREE.Mesh(new THREE.OctahedronGeometry(o.length * 0.06, 0), m.silver);
     clasp.position.set(0, o.height * 0.3, o.length * 0.45);
     this.body.add(this.cape, clasp);
@@ -129,6 +131,36 @@ class Quadruped implements FamiliarBody {
     this.cape.rotation.x = 0.3 * move + Math.sin(this.time * 6) * 0.04 * move + (airborne ? 0.4 : 0);
     if (this.tail) this.tail.rotation.y = Math.sin(this.time * (4 + speed)) * (0.15 + 0.25 * move);
   }
+}
+
+/**
+ * A cape draped over a quadruped's back: a fine grid (so it reads as cloth, with facets catching
+ * the light) that follows the torso's curve, falls over the flanks and ripples into soft folds.
+ */
+function capeGeometry(length: number, height: number): THREE.BufferGeometry {
+  const width = length * 0.78;
+  const depth = length * 0.74;
+  const front = length * 0.27;
+  const geo = new THREE.PlaneGeometry(width, depth, 12, 10);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const u = pos.getX(i) / (width / 2); // -1 (left) … 1 (right)
+    const v = 0.5 - pos.getY(i) / depth; // 0 (shoulders) … 1 (back hem)
+    const x = u * (width / 2);
+    const z = front - v * depth;
+    // Height of the torso's top surface here (it's an ellipsoid), then drape past its sides.
+    const ex = x / (length * 0.36);
+    const ez = z / (length * 0.56);
+    const inside = 1 - ex * ex - ez * ez;
+    let y = inside > 0 ? height * 0.58 * Math.sqrt(inside) : 0;
+    y -= Math.max(0, Math.abs(u) - 0.6) * height * 0.6; // hang over the flanks
+    y -= v * v * height * 0.12; // the hem dips toward the tail
+    // Folds: ripples running front-to-back, deeper toward the hem.
+    y += Math.sin(u * Math.PI * 3 + v * 1.7) * length * 0.022 * (0.25 + v);
+    pos.setXYZ(i, x * (1 + v * 0.12), y + height * 0.04, z);
+  }
+  geo.computeVertexNormals();
+  return geo;
 }
 
 function circlet(head: THREE.Group, m: Record<string, THREE.Material>, radius: number, y: number, z: number): void {
