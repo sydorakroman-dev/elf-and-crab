@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { attachAtPivot, loadParts, take } from './rig';
+import { attachAtPivot, loadParts } from './rig';
+import { toonify } from './toon';
 import { Spring, angleDelta, cadence, damp, legPose, splitBody } from './gait';
 
 const MODEL_SCALE = 0.42; // model is ~4.8 units tall → ~2 m
@@ -16,7 +17,19 @@ const DRAW_ELBOW = new THREE.Vector3(-0.8, 3.0, 0.02);
 const BOW_SHOULDER = new THREE.Vector3(0.5, 3.5, 0);
 const BOW_ELBOW = new THREE.Vector3(0.85, 3.08, 0.04);
 
-const HEAD_PARTS = ['head', 'pointed_ear', 'eye_white', 'pupil', 'eyebrow', 'nose', 'small_smile', 'hair_cap', 'front_hair_lock', 'circlet'];
+/** Parts too small or thin for an outline (it would swallow them). */
+const NO_OUTLINE = /^head_(eye|iris|pupil|shine|lid|brow|blush|mouth|nose|circlet)|bowstring|_nock|fletch|^arrow_|gem|brooch|tunic_(trim|vneck)|strap$/;
+
+/** Removes and returns every part whose name starts with one of the prefixes. */
+function takePrefix(parts: Map<string, THREE.Mesh>, ...prefixes: string[]): THREE.Mesh[] {
+  const found: THREE.Mesh[] = [];
+  for (const [name, mesh] of parts) {
+    if (!prefixes.some((p) => name.startsWith(p))) continue;
+    parts.delete(name);
+    found.push(mesh);
+  }
+  return found;
+}
 
 export interface ElfMotion {
   /** Ground speed, m/s. */
@@ -36,7 +49,9 @@ interface Leg {
 }
 
 /**
- * The elf archer (public/models/elf.glb), rigged in code with hips, knees, a torso that can
+ * The elf archer (public/models/elf.glb, built by scripts/models/build-elf.mjs), rigged in code
+ * by part-name prefix (hips_, thigh_<side>, shin_<side>, armL_/armR_ upper/lower, cloak, head,
+ * tail) with hips, knees, a torso that can
  * twist against the hips, a head, shoulders and elbows. Animation: a walk/run cycle with knee
  * lift, hip sway and counter-rotating shoulders; legs follow the direction of travel while the
  * torso faces the aim (strafing, backpedalling); leaning into speed, turns and dashes; spring
@@ -92,41 +107,32 @@ export class Elf {
     this.group.add(this.body);
 
     // Lower body: hips carry the skirt and both legs (thigh → knee → shin and boot).
-    this.hips = attachAtPivot(this.body, ORIGIN, HIPS, take(parts, 'tunic_skirt_1', 'tunic_skirt_-1', 'cream_hem_1', 'cream_hem_-1'));
+    this.hips = attachAtPivot(this.body, ORIGIN, HIPS, takePrefix(parts, 'hips_'));
     for (const side of [1, -1]) {
-      const hip = attachAtPivot(this.hips, HIPS, hipJoint(side), take(parts, `trousers_${side}0`));
-      const knee = attachAtPivot(
-        hip,
-        hipJoint(side),
-        kneeJoint(side),
-        take(parts, `trousers_${side}1`, `boot_shaft_${side}`, `boot_cuff_${side}`, `boot_foot_${side}`),
-      );
+      const hip = attachAtPivot(this.hips, HIPS, hipJoint(side), takePrefix(parts, `thigh_${side}`));
+      const knee = attachAtPivot(hip, hipJoint(side), kneeJoint(side), takePrefix(parts, `shin_${side}`));
       this.legs.push({ side, hip, knee });
     }
 
-    // Upper body: torso → shoulders → elbows, cloak, head → ponytail.
+    // Upper body: torso → shoulders → elbows (the bow rides the bow hand), cloak, head → ponytail.
     this.torso = attachAtPivot(this.body, ORIGIN, TORSO, []);
-    this.drawShoulder = attachAtPivot(this.torso, TORSO, DRAW_SHOULDER, take(parts, 'left_sleeve'));
-    this.drawElbow = attachAtPivot(this.drawShoulder, DRAW_SHOULDER, DRAW_ELBOW, take(parts, 'left_elbow', 'left_bracer', 'left_hand'));
-    this.bowShoulder = attachAtPivot(this.torso, TORSO, BOW_SHOULDER, take(parts, 'right_sleeve'));
-    const bowParts = Array.from({ length: 9 }, (_, i) => `wooden_bow${i}`);
-    this.bowElbow = attachAtPivot(
-      this.bowShoulder,
-      BOW_SHOULDER,
-      BOW_ELBOW,
-      take(parts, 'right_elbow', 'right_bracer', 'right_hand', 'bow_grip', 'bowstring', ...bowParts),
-    );
-    this.cloak = attachAtPivot(this.torso, TORSO, new THREE.Vector3(0, 3.55, -0.35), take(parts, 'cloak'));
-    const headNames = [...parts.keys()].filter((n) => HEAD_PARTS.some((p) => n.startsWith(p)));
-    this.head = attachAtPivot(this.torso, TORSO, NECK, take(parts, ...headNames));
+    this.drawShoulder = attachAtPivot(this.torso, TORSO, DRAW_SHOULDER, takePrefix(parts, 'armL_upper'));
+    this.drawElbow = attachAtPivot(this.drawShoulder, DRAW_SHOULDER, DRAW_ELBOW, takePrefix(parts, 'armL_lower'));
+    this.bowShoulder = attachAtPivot(this.torso, TORSO, BOW_SHOULDER, takePrefix(parts, 'armR_upper'));
+    this.bowElbow = attachAtPivot(this.bowShoulder, BOW_SHOULDER, BOW_ELBOW, takePrefix(parts, 'armR_lower'));
+    this.cloak = attachAtPivot(this.torso, TORSO, new THREE.Vector3(0, 3.55, -0.35), takePrefix(parts, 'cloak'));
+    this.head = attachAtPivot(this.torso, TORSO, NECK, takePrefix(parts, 'head'));
     const tailAt = new THREE.Vector3(0, 4.4, -0.2);
-    this.ponytail = attachAtPivot(this.head, NECK, tailAt, take(parts, 'ponytail0', 'ponytail1', 'ponytail2', 'ponytail3'));
+    this.ponytail = attachAtPivot(this.head, NECK, tailAt, takePrefix(parts, 'tail'));
 
     // Everything else (tunic, belt, quiver, arrows, neck…) rides on the torso.
     for (const mesh of parts.values()) {
       mesh.position.copy(TORSO).negate();
       this.torso.add(mesh);
     }
+
+    // Cartoon look: toon shading, and outlines on everything but the small face details and trims.
+    toonify(this.group, NO_OUTLINE);
   }
 
   /** Release: the string snaps forward and the bow kicks; then it's redrawn. */
@@ -224,7 +230,7 @@ export class Elf {
 
     // --- Cloth and hair: springs driven by speed, acceleration, turning and bounce -----------------
     const bounce = Math.cos(this.phase * 2) * 0.05 * move;
-    this.cloak.rotation.x = this.cloakPitch.update(0.08 + 0.45 * move + 0.7 * this.dash - this.accel * 0.015 + bounce, dt);
+    this.cloak.rotation.x = this.cloakPitch.update(0.08 + 0.26 * move + 0.45 * this.dash - this.accel * 0.01 + bounce * 0.6, dt);
     this.cloak.rotation.z = this.cloakRoll.update(THREE.MathUtils.clamp(this.turnRate * 0.06, -0.35, 0.35), dt);
     this.ponytail.rotation.x = this.tailPitch.update(0.05 + 0.35 * move + 0.5 * this.dash - bounce * 2, dt);
     this.ponytail.rotation.z = this.tailRoll.update(THREE.MathUtils.clamp(this.turnRate * 0.08, -0.4, 0.4) + s * 0.06 * move, dt);

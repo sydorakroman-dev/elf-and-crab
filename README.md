@@ -176,8 +176,10 @@ URL; free instances sleep when idle and take ~30-60 s to wake). The GitHub Pages
 
 - `src/world/rooms.ts` — the six rooms and the run's progression; `src/world/dungeon.ts` builds a room: instanced floor
   tiles and wall bricks, gates and doors, pillars, its centrepiece, torches.
-- `src/player/elf.ts`, `src/player/crab.ts` — the two glTF models (`public/models/`). They're static, unrigged
-  meshes, so `src/player/rig.ts` groups their named parts under pivots and the classes animate them in code.
+- `src/player/elf.ts`, `src/player/crab.ts` — the hero and the crab (`public/models/`). They're static, unrigged
+  meshes, so `src/player/rig.ts` groups their named parts under pivots and the classes animate them in code. The elf
+  is built by `scripts/models/build-elf.mjs` (`node scripts/models/build-elf.mjs`; shapes and the GLB writer in
+  `scripts/models/kit.mjs`), and drawn in a cartoon style — toon shading and outlines (`src/player/toon.ts`).
 - `server/` — room manager (`rooms.ts`, unit tested) and the HTTP + WebSocket server (`index.ts`).
 - `src/net/` — wire protocol, reconnecting client sessions, and snapshots with interpolation (unit tested).
 - `src/familiar/` — the familiar's tablet view: creature picker, top-down camera, tap-to-move, spell buttons, HUD.
