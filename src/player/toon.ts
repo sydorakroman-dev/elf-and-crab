@@ -9,7 +9,7 @@ import * as THREE from 'three';
 
 /** Light bands: shadow, mid, lit. */
 function gradientMap(): THREE.DataTexture {
-  const tones = new Uint8Array([90, 170, 255]);
+  const tones = new Uint8Array([125, 195, 255]);
   const tex = new THREE.DataTexture(tones, tones.length, 1, THREE.RedFormat);
   tex.minFilter = tex.magFilter = THREE.NearestFilter;
   tex.generateMipmaps = false;

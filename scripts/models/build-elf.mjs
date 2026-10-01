@@ -1,6 +1,6 @@
 /**
  * Builds the elf archer (the hero) as a GLB: rounded, smooth-shaded body parts, a proper face
- * (big eyes with irises and highlights, brows, nose, smile, long elf ears), layered hair with
+ * (green eyes under heavy brows, a square jaw, a straight mouth, long elf ears), layered hair with
  * bangs, side locks and a ponytail, a flowing cloak, and a recurve bow and quiver.
  *
  * Model space matches the joints in src/player/elf.ts (Y up, front +Z, about 4.8 units tall,
@@ -19,15 +19,14 @@ const OUT = process.argv[2] ?? 'public/models/elf.glb';
 
 // Bright, storybook colours (the renderer's lighting and tone mapping darken them a fair bit).
 const C = {
-  skin: 0xffdcbf,
-  blush: 0xff9e8c,
+  skin: 0xf9d3b2,
   hair: 0xffd25e,
   hairShade: 0xf0b545,
   brow: 0xc8913a,
   iris: 0x3fb46e,
   eyeWhite: 0xffffff,
   dark: 0x2a1c16,
-  lip: 0xd0685a,
+  lip: 0xa85c4c,
   tunic: 0x4fae74,
   tunicTrim: 0xffd36b,
   cream: 0xfff1d4,
@@ -86,7 +85,7 @@ deform(vneck, (v) => (v.z = 0.012 - v.x * v.x * 0.6));
 m.add('tunic_vneck', vneck, C.cream, { pos: [0, 3.68, 0.3], double: true });
 m.both((s) => m.add(`tunic_trim_${s}`, tube([[s * 0.25, 3.69, 0.29], [s * 0.12, 3.47, 0.33], [0, 3.26, 0.33]], 0.022, 10, 6), C.tunicTrim, smooth));
 m.add('tunic_collar', new THREE.TorusGeometry(0.21, 0.05, 8, 22), C.cream, { ...smooth, pos: [0, 3.71, 0.0], rot: [Math.PI / 2, 0, 0], scale: [1, 0.85, 1] });
-m.add('neck', limb([0, 3.62, 0], [0, 4.02, 0.02], 0.13, 0.12), C.skin, smooth);
+m.add('neck', limb([0, 3.62, 0], [0, 4.02, 0.02], 0.155, 0.14), C.skin, smooth);
 // Belt and buckle.
 m.add('belt', new THREE.CylinderGeometry(0.44, 0.44, 0.15, 28, 1, true), C.leather, { ...smooth, pos: [0, 2.74, 0], scale: [1, 1, 0.66] });
 m.add('belt_buckle', new THREE.BoxGeometry(0.2, 0.17, 0.05), C.gold, { pos: [0, 2.74, 0.3], metal: 0.6, roughness: 0.35 });
@@ -171,29 +170,32 @@ m.add('cloak_hood', new THREE.TorusGeometry(0.33, 0.1, 8, 20, Math.PI * 1.1), C.
 const H = new THREE.Vector3(0, 4.33, 0.03); // head centre
 const head = new THREE.SphereGeometry(0.33, 28, 20);
 deform(head, (v) => {
-  // Narrower jaw and a soft chin.
+  // A strong, square jaw: only slightly narrower toward a flat, forward chin.
   if (v.y < 0) {
     const k = -v.y / 0.33;
-    v.x *= 1 - 0.28 * k;
-    v.z *= 1 - 0.12 * k;
-    v.z += 0.04 * k * k;
+    v.x *= 1 - 0.13 * k;
+    v.z *= 1 - 0.06 * k;
+    v.z += 0.05 * k * k;
+    v.y = Math.max(v.y, -0.3); // flat underside of the chin
   }
+  // Defined cheekbones.
+  if (v.y > -0.05 && v.y < 0.1) v.x *= 1.03;
   v.z *= 0.96;
 });
 m.add('head', head, C.skin, { ...smooth, pos: H.toArray() });
-// Eyes: whites, green irises, pupils, highlights, a dark upper lid line.
+// Eyes: narrower and smaller than a cartoon heroine's, under heavy, straight brows.
 m.both((s) => {
   const ex = s * 0.135;
-  const ey = 4.355;
+  const ey = 4.35;
   const ez = 0.3;
   const turn = [0, s * 0.42, 0];
-  m.add(`head_eye_${s}`, new THREE.SphereGeometry(1, 16, 12), C.eyeWhite, { ...smooth, pos: [ex, ey, ez], rot: turn, scale: [0.075, 0.09, 0.035] });
-  m.add(`head_iris_${s}`, new THREE.SphereGeometry(1, 14, 10), C.iris, { ...smooth, pos: [ex - s * 0.012, ey - 0.005, ez + 0.022], rot: turn, scale: [0.048, 0.064, 0.022] });
-  m.add(`head_pupil_${s}`, new THREE.SphereGeometry(1, 12, 8), C.dark, { ...smooth, pos: [ex - s * 0.014, ey - 0.008, ez + 0.035], rot: turn, scale: [0.026, 0.036, 0.014] });
-  m.add(`head_shine_${s}`, new THREE.SphereGeometry(0.014, 8, 6), 0xffffff, { pos: [ex + s * 0.005, ey + 0.028, ez + 0.047], glow: 0.6 });
-  m.add(`head_lid_${s}`, tube([[ex - s * 0.075, ey + 0.035, ez + 0.0], [ex, ey + 0.09, ez + 0.02], [ex + s * 0.08, ey + 0.05, ez - 0.01], [ex + s * 0.1, ey + 0.07, ez - 0.025]], 0.013, 12, 5), C.dark, smooth);
-  m.add(`head_brow_${s}`, taperTube([[ex - s * 0.07, ey + 0.13, ez + 0.03], [ex + s * 0.01, ey + 0.16, ez + 0.025], [ex + s * 0.09, ey + 0.145, ez - 0.0]], (t) => 0.018 * (1 - t * 0.6), { segments: 10, radial: 6 }), C.brow, smooth);
-  m.add(`head_blush_${s}`, new THREE.SphereGeometry(1, 12, 8), C.blush, { ...smooth, pos: [s * 0.19, 4.24, 0.25], rot: [0, s * 0.6, 0], scale: [0.05, 0.03, 0.02] });
+  m.add(`head_eye_${s}`, new THREE.SphereGeometry(1, 16, 12), C.eyeWhite, { ...smooth, pos: [ex, ey, ez], rot: turn, scale: [0.07, 0.055, 0.032] });
+  m.add(`head_iris_${s}`, new THREE.SphereGeometry(1, 14, 10), C.iris, { ...smooth, pos: [ex - s * 0.01, ey - 0.003, ez + 0.021], rot: turn, scale: [0.04, 0.045, 0.02] });
+  m.add(`head_pupil_${s}`, new THREE.SphereGeometry(1, 12, 8), C.dark, { ...smooth, pos: [ex - s * 0.012, ey - 0.004, ez + 0.033], rot: turn, scale: [0.021, 0.026, 0.012] });
+  m.add(`head_shine_${s}`, new THREE.SphereGeometry(0.009, 8, 6), 0xffffff, { pos: [ex + s * 0.004, ey + 0.016, ez + 0.044], glow: 0.5 });
+  m.add(`head_lid_${s}`, tube([[ex - s * 0.07, ey + 0.025, ez + 0.0], [ex, ey + 0.05, ez + 0.022], [ex + s * 0.075, ey + 0.03, ez - 0.01]], 0.011, 12, 5), C.dark, smooth);
+  // Brows: thick, low and nearly level, dipping toward the nose for a determined look.
+  m.add(`head_brow_${s}`, taperTube([[ex - s * 0.085, ey + 0.085, ez + 0.035], [ex + s * 0.0, ey + 0.105, ez + 0.03], [ex + s * 0.095, ey + 0.11, ez + 0.0]], (t) => 0.028 - t * 0.008, { segments: 10, radial: 6 }), C.brow, smooth);
   // Long elf ears, pointing out and up.
   m.add(
     `head_ear_${s}`,
@@ -202,8 +204,8 @@ m.both((s) => {
     { ...smooth, scale: [1, 1, 0.6] },
   );
 });
-m.add('head_nose', limb([0, 4.31, 0.31], [0, 4.25, 0.36], 0.03, 0.022), C.skin, smooth);
-m.add('head_mouth', tube([[-0.06, 4.165, 0.3], [0, 4.145, 0.315], [0.06, 4.165, 0.3]], 0.011, 10, 5), C.lip, smooth);
+m.add('head_nose', limb([0, 4.34, 0.31], [0, 4.235, 0.375], 0.036, 0.028), C.skin, smooth);
+m.add('head_mouth', tube([[-0.055, 4.155, 0.31], [0, 4.15, 0.325], [0.055, 4.155, 0.31]], 0.01, 10, 5), C.lip, smooth);
 
 // Hair: a cap tilted back (forehead clear, nape covered), bangs, side locks, and a circlet.
 m.add('head_hair_cap', new THREE.SphereGeometry(0.36, 28, 18, 0, Math.PI * 2, 0, 1.62), C.hair, {
@@ -213,17 +215,17 @@ m.add('head_hair_cap', new THREE.SphereGeometry(0.36, 28, 18, 0, Math.PI * 2, 0,
   scale: [1.03, 1, 1.02],
 });
 for (let i = -2; i <= 2; i++) {
-  const x = i * 0.085;
-  const sway = i * 0.03;
+  // Swept to the elf's right, off the brow.
+  const x = i * 0.09;
   m.add(
     `head_bang_${i + 2}`,
-    taperTube([[x * 0.6, 4.66, 0.12], [x * 1.05 + sway, 4.62, 0.3], [x * 1.3 + sway * 1.6, 4.5, 0.355]], (t) => 0.07 * (1 - t) + 0.01, { segments: 12, radial: 8 }),
+    taperTube([[x * 0.6 - 0.04, 4.67, 0.1], [x + 0.06, 4.64, 0.28], [x + 0.17, 4.56, 0.33]], (t) => 0.07 * (1 - t) + 0.012, { segments: 12, radial: 8 }),
     i % 2 ? C.hairShade : C.hair,
     smooth,
   );
 }
 m.both((s) => {
-  m.add(`head_lock_${s}`, taperTube([[s * 0.27, 4.58, 0.14], [s * 0.36, 4.3, 0.2], [s * 0.35, 3.95, 0.22], [s * 0.31, 3.58, 0.23]], (t) => 0.085 * (1 - t * 0.7), { segments: 18, radial: 9 }), C.hair, smooth);
+  m.add(`head_lock_${s}`, taperTube([[s * 0.3, 4.58, 0.12], [s * 0.38, 4.32, 0.16], [s * 0.37, 4.05, 0.14]], (t) => 0.075 * (1 - t * 0.7), { segments: 14, radial: 9 }), C.hair, smooth);
   m.add(`head_lock_back_${s}`, taperTube([[s * 0.22, 4.5, -0.2], [s * 0.3, 4.2, -0.26], [s * 0.26, 3.9, -0.3]], (t) => 0.1 * (1 - t * 0.6), { segments: 12, radial: 9 }), C.hairShade, smooth);
 });
 const circlet = [];

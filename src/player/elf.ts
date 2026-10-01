@@ -18,7 +18,7 @@ const BOW_SHOULDER = new THREE.Vector3(0.5, 3.5, 0);
 const BOW_ELBOW = new THREE.Vector3(0.85, 3.08, 0.04);
 
 /** Parts too small or thin for an outline (it would swallow them). */
-const NO_OUTLINE = /^head_(eye|iris|pupil|shine|lid|brow|blush|mouth|nose|circlet)|bowstring|_nock|fletch|^arrow_|gem|brooch|tunic_(trim|vneck)|strap$/;
+const NO_OUTLINE = /^head_(eye|iris|pupil|shine|lid|brow|mouth|nose|circlet)|bowstring|_nock|fletch|^arrow_|gem|brooch|tunic_(trim|vneck)|strap$/;
 
 /** Removes and returns every part whose name starts with one of the prefixes. */
 function takePrefix(parts: Map<string, THREE.Mesh>, ...prefixes: string[]): THREE.Mesh[] {

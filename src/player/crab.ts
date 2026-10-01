@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { attachAtPivot, bounds, loadParts, take } from './rig';
+import { toonify } from './toon';
 
 interface Limb {
   pivot: THREE.Group;
@@ -8,7 +9,8 @@ interface Limb {
 }
 
 /**
- * The magical crab model (public/models/crab.glb), rigged in code: legs, claws and
+ * The magical crab (public/models/crab.glb, built by scripts/models/build-familiars.mjs), rigged in
+ * code and drawn in the cartoon style (toon shading + outlines): legs, claws and
  * pincers are re-parented under pivots at their hips/shoulders and animated procedurally. Front faces local +Z; it walks along local ±X
  * (sideways, like a real crab). The group's origin sits at its feet.
  */
@@ -74,6 +76,7 @@ export class Crab {
       }
       this.body.add(mesh);
     }
+    toonify(this.group, /pupil|shine|smile|gem|circlet|magic_|clasp|spike/);
   }
 
   /** Snap both claws shut (used when the crab attacks). */
