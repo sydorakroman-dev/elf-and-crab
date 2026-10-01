@@ -50,66 +50,66 @@ the last.
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
 | Armored Beetle | weak | 10 | 8 | swarms |
-| Venomous Snake | normal | 25 | 10 | coils, then lunges (18) |
-| Dire Wolf | tough | 45 | 15 | very fast; bites, backs off, comes again |
-| Thorn Boar | elite | 80 | 15 | paws the ground, then charges (30); dazed if it hits a tree or wall |
-| **Crystal Bear** | boss | 300 | 20 | swipe (25), ground pound with warning ring (25), roars in beetles at half health |
+| Venomous Snake | normal | 30 | 10 | coils, then lunges (18) |
+| Dire Wolf | tough | 50 | 15 | very fast; bites, backs off, comes again |
+| Thorn Boar | elite | 90 | 15 | paws the ground, then charges (30); dazed if it hits a tree or wall |
+| **Crystal Bear** | boss | 345 | 20 | swipe (25), ground pound with warning ring (25), roars in beetles at half health |
 
 **Crystal Cave — goblins** (small, quick, fragile, full of gadgets)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
 | Scrap Brawler | weak | 15 | 10 | mechanical-fist punch |
-| Rotor Scout | weak | 12 | 12 | flies; dives at you |
-| Rivet Shooter | normal | 18 | 8 | keeps its distance, fires rivets |
-| Bomb Lobber | normal | 20 | 18 | bombs land where you stand, after a warning ring |
-| Boiler Tinkerer | tough | 45 | 14 | steam burst around itself |
-| **Scrap Boss** | boss | 400 | 25 | stomp shockwave, mech punches; drops 4 brawlers at half health |
+| Rotor Scout | weak | 15 | 12 | flies; dives at you |
+| Rivet Shooter | normal | 20 | 8 | keeps its distance, fires rivets |
+| Bomb Lobber | normal | 25 | 18 | bombs land where you stand, after a warning ring |
+| Boiler Tinkerer | tough | 50 | 14 | steam burst around itself |
+| **Scrap Boss** | boss | 460 | 25 | stomp shockwave, mech punches; drops 4 brawlers at half health |
 
 **Crypt — the undead**
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| Skeleton Warrior | normal | 30 | 14 | sword slash |
-| Skeleton Archer | normal | 25 | 13 | arrows from afar |
-| Ghost | normal | 25 | 12 | floats straight through pillars |
-| Zombie Brute | tough | 90 | 25 | slow; fist slam |
-| Undead Knight | elite | 130 | 22 | its shield halves arrows to the front — hit it from the side |
-| **Necromancer** | boss | 500 | 14 / 20 | 5-bolt soul volleys, soul blasts at your spot; raises skeletons every 10 s |
+| Skeleton Warrior | normal | 35 | 14 | sword slash |
+| Skeleton Archer | normal | 30 | 13 | arrows from afar |
+| Ghost | normal | 30 | 12 | floats straight through pillars |
+| Zombie Brute | tough | 105 | 25 | slow; fist slam |
+| Undead Knight | elite | 150 | 22 | its shield halves arrows to the front — hit it from the side |
+| **Necromancer** | boss | 575 | 14 / 20 | 5-bolt soul volleys, soul blasts at your spot; raises skeletons every 10 s |
 
 **Throne Room — orcs**
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| Orc Scout | normal | 35 | 12 | fast; stabs, then backs off |
-| Orc Archer | normal | 45 | 13 | arrows from afar |
-| Orc Warrior | tough | 60 | 20 | axe swing |
-| Orc Shaman | tough | 50 | 12 | magic bolts; heals nearby orcs (green ring) — kill it first |
-| Orc Shield Guard | elite | 150 | 22 | its shield blocks almost every arrow to the front |
-| **Orc Chieftain** | boss | 650 | 28 / 30 | hammer swings, ground slam with warning ring, long charges; war-cry brings 3 warriors |
+| Orc Scout | normal | 40 | 12 | fast; stabs, then backs off |
+| Orc Archer | normal | 50 | 13 | arrows from afar |
+| Orc Warrior | tough | 70 | 20 | axe swing |
+| Orc Shaman | tough | 55 | 12 | magic bolts; heals nearby orcs (green ring) — kill it first |
+| Orc Shield Guard | elite | 170 | 22 | its shield blocks almost every arrow to the front |
+| **Orc Chieftain** | boss | 745 | 28 / 30 | hammer swings, ground slam with warning ring, long charges; war-cry brings 3 warriors |
 
 **Flooded Hall — underworld dwellers**
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| Cave Spider | normal | 40 | 18 | leaps at you |
-| Cave Slime | normal | 50 | 12 | acid spit that slows you |
-| Spore Crawler | normal | 45 | 10 | spore bombs leave poison clouds (8 HP/s) |
-| Mushroom Monster | tough | 110 | 18 | poison spore burst around itself |
-| Living Mold | elite | 160 | 28 | slow, hard punch; regrows when you stop hitting it |
-| **Giant Cave Worm** | boss | 800 | 30 | burrows (can't be hit), bursts up under you after a warning ring; acid fans; calls spiders |
+| Cave Spider | normal | 45 | 18 | leaps at you |
+| Cave Slime | normal | 55 | 12 | acid spit that slows you |
+| Spore Crawler | normal | 50 | 10 | spore bombs leave poison clouds (8 HP/s) |
+| Mushroom Monster | tough | 125 | 18 | poison spore burst around itself |
+| Living Mold | elite | 185 | 28 | slow, hard punch; regrows when you stop hitting it |
+| **Giant Cave Worm** | boss | 920 | 30 | burrows (can't be hit), bursts up under you after a warning ring; acid fans; calls spiders |
 
 **Lava Chamber — nature elementals**
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| Thorn Vine | normal | 50 | 15 | lashes from 3 m |
-| Wind Elemental | normal | 55 | 8 | gust bolts with a big shove |
-| Water Elemental | normal | 70 | 12 | water bolts that slow you for 2 s |
-| Fire Elemental | tough | 90 | 15 | fireballs that leave burning ground (10 HP/s) |
-| Treant | elite | 190 | 22 | roots erupt where you stand, after a warning ring, and slow |
-| Rock Golem | elite | 220 | 30 | slow; heavy punch with huge knockback |
-| **The Inferno** | final boss | 1200 | 30 / 15 / 22 | flame ring around itself, 5-fireball fans, meteors at your spot (all leave fire); calls fire elementals |
+| Thorn Vine | normal | 55 | 15 | lashes from 3 m |
+| Wind Elemental | normal | 65 | 8 | gust bolts with a big shove |
+| Water Elemental | normal | 80 | 12 | water bolts that slow you for 2 s |
+| Fire Elemental | tough | 105 | 15 | fireballs that leave burning ground (10 HP/s) |
+| Treant | elite | 220 | 22 | roots erupt where you stand, after a warning ring, and slow |
+| Rock Golem | elite | 255 | 30 | slow; heavy punch with huge knockback |
+| **The Inferno** | final boss | 1380 | 30 / 15 / 22 | flame ring around itself, 5-fireball fans, meteors at your spot (all leave fire); calls fire elementals |
 
 The models (`public/models/`) are static, part-named meshes; `src/game/monsterVisual.ts`, `beastVisual.ts` and
 `elementalVisual.ts` rig them in code. Health and damage live in `src/game/balance.ts` and the `BEASTS`
@@ -122,7 +122,8 @@ Two roles:
 
 - **Hero (the elf)** plays as usual on a computer (or phone). The title screen shows a room code and a QR code.
 - **Familiar** scans the QR code or opens the link (`…/?join=CODE`) on a tablet, or types the code under
-  "Got a code?", then **picks a creature**. Tap or drag on the floor to move — it bites any enemy it touches.
+  "Got a code?", then **picks a creature**. Tap or drag on the floor to move — it bites any enemy it touches. Familiars
+  can't be hurt: monsters only ever go for the elf.
   Spell buttons have their own cooldowns. The creature can be changed between runs or while the elf is paused.
 
 | Familiar | Speed | Spells |

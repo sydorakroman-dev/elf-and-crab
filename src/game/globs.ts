@@ -12,17 +12,17 @@ const POINTED: ProjectileKind[] = ['rivet', 'arrow'];
 
 /** How each kind looks and flies. Damage and effects are applied by the game (see balance.ts). */
 export const PROJECTILES: Record<ProjectileKind, { speed: number; radius: number; color: number }> = {
-  acid: { speed: 11, radius: 0.3, color: 0x9be04a },
-  gust: { speed: 14, radius: 0.35, color: 0xdfeaff },
-  water: { speed: 12, radius: 0.3, color: 0x2f9fd8 },
-  fire: { speed: 13, radius: 0.32, color: 0xff7a2a },
-  rivet: { speed: 16, radius: 0.22, color: 0xc8ccd4 },
-  arrow: { speed: 17, radius: 0.22, color: 0xd8c8a0 },
-  soul: { speed: 10, radius: 0.32, color: 0x6ff0c8 },
-  magic: { speed: 12, radius: 0.3, color: 0xb070ff },
+  acid: { speed: 15, radius: 0.3, color: 0x9be04a },
+  gust: { speed: 20, radius: 0.35, color: 0xdfeaff },
+  water: { speed: 17, radius: 0.3, color: 0x2f9fd8 },
+  fire: { speed: 18, radius: 0.32, color: 0xff7a2a },
+  rivet: { speed: 22, radius: 0.22, color: 0xc8ccd4 },
+  arrow: { speed: 24, radius: 0.22, color: 0xd8c8a0 },
+  soul: { speed: 14, radius: 0.32, color: 0x6ff0c8 },
+  magic: { speed: 17, radius: 0.3, color: 0xb070ff },
 };
 
-const LIFETIME = 2.2;
+const LIFETIME = 2.6;
 const HEIGHT = 1.0;
 const POOL = 40;
 

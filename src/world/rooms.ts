@@ -151,7 +151,7 @@ export const ROOMS: RoomDef[] = [
     group: 'Underworld dwellers',
     art: 'underworld',
     waves: [
-      { mix: { spider: 6, ooze: 3, sporecrawler: 2 } },
+      { mix: { spider: 7, ooze: 3, sporecrawler: 2 } },
       { mix: { spider: 6, ooze: 3, sporecrawler: 2, mushroom: 2, mold: 1 } },
       { mix: { spider: 4, ooze: 2, mushroom: 1 }, boss: 'caveworm' },
     ],

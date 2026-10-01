@@ -1,19 +1,19 @@
 room,room_name,wave,enemies,enemy_count,total_hp,boss
-1,The Woodland,1,8 Armored Beetle + 2 Venomous Snake,10,130,
-1,The Woodland,2,8 Armored Beetle + 4 Venomous Snake + 2 Dire Wolf + 1 Thorn Boar,15,350,
-1,The Woodland,3,6 Armored Beetle + 2 Dire Wolf,8,450,The Crystal Bear
-2,The Crystal Cave,1,8 Scrap Brawler + 3 Rivet Shooter + 2 Rotor Scout,13,198,
-2,The Crystal Cave,2,10 Scrap Brawler + 3 Rotor Scout + 3 Rivet Shooter + 2 Bomb Lobber + 2 Boiler Tinkerer,20,370,
-2,The Crystal Cave,3,6 Scrap Brawler + 2 Rivet Shooter + 2 Bomb Lobber,10,566,The Scrap Boss
-3,The Crypt,1,8 Skeleton Warrior + 2 Skeleton Archer + 2 Ghost,12,340,
-3,The Crypt,2,8 Skeleton Warrior + 3 Skeleton Archer + 3 Ghost + 2 Zombie Brute + 1 Undead Knight,17,700,
-3,The Crypt,3,4 Skeleton Warrior + 2 Skeleton Archer + 1 Zombie Brute,7,760,The Necromancer
-4,The Throne Room,1,4 Orc Warrior + 4 Orc Scout + 2 Orc Archer,10,470,
-4,The Throne Room,2,5 Orc Warrior + 4 Orc Scout + 3 Orc Archer + 2 Orc Shaman + 1 Orc Shield Guard,15,825,
-4,The Throne Room,3,3 Orc Warrior + 2 Orc Archer + 1 Orc Shaman,6,970,The Orc Chieftain
-5,The Flooded Hall,1,6 Cave Spider + 3 Cave Slime + 2 Spore Crawler,11,480,
-5,The Flooded Hall,2,6 Cave Spider + 3 Cave Slime + 2 Spore Crawler + 2 Mushroom Monster + 1 Living Mold,14,860,
-5,The Flooded Hall,3,4 Cave Spider + 2 Cave Slime + 1 Mushroom Monster,7,1170,The Giant Cave Worm
-6,The Lava Chamber,1,5 Thorn Vine + 3 Wind Elemental + 2 Water Elemental + 2 Fire Elemental,12,735,
-6,The Lava Chamber,2,5 Thorn Vine + 3 Wind Elemental + 3 Water Elemental + 3 Fire Elemental + 1 Rock Golem + 1 Treant,16,1305,
-6,The Lava Chamber,3,3 Thorn Vine + 2 Fire Elemental + 1 Rock Golem,6,1750,The Inferno
+1,The Woodland,1,8 Armored Beetle + 2 Venomous Snake,10,140,
+1,The Woodland,2,8 Armored Beetle + 4 Venomous Snake + 2 Dire Wolf + 1 Thorn Boar,15,390,
+1,The Woodland,3,6 Armored Beetle + 2 Dire Wolf,8,505,The Crystal Bear
+2,The Crystal Cave,1,8 Scrap Brawler + 3 Rivet Shooter + 2 Rotor Scout,13,210,
+2,The Crystal Cave,2,10 Scrap Brawler + 3 Rotor Scout + 3 Rivet Shooter + 2 Bomb Lobber + 2 Boiler Tinkerer,20,405,
+2,The Crystal Cave,3,6 Scrap Brawler + 2 Rivet Shooter + 2 Bomb Lobber,10,640,The Scrap Boss
+3,The Crypt,1,8 Skeleton Warrior + 2 Skeleton Archer + 2 Ghost,12,400,
+3,The Crypt,2,8 Skeleton Warrior + 3 Skeleton Archer + 3 Ghost + 2 Zombie Brute + 1 Undead Knight,17,820,
+3,The Crypt,3,4 Skeleton Warrior + 2 Skeleton Archer + 1 Zombie Brute,7,880,The Necromancer
+4,The Throne Room,1,4 Orc Warrior + 4 Orc Scout + 2 Orc Archer,10,540,
+4,The Throne Room,2,5 Orc Warrior + 4 Orc Scout + 3 Orc Archer + 2 Orc Shaman + 1 Orc Shield Guard,15,940,
+4,The Throne Room,3,3 Orc Warrior + 2 Orc Archer + 1 Orc Shaman,6,1110,The Orc Chieftain
+5,The Flooded Hall,1,7 Cave Spider + 3 Cave Slime + 2 Spore Crawler,12,580,
+5,The Flooded Hall,2,6 Cave Spider + 3 Cave Slime + 2 Spore Crawler + 2 Mushroom Monster + 1 Living Mold,14,970,
+5,The Flooded Hall,3,4 Cave Spider + 2 Cave Slime + 1 Mushroom Monster,7,1335,The Giant Cave Worm
+6,The Lava Chamber,1,5 Thorn Vine + 3 Wind Elemental + 2 Water Elemental + 2 Fire Elemental,12,840,
+6,The Lava Chamber,2,5 Thorn Vine + 3 Wind Elemental + 3 Water Elemental + 3 Fire Elemental + 1 Rock Golem + 1 Treant,16,1500,
+6,The Lava Chamber,3,3 Thorn Vine + 2 Fire Elemental + 1 Rock Golem,6,2010,The Inferno

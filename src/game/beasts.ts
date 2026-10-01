@@ -26,11 +26,11 @@ export interface BeastDef {
 }
 
 export const BEASTS: Record<BeastKind, BeastDef> = {
-  beetle: { name: 'Armored Beetle', tier: 'weak', hp: 10, speed: 4.2, radius: 0.6, touch: 8, push: 9, score: 8, color: 0x1f6a6e, drop: 0.03 },
-  snake: { name: 'Venomous Snake', tier: 'normal', hp: 25, speed: 3.2, radius: 0.7, touch: 10, push: 7, score: 15, color: 0x2f8f3a, drop: 0.06 },
-  direwolf: { name: 'Dire Wolf', tier: 'tough', hp: 45, speed: 6.0, radius: 0.8, touch: 15, push: 5, score: 30, color: 0x3a4250, drop: 0.12 },
-  boar: { name: 'Thorn Boar', tier: 'elite', hp: 80, speed: 3.8, radius: 1.0, touch: 15, push: 2.5, score: 60, color: 0x7a4a26, drop: 0.25 },
-  bear: { name: 'The Crystal Bear', tier: 'mini-boss', hp: 300, speed: 2.8, radius: 1.7, touch: 20, push: 0.8, score: 300, color: 0x6b4226, drop: 0 },
+  beetle: { name: 'Armored Beetle', tier: 'weak', hp: 10, speed: 5.3, radius: 0.6, touch: 8, push: 9, score: 8, color: 0x1f6a6e, drop: 0.03 },
+  snake: { name: 'Venomous Snake', tier: 'normal', hp: 30, speed: 3.5, radius: 0.7, touch: 10, push: 7, score: 15, color: 0x2f8f3a, drop: 0.06 },
+  direwolf: { name: 'Dire Wolf', tier: 'tough', hp: 50, speed: 7.5, radius: 0.8, touch: 15, push: 5, score: 30, color: 0x3a4250, drop: 0.12 },
+  boar: { name: 'Thorn Boar', tier: 'elite', hp: 90, speed: 4.2, radius: 1.0, touch: 15, push: 2.5, score: 60, color: 0x7a4a26, drop: 0.25 },
+  bear: { name: 'The Crystal Bear', tier: 'mini-boss', hp: 345, speed: 3.1, radius: 1.7, touch: 20, push: 0.8, score: 300, color: 0x6b4226, drop: 0 },
 };
 
 // Snake: coils, then lunges.

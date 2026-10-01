@@ -58,10 +58,11 @@ describe('monsters', () => {
 
   it('shield guards shrug off arrows to the front, not the back', () => {
     const e = new Monster('shieldguard', 0, 0); // faces +z
+    const full = MONSTERS.shieldguard.hp;
     e.hurt(10, 0, -1); // arrow flying toward its face
-    expect(e.hp).toBeCloseTo(150 - 1.5);
+    expect(e.hp).toBeCloseTo(full - 1.5);
     e.hurt(10, 0, 1); // from behind
-    expect(e.hp).toBeCloseTo(150 - 11.5);
+    expect(e.hp).toBeCloseTo(full - 11.5);
   });
 
   it('living mold regrows when left alone', () => {
@@ -83,9 +84,9 @@ describe('monsters', () => {
 
   it('bosses call for help as their health drops', () => {
     const boss = new Monster('scrapboss', 0, 20);
-    boss.hurt(100, 0, 1);
+    boss.hurt(boss.maxHp * 0.25, 0, 1);
     expect(boss.summon).toBeNull();
-    boss.hurt(120, 0, 1); // past half
+    boss.hurt(boss.maxHp * 0.3, 0, 1); // past half
     expect(boss.summon).toEqual({ kind: 'brawler', count: 4 });
   });
 
@@ -109,7 +110,7 @@ describe('monsters', () => {
     });
     expect(hidden).toBe(true);
     expect(strike).toMatchObject({ x: 3, z: -2, damage: 30 });
-    expect(worm.hp).toBe(800);
+    expect(worm.hp).toBe(MONSTERS.caveworm.hp);
   });
 
   it('spiders leap and hit hard while leaping', () => {

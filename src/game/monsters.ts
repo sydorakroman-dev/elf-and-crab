@@ -75,27 +75,27 @@ const LONG = 99;
 export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   // ── Goblins (Crystal Cave): small, quick, fragile, full of gadgets ──
   brawler: {
-    name: 'Scrap Brawler', tier: 'weak', style: 'melee', hp: 15, speed: 4.6, radius: 0.5, touch: 8, push: 9, score: 10, drop: 0.04,
+    name: 'Scrap Brawler', tier: 'weak', style: 'melee', hp: 15, speed: 5.8, radius: 0.5, touch: 8, push: 9, score: 10, drop: 0.04,
     attacks: [{ type: 'melee', range: 1.6, windup: 0.35, reach: 0.9, radius: 1.1, damage: 10, knock: 10, cooldown: 1.4 }],
   },
   rotor: {
-    name: 'Rotor Scout', tier: 'weak', style: 'melee', hp: 12, speed: 6, radius: 0.5, touch: 6, push: 9, score: 12, drop: 0.05,
+    name: 'Rotor Scout', tier: 'weak', style: 'melee', hp: 15, speed: 7.5, radius: 0.5, touch: 6, push: 9, score: 12, drop: 0.05,
     attacks: [{ type: 'lunge', range: 7, minRange: 2.5, windup: 0.5, speed: 16, time: 0.4, damage: 12, knock: 12, cooldown: 3 }],
   },
   riveter: {
-    name: 'Rivet Shooter', tier: 'normal', style: 'ranged', hp: 18, speed: 3.6, radius: 0.5, touch: 6, push: 9, score: 15, drop: 0.06, keepAway: [7, 12],
-    attacks: [{ type: 'shoot', range: 14, windup: 0.45, cooldown: 2.2, shot: 'rivet' }],
+    name: 'Rivet Shooter', tier: 'normal', style: 'ranged', hp: 20, speed: 4, radius: 0.5, touch: 6, push: 9, score: 15, drop: 0.06, keepAway: [10.5, 18],
+    attacks: [{ type: 'shoot', range: 21, windup: 0.45, cooldown: 2.2, shot: 'rivet' }],
   },
   lobber: {
-    name: 'Bomb Lobber', tier: 'normal', style: 'ranged', hp: 20, speed: 3.4, radius: 0.5, touch: 6, push: 9, score: 18, drop: 0.08, keepAway: [8, 13],
-    attacks: [{ type: 'area', at: 'target', range: 15, windup: 1.0, radius: 2.2, damage: 18, knock: 14, cooldown: 3.5 }],
+    name: 'Bomb Lobber', tier: 'normal', style: 'ranged', hp: 25, speed: 3.7, radius: 0.5, touch: 6, push: 9, score: 18, drop: 0.08, keepAway: [12, 19.5],
+    attacks: [{ type: 'area', at: 'target', range: 22.5, windup: 1.0, radius: 2.2, damage: 18, knock: 14, cooldown: 3.5 }],
   },
   tinkerer: {
-    name: 'Boiler Tinkerer', tier: 'tough', style: 'melee', hp: 45, speed: 3.0, radius: 0.6, touch: 10, push: 6, score: 30, drop: 0.15,
+    name: 'Boiler Tinkerer', tier: 'tough', style: 'melee', hp: 50, speed: 3.3, radius: 0.6, touch: 10, push: 6, score: 30, drop: 0.15,
     attacks: [{ type: 'area', at: 'self', range: 2.8, windup: 0.7, radius: 2.6, damage: 14, knock: 16, cooldown: 3 }],
   },
   scrapboss: {
-    name: 'The Scrap Boss', tier: 'mini-boss', style: 'melee', hp: 400, speed: 2.6, radius: 1.5, touch: 15, push: 1, score: 300, drop: 0, bossName: 'The Scrap Boss',
+    name: 'The Scrap Boss', tier: 'mini-boss', style: 'melee', hp: 460, speed: 2.9, radius: 1.5, touch: 15, push: 1, score: 300, drop: 0, bossName: 'The Scrap Boss',
     attacks: [
       { type: 'area', at: 'self', range: 6, windup: 1.0, radius: 4.5, damage: 25, knock: 18, cooldown: 6 },
       { type: 'melee', range: 3, windup: 0.6, reach: 1.4, radius: 2.0, damage: 25, knock: 24, cooldown: 2 },
@@ -105,59 +105,59 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
 
   // ── Undead (Crypt) ──
   skeleton: {
-    name: 'Skeleton Warrior', tier: 'normal', style: 'melee', hp: 30, speed: 3.4, radius: 0.6, touch: 10, push: 7, score: 15, drop: 0.05,
+    name: 'Skeleton Warrior', tier: 'normal', style: 'melee', hp: 35, speed: 4.3, radius: 0.6, touch: 10, push: 7, score: 15, drop: 0.05,
     attacks: [{ type: 'melee', range: 2, windup: 0.45, reach: 1.1, radius: 1.3, damage: 14, knock: 10, cooldown: 1.6 }],
   },
   skelarcher: {
-    name: 'Skeleton Archer', tier: 'normal', style: 'ranged', hp: 25, speed: 3.2, radius: 0.6, touch: 8, push: 7, score: 18, drop: 0.07, keepAway: [9, 14],
-    attacks: [{ type: 'shoot', range: 16, windup: 0.6, cooldown: 2.6, shot: 'arrow' }],
+    name: 'Skeleton Archer', tier: 'normal', style: 'ranged', hp: 30, speed: 3.5, radius: 0.6, touch: 8, push: 7, score: 18, drop: 0.07, keepAway: [13.5, 21],
+    attacks: [{ type: 'shoot', range: 24, windup: 0.6, cooldown: 2.6, shot: 'arrow' }],
   },
   ghost: {
-    name: 'Ghost', tier: 'normal', style: 'melee', hp: 25, speed: 4.0, radius: 0.7, touch: 12, push: 8, score: 18, drop: 0.07, phasing: true,
+    name: 'Ghost', tier: 'normal', style: 'melee', hp: 30, speed: 5, radius: 0.7, touch: 12, push: 8, score: 18, drop: 0.07, phasing: true,
     attacks: [],
   },
   zombie: {
-    name: 'Zombie Brute', tier: 'tough', style: 'melee', hp: 90, speed: 2.3, radius: 0.9, touch: 14, push: 3, score: 40, drop: 0.15,
+    name: 'Zombie Brute', tier: 'tough', style: 'melee', hp: 105, speed: 2.5, radius: 0.9, touch: 14, push: 3, score: 40, drop: 0.15,
     attacks: [{ type: 'melee', range: 2.4, windup: 0.7, reach: 1.2, radius: 1.8, damage: 25, knock: 20, cooldown: 2.4 }],
   },
   knight: {
-    name: 'Undead Knight', tier: 'elite', style: 'melee', hp: 130, speed: 3.0, radius: 0.8, touch: 14, push: 2.5, score: 60, drop: 0.25, guard: 0.5,
+    name: 'Undead Knight', tier: 'elite', style: 'melee', hp: 150, speed: 3.3, radius: 0.8, touch: 14, push: 2.5, score: 60, drop: 0.25, guard: 0.5,
     attacks: [{ type: 'melee', range: 2.4, windup: 0.55, reach: 1.3, radius: 1.5, damage: 22, knock: 14, cooldown: 1.8 }],
   },
   necromancer: {
-    name: 'The Necromancer', tier: 'mini-boss', style: 'ranged', hp: 500, speed: 3.0, radius: 1.1, touch: 15, push: 1, score: 400, drop: 0, bossName: 'The Necromancer',
-    keepAway: [7, 12],
+    name: 'The Necromancer', tier: 'mini-boss', style: 'ranged', hp: 575, speed: 3.3, radius: 1.1, touch: 15, push: 1, score: 400, drop: 0, bossName: 'The Necromancer',
+    keepAway: [10.5, 18],
     attacks: [
-      { type: 'shoot', range: 18, windup: 0.7, cooldown: 3.2, shot: 'soul', count: 5, spread: 0.22 },
-      { type: 'area', at: 'target', range: 16, windup: 1.1, radius: 2.4, damage: 20, knock: 10, cooldown: 5.5 },
+      { type: 'shoot', range: 27, windup: 0.7, cooldown: 3.2, shot: 'soul', count: 5, spread: 0.22 },
+      { type: 'area', at: 'target', range: 24, windup: 1.1, radius: 2.4, damage: 20, knock: 10, cooldown: 5.5 },
     ],
     summonEvery: { every: 10, kind: 'skeleton', count: 2, max: 6 },
   },
 
   // ── Orcs (Throne Room) ──
   orcscout: {
-    name: 'Orc Scout', tier: 'normal', style: 'melee', hp: 35, speed: 5.4, radius: 0.7, touch: 12, push: 6, score: 20, drop: 0.07, hitAndRun: 0.9,
+    name: 'Orc Scout', tier: 'normal', style: 'melee', hp: 40, speed: 6.8, radius: 0.7, touch: 12, push: 6, score: 20, drop: 0.07, hitAndRun: 0.9,
     attacks: [{ type: 'melee', range: 1.8, windup: 0.3, reach: 1, radius: 1.2, damage: 12, knock: 10, cooldown: 1.2 }],
   },
   orcwarrior: {
-    name: 'Orc Warrior', tier: 'tough', style: 'melee', hp: 60, speed: 3.6, radius: 0.8, touch: 14, push: 4, score: 30, drop: 0.1,
+    name: 'Orc Warrior', tier: 'tough', style: 'melee', hp: 70, speed: 4, radius: 0.8, touch: 14, push: 4, score: 30, drop: 0.1,
     attacks: [{ type: 'melee', range: 2.2, windup: 0.5, reach: 1.2, radius: 1.5, damage: 20, knock: 14, cooldown: 1.8 }],
   },
   orcarcher: {
-    name: 'Orc Archer', tier: 'normal', style: 'ranged', hp: 45, speed: 3.4, radius: 0.7, touch: 10, push: 5, score: 25, drop: 0.1, keepAway: [9, 14],
-    attacks: [{ type: 'shoot', range: 16, windup: 0.55, cooldown: 2.4, shot: 'arrow' }],
+    name: 'Orc Archer', tier: 'normal', style: 'ranged', hp: 50, speed: 3.7, radius: 0.7, touch: 10, push: 5, score: 25, drop: 0.1, keepAway: [13.5, 21],
+    attacks: [{ type: 'shoot', range: 24, windup: 0.55, cooldown: 2.4, shot: 'arrow' }],
   },
   shaman: {
-    name: 'Orc Shaman', tier: 'tough', style: 'ranged', hp: 50, speed: 3.2, radius: 0.7, touch: 10, push: 5, score: 35, drop: 0.15, keepAway: [8, 13],
-    attacks: [{ type: 'shoot', range: 15, windup: 0.6, cooldown: 3, shot: 'magic' }],
+    name: 'Orc Shaman', tier: 'tough', style: 'ranged', hp: 55, speed: 3.5, radius: 0.7, touch: 10, push: 5, score: 35, drop: 0.15, keepAway: [12, 19.5],
+    attacks: [{ type: 'shoot', range: 22.5, windup: 0.6, cooldown: 3, shot: 'magic' }],
     heal: { every: 4, amount: 12, radius: 7 },
   },
   shieldguard: {
-    name: 'Orc Shield Guard', tier: 'elite', style: 'melee', hp: 150, speed: 2.8, radius: 0.9, touch: 14, push: 2, score: 70, drop: 0.25, guard: 0.15,
+    name: 'Orc Shield Guard', tier: 'elite', style: 'melee', hp: 170, speed: 3.1, radius: 0.9, touch: 14, push: 2, score: 70, drop: 0.25, guard: 0.15,
     attacks: [{ type: 'melee', range: 2.4, windup: 0.6, reach: 1.3, radius: 1.6, damage: 22, knock: 16, cooldown: 2 }],
   },
   chieftain: {
-    name: 'The Orc Chieftain', tier: 'mini-boss', style: 'melee', hp: 650, speed: 3.0, radius: 1.5, touch: 18, push: 0.8, score: 500, drop: 0, bossName: 'The Orc Chieftain',
+    name: 'The Orc Chieftain', tier: 'mini-boss', style: 'melee', hp: 745, speed: 3.3, radius: 1.5, touch: 18, push: 0.8, score: 500, drop: 0, bossName: 'The Orc Chieftain',
     attacks: [
       { type: 'area', at: 'self', range: 5, windup: 1.1, radius: 4.8, damage: 30, knock: 20, cooldown: 7 },
       { type: 'lunge', range: 16, minRange: 6, windup: 0.8, speed: 14, time: 1.0, damage: 30, knock: 24, cooldown: 8 },
@@ -168,30 +168,30 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
 
   // ── Underworld dwellers (Flooded Hall) ──
   spider: {
-    name: 'Cave Spider', tier: 'normal', style: 'melee', hp: 40, speed: 4.8, radius: 0.9, touch: 12, push: 6, score: 25, drop: 0.08,
+    name: 'Cave Spider', tier: 'normal', style: 'melee', hp: 45, speed: 6, radius: 0.9, touch: 12, push: 6, score: 25, drop: 0.08,
     attacks: [{ type: 'lunge', range: 5, minRange: 1.5, windup: 0.4, speed: 18, time: 0.25, damage: 18, knock: 12, cooldown: 2 }],
   },
   ooze: {
-    name: 'Cave Slime', tier: 'normal', style: 'ranged', hp: 50, speed: 2.8, radius: 0.8, touch: 12, push: 5, score: 25, drop: 0.08, keepAway: [6, 11],
-    attacks: [{ type: 'shoot', range: 13, windup: 0.6, cooldown: 2.8, shot: 'acid' }],
+    name: 'Cave Slime', tier: 'normal', style: 'ranged', hp: 55, speed: 3.1, radius: 0.8, touch: 12, push: 5, score: 25, drop: 0.08, keepAway: [9, 16.5],
+    attacks: [{ type: 'shoot', range: 19.5, windup: 0.6, cooldown: 2.8, shot: 'acid' }],
   },
   sporecrawler: {
-    name: 'Spore Crawler', tier: 'normal', style: 'ranged', hp: 45, speed: 3.6, radius: 0.8, touch: 10, push: 6, score: 25, drop: 0.08, keepAway: [8, 13],
-    attacks: [{ type: 'area', at: 'target', range: 15, windup: 1.0, radius: 2.0, damage: 10, knock: 4, cooldown: 4, zone: 'poison' }],
+    name: 'Spore Crawler', tier: 'normal', style: 'ranged', hp: 50, speed: 4, radius: 0.8, touch: 10, push: 6, score: 25, drop: 0.08, keepAway: [12, 19.5],
+    attacks: [{ type: 'area', at: 'target', range: 22.5, windup: 1.0, radius: 2.0, damage: 10, knock: 4, cooldown: 4, zone: 'poison' }],
   },
   mushroom: {
-    name: 'Mushroom Monster', tier: 'tough', style: 'melee', hp: 110, speed: 2.6, radius: 1.0, touch: 15, push: 3, score: 45, drop: 0.15,
+    name: 'Mushroom Monster', tier: 'tough', style: 'melee', hp: 125, speed: 2.9, radius: 1.0, touch: 15, push: 3, score: 45, drop: 0.15,
     attacks: [{ type: 'area', at: 'self', range: 3, windup: 0.8, radius: 3, damage: 18, knock: 14, cooldown: 3.5, zone: 'poison' }],
   },
   mold: {
-    name: 'Living Mold', tier: 'elite', style: 'melee', hp: 160, speed: 2.2, radius: 1.0, touch: 15, push: 2, score: 70, drop: 0.25, regen: { delay: 2, rate: 6 },
+    name: 'Living Mold', tier: 'elite', style: 'melee', hp: 185, speed: 2.4, radius: 1.0, touch: 15, push: 2, score: 70, drop: 0.25, regen: { delay: 2, rate: 6 },
     attacks: [{ type: 'melee', range: 2.4, windup: 0.65, reach: 1.2, radius: 1.8, damage: 28, knock: 22, cooldown: 2.2 }],
   },
   caveworm: {
-    name: 'The Giant Cave Worm', tier: 'mini-boss', style: 'melee', hp: 800, speed: 1.6, radius: 1.6, touch: 18, push: 0.5, score: 600, drop: 0, bossName: 'The Giant Cave Worm',
+    name: 'The Giant Cave Worm', tier: 'mini-boss', style: 'melee', hp: 920, speed: 1.8, radius: 1.6, touch: 18, push: 0.5, score: 600, drop: 0, bossName: 'The Giant Cave Worm',
     attacks: [
       { type: 'burrow', range: LONG, cooldown: 7, windup: 1.3, radius: 3.2, damage: 30, knock: 22 },
-      { type: 'shoot', range: 18, windup: 0.7, cooldown: 3, shot: 'acid', count: 3, spread: 0.25 },
+      { type: 'shoot', range: 27, windup: 0.7, cooldown: 3, shot: 'acid', count: 3, spread: 0.25 },
       { type: 'melee', range: 3, windup: 0.6, reach: 1.4, radius: 2.2, damage: 25, knock: 20, cooldown: 2 },
     ],
     summonAt: { at: [0.5], kind: 'spider', count: 3 },
@@ -199,12 +199,12 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
 
   // ── The final boss (Lava Chamber) ──
   inferno: {
-    name: 'The Inferno', tier: 'boss', style: 'ranged', hp: 1200, speed: 2.4, radius: 2.0, touch: 20, push: 0.4, score: 1000, drop: 0, bossName: 'The Inferno',
-    keepAway: [6, 12],
+    name: 'The Inferno', tier: 'boss', style: 'ranged', hp: 1380, speed: 2.6, radius: 2.0, touch: 20, push: 0.4, score: 1000, drop: 0, bossName: 'The Inferno',
+    keepAway: [9, 18],
     attacks: [
       { type: 'area', at: 'self', range: 7, windup: 1.1, radius: 5.5, damage: 30, knock: 22, cooldown: 7, zone: 'fire' },
-      { type: 'shoot', range: 20, windup: 0.7, cooldown: 3, shot: 'fire', count: 5, spread: 0.2 },
-      { type: 'area', at: 'target', range: 20, windup: 1.0, radius: 2.5, damage: 22, knock: 12, cooldown: 4.5, zone: 'fire' },
+      { type: 'shoot', range: 30, windup: 0.7, cooldown: 3, shot: 'fire', count: 5, spread: 0.2 },
+      { type: 'area', at: 'target', range: 30, windup: 1.0, radius: 2.5, damage: 22, knock: 12, cooldown: 4.5, zone: 'fire' },
     ],
     summonAt: { at: [2 / 3, 1 / 3], kind: 'fire', count: 2 },
   },

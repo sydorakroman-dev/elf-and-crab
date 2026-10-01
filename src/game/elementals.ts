@@ -27,12 +27,12 @@ export interface ElementalDef {
 }
 
 export const ELEMENTALS: Record<ElementalKind, ElementalDef> = {
-  vine: { name: 'Thorn Vine', tier: 'normal', style: 'melee', hp: 50, speed: 3.4, radius: 0.8, touch: 10, push: 6, score: 20, color: 0x4f9a3a, drop: 0.08 },
-  wind: { name: 'Wind Elemental', tier: 'normal', style: 'ranged', hp: 55, speed: 3.8, radius: 0.85, touch: 8, push: 7, score: 25, color: 0xcfe6f2, drop: 0.08 },
-  water: { name: 'Water Elemental', tier: 'normal', style: 'ranged', hp: 70, speed: 3.0, radius: 0.9, touch: 10, push: 6, score: 30, color: 0x3fa8e0, drop: 0.1 },
-  fire: { name: 'Fire Elemental', tier: 'tough', style: 'ranged', hp: 90, speed: 3.2, radius: 0.85, touch: 15, push: 5, score: 45, color: 0xff7a2a, drop: 0.15 },
-  treant: { name: 'Treant', tier: 'elite', style: 'melee', hp: 190, speed: 2.4, radius: 1.3, touch: 15, push: 2, score: 70, color: 0x7a5a32, drop: 0.25 },
-  golem: { name: 'Rock Golem', tier: 'elite', style: 'melee', hp: 220, speed: 2.2, radius: 1.3, touch: 15, push: 1.5, score: 80, color: 0x8a8378, drop: 0.25 },
+  vine: { name: 'Thorn Vine', tier: 'normal', style: 'melee', hp: 55, speed: 4.3, radius: 0.8, touch: 10, push: 6, score: 20, color: 0x4f9a3a, drop: 0.08 },
+  wind: { name: 'Wind Elemental', tier: 'normal', style: 'ranged', hp: 65, speed: 4.8, radius: 0.85, touch: 8, push: 7, score: 25, color: 0xcfe6f2, drop: 0.08 },
+  water: { name: 'Water Elemental', tier: 'normal', style: 'ranged', hp: 80, speed: 3.3, radius: 0.9, touch: 10, push: 6, score: 30, color: 0x3fa8e0, drop: 0.1 },
+  fire: { name: 'Fire Elemental', tier: 'tough', style: 'ranged', hp: 105, speed: 3.5, radius: 0.85, touch: 15, push: 5, score: 45, color: 0xff7a2a, drop: 0.15 },
+  treant: { name: 'Treant', tier: 'elite', style: 'melee', hp: 220, speed: 2.6, radius: 1.3, touch: 15, push: 2, score: 70, color: 0x7a5a32, drop: 0.25 },
+  golem: { name: 'Rock Golem', tier: 'elite', style: 'melee', hp: 255, speed: 2.4, radius: 1.3, touch: 15, push: 1.5, score: 80, color: 0x8a8378, drop: 0.25 },
 };
 
 // Thorn vine: rears back, then lashes a vine out in front.
@@ -43,9 +43,9 @@ export const GOLEM = { range: 3.0, windup: 0.75, reach: 1.6, radius: 2.2, damage
 export const TREANT = { range: 14, windup: 1.1, radius: 2.2, damage: 22, knock: 6, slowSeconds: 1.5, slowFactor: 0.5, cooldown: 5 };
 // Ranged elementals: distance band, time between shots, cast wind-up.
 export const CASTERS: Record<'wind' | 'water' | 'fire', { min: number; max: number; interval: number; windup: number; shot: ProjectileKind }> = {
-  wind: { min: 7, max: 12, interval: 2.4, windup: 0.5, shot: 'gust' },
-  water: { min: 8, max: 13, interval: 3.0, windup: 0.6, shot: 'water' },
-  fire: { min: 9, max: 14, interval: 3.2, windup: 0.7, shot: 'fire' },
+  wind: { min: 10.5, max: 18, interval: 2.4, windup: 0.5, shot: 'gust' },
+  water: { min: 12, max: 19.5, interval: 3.0, windup: 0.6, shot: 'water' },
+  fire: { min: 13.5, max: 21, interval: 3.2, windup: 0.7, shot: 'fire' },
 };
 
 let nextElementalId = 200000; // separate from beast ids
