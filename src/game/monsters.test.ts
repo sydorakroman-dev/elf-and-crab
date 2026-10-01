@@ -46,7 +46,7 @@ describe('monsters', () => {
       strike ??= m.strike;
     });
     expect(ring).toMatchObject({ x: 1, z: 0 });
-    expect(strike).toMatchObject({ x: 1, z: 0, damage: 18 });
+    expect(strike).toMatchObject({ x: 1, z: 0, damage: (MONSTERS.lobber.attacks[0] as { damage: number }).damage });
   });
 
   it('spore crawlers leave poison behind', () => {
@@ -67,9 +67,10 @@ describe('monsters', () => {
 
   it('living mold regrows when left alone', () => {
     const e = new Monster('mold', 0, 30);
-    e.hurt(60, 0, 1);
+    e.hurt(e.maxHp / 2, 0, 1);
+    const hurt = e.hp;
     run(e, new THREE.Vector3(0, 0, -30), 6);
-    expect(e.hp).toBeGreaterThan(100);
+    expect(e.hp).toBeGreaterThan(hurt + 5);
   });
 
   it('orc shamans heal hurt friends nearby', () => {
@@ -109,7 +110,7 @@ describe('monsters', () => {
       strike ??= m.strike;
     });
     expect(hidden).toBe(true);
-    expect(strike).toMatchObject({ x: 3, z: -2, damage: 30 });
+    expect(strike).toMatchObject({ x: 3, z: -2, damage: (MONSTERS.caveworm.attacks[0] as { damage: number }).damage });
     expect(worm.hp).toBe(MONSTERS.caveworm.hp);
   });
 
@@ -117,7 +118,7 @@ describe('monsters', () => {
     const e = new Monster('spider', 0, 4);
     let max = 0;
     run(e, origin(), 1.5, (m) => (max = Math.max(max, m.touchDamage)));
-    expect(max).toBe(18);
+    expect(max).toBe((MONSTERS.spider.attacks[0] as { damage: number }).damage);
   });
 
   it('ghosts drift straight through pillars', () => {

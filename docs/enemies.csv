@@ -10,12 +10,12 @@ Water Elemental,Lava Chamber,ranged,normal,80,3.3,0.9,10,water bolt,12,keeps 12-
 Fire Elemental,Lava Chamber,ranged,tough,105,3.5,0.85,15,fireball,15,"keeps 13.5-21 m away; every 3.2 s; leaves burning ground (r 1.8 m, 3 s, 10 HP/s)",45,15%
 Treant,Lava Chamber,melee,elite,220,2.6,1.3,15,erupting roots,22,targets the hero's spot within 14 m with a 1.1 s warning ring (r 2.2 m); slows to 50% for 1.5 s; every 5 s,70,25%
 Rock Golem,Lava Chamber,melee,elite,255,2.4,1.3,15,heavy punch,30,punches within 3 m after a 0.75 s wind-up; huge knockback (34); every 2.4 s,80,25%
-Scrap Brawler,Crystal Cave,melee,weak,15,5.8,0.5,8,melee hit,10,melee hit: within 1.6 m after a 0.35 s wind-up; every 1.4 s,10,4%
-Rotor Scout,Crystal Cave,melee,weak,15,7.5,0.5,6,leap / charge,12,leap / charge: from 2.5-7 m at 16 m/s after a 0.5 s wind-up; every 3 s,12,5%
-Rivet Shooter,Crystal Cave,ranged,normal,20,4,0.5,6,rivet bolt,8,rivet bolt: up to 21 m; every 2.2 s; keeps 10.5-18 m away,15,6%
-Bomb Lobber,Crystal Cave,ranged,normal,25,3.7,0.5,6,blast at the hero's spot,18,"blast at the hero's spot: 1 s warning ring, r 2.2 m; every 3.5 s; keeps 12-19.5 m away",18,8%
-Boiler Tinkerer,Crystal Cave,melee,tough,50,3.3,0.6,10,area blast around itself,14,"area blast around itself: 0.7 s warning ring, r 2.6 m; every 3 s",30,15%
-The Scrap Boss,Crystal Cave,melee,mini-boss,460,2.9,1.5,15,area blast around itself / melee hit,25 / 25,"area blast around itself: 1 s warning ring, r 4.5 m; every 6 s; melee hit: within 3 m after a 0.6 s wind-up; every 2 s; calls 4 Scrap Brawlers at 50% HP",300,0%
+Cave Spider,Crystal Cave,melee,normal,22,6,0.9,9,leap / charge,12,leap / charge: from 1.5-5 m at 17 m/s after a 0.45 s wind-up; every 2.2 s,15,5%
+Cave Slime,Crystal Cave,ranged,normal,28,3.1,0.8,8,acid bolt,9,acid bolt: up to 19.5 m; every 3 s; slows the hero to 60% for 1.5 s; keeps 9-16.5 m away,15,6%
+Spore Crawler,Crystal Cave,ranged,normal,25,4,0.8,8,blast at the hero's spot,8,"blast at the hero's spot: 1.1 s warning ring, r 2 m; every 4.5 s; leaves poison ground (6 HP/s, 4 s); keeps 12-19.5 m away",18,7%
+Mushroom Monster,Crystal Cave,melee,tough,55,2.9,1,10,area blast around itself,14,"area blast around itself: 0.85 s warning ring, r 3 m; every 3.8 s; leaves poison ground (6 HP/s, 4 s)",30,15%
+Living Mold,Crystal Cave,melee,elite,80,2.4,1,12,melee hit,18,melee hit: within 2.4 m after a 0.7 s wind-up; every 2.4 s; regrows 3 HP/s after 2 s unhurt,45,25%
+The Giant Cave Worm,Crystal Cave,melee,mini-boss,420,1.8,1.6,12,burrow + erupt / 3-bolt acid fan / melee hit,18 / 9 / 18,"burrow + erupt: sinks out of reach, bursts up under the hero after a 1.5 s warning ring (r 3 m); every 9 s; 3-bolt acid fan: up to 27 m; every 4.5 s; slows the hero to 60% for 1.5 s; melee hit: within 3 m after a 0.65 s wind-up; every 2.2 s; calls 3 Cave Spiders at 50% HP",300,0%
 Skeleton Warrior,Crypt,melee,normal,35,4.3,0.6,10,melee hit,14,melee hit: within 2 m after a 0.45 s wind-up; every 1.6 s,15,5%
 Skeleton Archer,Crypt,ranged,normal,30,3.5,0.6,8,arrow bolt,13,arrow bolt: up to 24 m; every 2.6 s; keeps 13.5-21 m away,18,7%
 Ghost,Crypt,melee,normal,30,5,0.7,12,,,floats through pillars,18,7%
@@ -28,12 +28,12 @@ Orc Archer,Throne Room,ranged,normal,50,3.7,0.7,10,arrow bolt,13,arrow bolt: up 
 Orc Shaman,Throne Room,ranged,tough,55,3.5,0.7,10,magic bolt,12,magic bolt: up to 22.5 m; every 3 s; keeps 12-19.5 m away; heals allies within 7 m for 12 every 4 s,35,15%
 Orc Shield Guard,Throne Room,melee,elite,170,3.1,0.9,14,melee hit,22,melee hit: within 2.4 m after a 0.6 s wind-up; every 2 s; shield: takes 15% damage from the front,70,25%
 The Orc Chieftain,Throne Room,melee,mini-boss,745,3.3,1.5,18,area blast around itself / leap / charge / melee hit,30 / 30 / 28,"area blast around itself: 1.1 s warning ring, r 4.8 m; every 7 s; leap / charge: from 6-16 m at 14 m/s after a 0.8 s wind-up; every 8 s; melee hit: within 3.2 m after a 0.7 s wind-up; every 1.8 s; calls 3 Orc Warriors at 50% HP",500,0%
-Cave Spider,Flooded Hall,melee,normal,45,6,0.9,12,leap / charge,18,leap / charge: from 1.5-5 m at 18 m/s after a 0.4 s wind-up; every 2 s,25,8%
-Cave Slime,Flooded Hall,ranged,normal,55,3.1,0.8,12,acid bolt,12,acid bolt: up to 19.5 m; every 2.8 s; slows the hero to 60% for 1.5 s; keeps 9-16.5 m away,25,8%
-Spore Crawler,Flooded Hall,ranged,normal,50,4,0.8,10,blast at the hero's spot,10,"blast at the hero's spot: 1 s warning ring, r 2 m; every 4 s; leaves poison ground (8 HP/s, 4 s); keeps 12-19.5 m away",25,8%
-Mushroom Monster,Flooded Hall,melee,tough,125,2.9,1,15,area blast around itself,18,"area blast around itself: 0.8 s warning ring, r 3 m; every 3.5 s; leaves poison ground (8 HP/s, 4 s)",45,15%
-Living Mold,Flooded Hall,melee,elite,185,2.4,1,15,melee hit,28,melee hit: within 2.4 m after a 0.65 s wind-up; every 2.2 s; regrows 6 HP/s after 2 s unhurt,70,25%
-The Giant Cave Worm,Flooded Hall,melee,mini-boss,920,1.8,1.6,18,burrow + erupt / 3-bolt acid fan / melee hit,30 / 12 / 25,"burrow + erupt: sinks out of reach, bursts up under the hero after a 1.3 s warning ring (r 3.2 m); every 7 s; 3-bolt acid fan: up to 27 m; every 3 s; slows the hero to 60% for 1.5 s; melee hit: within 3 m after a 0.6 s wind-up; every 2 s; calls 3 Cave Spiders at 50% HP",600,0%
+Scrap Brawler,Flooded Hall,melee,normal,45,5.8,0.5,14,melee hit,18,melee hit: within 1.6 m after a 0.32 s wind-up; every 1.3 s,25,6%
+Rotor Scout,Flooded Hall,melee,normal,40,7.5,0.5,12,leap / charge,20,leap / charge: from 2.5-8 m at 18 m/s after a 0.45 s wind-up; every 2.6 s,25,7%
+Rivet Shooter,Flooded Hall,ranged,normal,50,4,0.5,10,rivet bolt,14,rivet bolt: up to 21 m; every 2 s; keeps 10.5-18 m away,30,10%
+Bomb Lobber,Flooded Hall,ranged,tough,55,3.7,0.5,10,blast at the hero's spot,26,"blast at the hero's spot: 0.9 s warning ring, r 2.6 m; every 3.2 s; keeps 12-19.5 m away",35,12%
+Boiler Tinkerer,Flooded Hall,melee,elite,130,3.3,0.6,15,area blast around itself,24,"area blast around itself: 0.65 s warning ring, r 3 m; every 2.8 s",60,25%
+The Scrap Boss,Flooded Hall,melee,mini-boss,950,2.9,1.5,20,area blast around itself / melee hit,32 / 32,"area blast around itself: 1 s warning ring, r 5 m; every 5.5 s; melee hit: within 3 m after a 0.55 s wind-up; every 1.8 s; calls 4 Scrap Brawlers at 66% and 33% HP",700,0%
 The Inferno,Lava Chamber,ranged,boss,1380,2.6,2,20,area blast around itself / 5-bolt fire fan / blast at the hero's spot,30 / 15 / 22,"area blast around itself: 1.1 s warning ring, r 5.5 m; every 7 s; leaves fire ground (10 HP/s); 5-bolt fire fan: up to 30 m; every 3 s; blast at the hero's spot: 1 s warning ring, r 2.5 m; every 4.5 s; leaves fire ground (10 HP/s); keeps 9-18 m away; calls 2 Fire Elementals at 67% and 33% HP",1000,0%
 
 HERO (elf),,,,100,7.5,0.5,,arrow,10,"invulnerable 1.1 s after a hit; heals +20 per wave, full per room, +25 heart pickup, +25 spring",,

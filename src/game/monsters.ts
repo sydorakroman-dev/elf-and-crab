@@ -73,34 +73,35 @@ export interface MonsterDef {
 
 const LONG = 99;
 export const MONSTERS: Record<MonsterKind, MonsterDef> = {
-  // ── Goblins (Crystal Cave): small, quick, fragile, full of gadgets ──
-  brawler: {
-    name: 'Scrap Brawler', tier: 'weak', style: 'melee', hp: 15, speed: 5.8, radius: 0.5, touch: 8, push: 9, score: 10, drop: 0.04,
-    attacks: [{ type: 'melee', range: 1.6, windup: 0.35, reach: 0.9, radius: 1.1, damage: 10, knock: 10, cooldown: 1.4 }],
+  // ── Underworld dwellers (Crystal Cave): critters of the deep, poison and acid ──
+  spider: {
+    name: 'Cave Spider', tier: 'normal', style: 'melee', hp: 22, speed: 6, radius: 0.9, touch: 9, push: 7, score: 15, drop: 0.05,
+    attacks: [{ type: 'lunge', range: 5, minRange: 1.5, windup: 0.45, speed: 17, time: 0.25, damage: 12, knock: 10, cooldown: 2.2 }],
   },
-  rotor: {
-    name: 'Rotor Scout', tier: 'weak', style: 'melee', hp: 15, speed: 7.5, radius: 0.5, touch: 6, push: 9, score: 12, drop: 0.05,
-    attacks: [{ type: 'lunge', range: 7, minRange: 2.5, windup: 0.5, speed: 16, time: 0.4, damage: 12, knock: 12, cooldown: 3 }],
+  ooze: {
+    name: 'Cave Slime', tier: 'normal', style: 'ranged', hp: 28, speed: 3.1, radius: 0.8, touch: 8, push: 7, score: 15, drop: 0.06, keepAway: [9, 16.5],
+    attacks: [{ type: 'shoot', range: 19.5, windup: 0.6, cooldown: 3, shot: 'acid' }],
   },
-  riveter: {
-    name: 'Rivet Shooter', tier: 'normal', style: 'ranged', hp: 20, speed: 4, radius: 0.5, touch: 6, push: 9, score: 15, drop: 0.06, keepAway: [10.5, 18],
-    attacks: [{ type: 'shoot', range: 21, windup: 0.45, cooldown: 2.2, shot: 'rivet' }],
+  sporecrawler: {
+    name: 'Spore Crawler', tier: 'normal', style: 'ranged', hp: 25, speed: 4, radius: 0.8, touch: 8, push: 7, score: 18, drop: 0.07, keepAway: [12, 19.5],
+    attacks: [{ type: 'area', at: 'target', range: 22.5, windup: 1.1, radius: 2.0, damage: 8, knock: 4, cooldown: 4.5, zone: 'poison' }],
   },
-  lobber: {
-    name: 'Bomb Lobber', tier: 'normal', style: 'ranged', hp: 25, speed: 3.7, radius: 0.5, touch: 6, push: 9, score: 18, drop: 0.08, keepAway: [12, 19.5],
-    attacks: [{ type: 'area', at: 'target', range: 22.5, windup: 1.0, radius: 2.2, damage: 18, knock: 14, cooldown: 3.5 }],
+  mushroom: {
+    name: 'Mushroom Monster', tier: 'tough', style: 'melee', hp: 55, speed: 2.9, radius: 1.0, touch: 10, push: 4, score: 30, drop: 0.15,
+    attacks: [{ type: 'area', at: 'self', range: 3, windup: 0.85, radius: 3, damage: 14, knock: 12, cooldown: 3.8, zone: 'poison' }],
   },
-  tinkerer: {
-    name: 'Boiler Tinkerer', tier: 'tough', style: 'melee', hp: 50, speed: 3.3, radius: 0.6, touch: 10, push: 6, score: 30, drop: 0.15,
-    attacks: [{ type: 'area', at: 'self', range: 2.8, windup: 0.7, radius: 2.6, damage: 14, knock: 16, cooldown: 3 }],
+  mold: {
+    name: 'Living Mold', tier: 'elite', style: 'melee', hp: 80, speed: 2.4, radius: 1.0, touch: 12, push: 3, score: 45, drop: 0.25, regen: { delay: 2, rate: 3 },
+    attacks: [{ type: 'melee', range: 2.4, windup: 0.7, reach: 1.2, radius: 1.8, damage: 18, knock: 18, cooldown: 2.4 }],
   },
-  scrapboss: {
-    name: 'The Scrap Boss', tier: 'mini-boss', style: 'melee', hp: 460, speed: 2.9, radius: 1.5, touch: 15, push: 1, score: 300, drop: 0, bossName: 'The Scrap Boss',
+  caveworm: {
+    name: 'The Giant Cave Worm', tier: 'mini-boss', style: 'melee', hp: 420, speed: 1.8, radius: 1.6, touch: 12, push: 0.8, score: 300, drop: 0, bossName: 'The Giant Cave Worm',
     attacks: [
-      { type: 'area', at: 'self', range: 6, windup: 1.0, radius: 4.5, damage: 25, knock: 18, cooldown: 6 },
-      { type: 'melee', range: 3, windup: 0.6, reach: 1.4, radius: 2.0, damage: 25, knock: 24, cooldown: 2 },
+      { type: 'burrow', range: LONG, cooldown: 9, windup: 1.5, radius: 3, damage: 18, knock: 16 },
+      { type: 'shoot', range: 27, windup: 0.8, cooldown: 4.5, shot: 'acid', count: 3, spread: 0.25 },
+      { type: 'melee', range: 3, windup: 0.65, reach: 1.4, radius: 2.2, damage: 18, knock: 18, cooldown: 2.2 },
     ],
-    summonAt: { at: [0.5], kind: 'brawler', count: 4 },
+    summonAt: { at: [0.5], kind: 'spider', count: 3 },
   },
 
   // ── Undead (Crypt) ──
@@ -166,35 +167,34 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
     summonAt: { at: [0.5], kind: 'orcwarrior', count: 3 },
   },
 
-  // ── Underworld dwellers (Flooded Hall) ──
-  spider: {
-    name: 'Cave Spider', tier: 'normal', style: 'melee', hp: 45, speed: 6, radius: 0.9, touch: 12, push: 6, score: 25, drop: 0.08,
-    attacks: [{ type: 'lunge', range: 5, minRange: 1.5, windup: 0.4, speed: 18, time: 0.25, damage: 18, knock: 12, cooldown: 2 }],
+  // ── Goblins (Flooded Hall): quick, well-armed tinkerers with nasty gadgets ──
+  brawler: {
+    name: 'Scrap Brawler', tier: 'normal', style: 'melee', hp: 45, speed: 5.8, radius: 0.5, touch: 14, push: 6, score: 25, drop: 0.06,
+    attacks: [{ type: 'melee', range: 1.6, windup: 0.32, reach: 0.9, radius: 1.2, damage: 18, knock: 14, cooldown: 1.3 }],
   },
-  ooze: {
-    name: 'Cave Slime', tier: 'normal', style: 'ranged', hp: 55, speed: 3.1, radius: 0.8, touch: 12, push: 5, score: 25, drop: 0.08, keepAway: [9, 16.5],
-    attacks: [{ type: 'shoot', range: 19.5, windup: 0.6, cooldown: 2.8, shot: 'acid' }],
+  rotor: {
+    name: 'Rotor Scout', tier: 'normal', style: 'melee', hp: 40, speed: 7.5, radius: 0.5, touch: 12, push: 6, score: 25, drop: 0.07,
+    attacks: [{ type: 'lunge', range: 8, minRange: 2.5, windup: 0.45, speed: 18, time: 0.4, damage: 20, knock: 14, cooldown: 2.6 }],
   },
-  sporecrawler: {
-    name: 'Spore Crawler', tier: 'normal', style: 'ranged', hp: 50, speed: 4, radius: 0.8, touch: 10, push: 6, score: 25, drop: 0.08, keepAway: [12, 19.5],
-    attacks: [{ type: 'area', at: 'target', range: 22.5, windup: 1.0, radius: 2.0, damage: 10, knock: 4, cooldown: 4, zone: 'poison' }],
+  riveter: {
+    name: 'Rivet Shooter', tier: 'normal', style: 'ranged', hp: 50, speed: 4, radius: 0.5, touch: 10, push: 6, score: 30, drop: 0.1, keepAway: [10.5, 18],
+    attacks: [{ type: 'shoot', range: 21, windup: 0.4, cooldown: 2, shot: 'rivet' }],
   },
-  mushroom: {
-    name: 'Mushroom Monster', tier: 'tough', style: 'melee', hp: 125, speed: 2.9, radius: 1.0, touch: 15, push: 3, score: 45, drop: 0.15,
-    attacks: [{ type: 'area', at: 'self', range: 3, windup: 0.8, radius: 3, damage: 18, knock: 14, cooldown: 3.5, zone: 'poison' }],
+  lobber: {
+    name: 'Bomb Lobber', tier: 'tough', style: 'ranged', hp: 55, speed: 3.7, radius: 0.5, touch: 10, push: 6, score: 35, drop: 0.12, keepAway: [12, 19.5],
+    attacks: [{ type: 'area', at: 'target', range: 22.5, windup: 0.9, radius: 2.6, damage: 26, knock: 18, cooldown: 3.2 }],
   },
-  mold: {
-    name: 'Living Mold', tier: 'elite', style: 'melee', hp: 185, speed: 2.4, radius: 1.0, touch: 15, push: 2, score: 70, drop: 0.25, regen: { delay: 2, rate: 6 },
-    attacks: [{ type: 'melee', range: 2.4, windup: 0.65, reach: 1.2, radius: 1.8, damage: 28, knock: 22, cooldown: 2.2 }],
+  tinkerer: {
+    name: 'Boiler Tinkerer', tier: 'elite', style: 'melee', hp: 130, speed: 3.3, radius: 0.6, touch: 15, push: 3, score: 60, drop: 0.25,
+    attacks: [{ type: 'area', at: 'self', range: 3, windup: 0.65, radius: 3, damage: 24, knock: 20, cooldown: 2.8 }],
   },
-  caveworm: {
-    name: 'The Giant Cave Worm', tier: 'mini-boss', style: 'melee', hp: 920, speed: 1.8, radius: 1.6, touch: 18, push: 0.5, score: 600, drop: 0, bossName: 'The Giant Cave Worm',
+  scrapboss: {
+    name: 'The Scrap Boss', tier: 'mini-boss', style: 'melee', hp: 950, speed: 2.9, radius: 1.5, touch: 20, push: 0.5, score: 700, drop: 0, bossName: 'The Scrap Boss',
     attacks: [
-      { type: 'burrow', range: LONG, cooldown: 7, windup: 1.3, radius: 3.2, damage: 30, knock: 22 },
-      { type: 'shoot', range: 27, windup: 0.7, cooldown: 3, shot: 'acid', count: 3, spread: 0.25 },
-      { type: 'melee', range: 3, windup: 0.6, reach: 1.4, radius: 2.2, damage: 25, knock: 20, cooldown: 2 },
+      { type: 'area', at: 'self', range: 6, windup: 1.0, radius: 5, damage: 32, knock: 22, cooldown: 5.5 },
+      { type: 'melee', range: 3, windup: 0.55, reach: 1.4, radius: 2.2, damage: 32, knock: 28, cooldown: 1.8 },
     ],
-    summonAt: { at: [0.5], kind: 'spider', count: 3 },
+    summonAt: { at: [0.66, 0.33], kind: 'brawler', count: 4 },
   },
 
   // ── The final boss (Lava Chamber) ──

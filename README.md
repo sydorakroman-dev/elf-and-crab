@@ -1,7 +1,7 @@
 # Elf & Crab
 
 A small third-person WebGL arena game built with [Three.js](https://threejs.org), Vite and TypeScript.
-An elf archer fights through a forest and five dungeon rooms of goblins, undead, orcs, cave dwellers and elementals — solo, or with a friend
+An elf archer fights through a forest and five dungeon rooms of cave dwellers, undead, orcs, goblins and elementals — solo, or with a friend
 playing her crab familiar on a tablet.
 
 **Play:** https://elf-and-crab.onrender.com (also mirrored at https://sydorakroman-dev.github.io/elf-and-crab/)
@@ -33,10 +33,10 @@ Inferno**; beat it to win.
 | Room | Who lives there | Boss |
 | --- | --- | --- |
 | 1 · The Woodland — a round, sunny clearing, trees, hedges | forest beasts | 🐻 The Crystal Bear |
-| 2 · The Crystal Cave — eight-sided, glowing crystal clusters | goblins | ⚙️ The Scrap Boss |
+| 2 · The Crystal Cave — eight-sided, glowing crystal clusters | underworld dwellers | 🪱 The Giant Cave Worm |
 | 3 · The Crypt — square, torches, a brazier, four pillars | the undead | 💀 The Necromancer |
 | 4 · The Throne Room — square, a colonnade and a throne | orcs | 🪓 The Orc Chieftain |
-| 5 · The Flooded Hall — eight-sided, pillars, cold light, puddles | underworld dwellers | 🪱 The Giant Cave Worm |
+| 5 · The Flooded Hall — eight-sided, pillars, cold light, puddles | goblins | ⚙️ The Scrap Boss |
 | 6 · The Lava Chamber — round, a lava pit (arrows fly over it) | nature elementals | 🔥 The Inferno (final boss) |
 
 ## Enemies
@@ -55,16 +55,16 @@ the last.
 | Thorn Boar | elite | 90 | 15 | paws the ground, then charges (30); dazed if it hits a tree or wall |
 | **Crystal Bear** | boss | 345 | 20 | swipe (25), ground pound with warning ring (25), roars in beetles at half health |
 
-**Crystal Cave — goblins** (small, quick, fragile, full of gadgets)
+**Crystal Cave — underworld dwellers** (critters of the deep: poison and acid)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| Scrap Brawler | weak | 15 | 10 | mechanical-fist punch |
-| Rotor Scout | weak | 15 | 12 | flies; dives at you |
-| Rivet Shooter | normal | 20 | 8 | keeps its distance, fires rivets |
-| Bomb Lobber | normal | 25 | 18 | bombs land where you stand, after a warning ring |
-| Boiler Tinkerer | tough | 50 | 14 | steam burst around itself |
-| **Scrap Boss** | boss | 460 | 25 | stomp shockwave, mech punches; drops 4 brawlers at half health |
+| Cave Spider | normal | 22 | 12 | leaps at you |
+| Cave Slime | normal | 28 | 9 | acid spit that slows you |
+| Spore Crawler | normal | 25 | 8 | spore bombs leave poison clouds (6 HP/s) |
+| Mushroom Monster | tough | 55 | 14 | poison spore burst around itself |
+| Living Mold | elite | 80 | 18 | slow, hard punch; regrows when you stop hitting it |
+| **Giant Cave Worm** | boss | 420 | 18 | burrows (can't be hit), bursts up under you after a warning ring; acid fans; calls spiders |
 
 **Crypt — the undead**
 
@@ -88,16 +88,16 @@ the last.
 | Orc Shield Guard | elite | 170 | 22 | its shield blocks almost every arrow to the front |
 | **Orc Chieftain** | boss | 745 | 28 / 30 | hammer swings, ground slam with warning ring, long charges; war-cry brings 3 warriors |
 
-**Flooded Hall — underworld dwellers**
+**Flooded Hall — goblins** (quick, well-armed tinkerers with nasty gadgets)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| Cave Spider | normal | 45 | 18 | leaps at you |
-| Cave Slime | normal | 55 | 12 | acid spit that slows you |
-| Spore Crawler | normal | 50 | 10 | spore bombs leave poison clouds (8 HP/s) |
-| Mushroom Monster | tough | 125 | 18 | poison spore burst around itself |
-| Living Mold | elite | 185 | 28 | slow, hard punch; regrows when you stop hitting it |
-| **Giant Cave Worm** | boss | 920 | 30 | burrows (can't be hit), bursts up under you after a warning ring; acid fans; calls spiders |
+| Scrap Brawler | normal | 45 | 18 | mechanical-fist punch |
+| Rotor Scout | normal | 40 | 20 | flies; dives at you |
+| Rivet Shooter | normal | 50 | 14 | keeps its distance, fires rivets |
+| Bomb Lobber | tough | 55 | 26 | bombs land where you stand, after a warning ring |
+| Boiler Tinkerer | elite | 130 | 24 | steam burst around itself |
+| **Scrap Boss** | boss | 950 | 32 | stomp shockwave, mech punches; drops 4 brawlers at 2/3 and 1/3 health |
 
 **Lava Chamber — nature elementals**
 

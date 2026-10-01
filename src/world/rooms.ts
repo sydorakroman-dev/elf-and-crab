@@ -78,12 +78,12 @@ export const ROOMS: RoomDef[] = [
   {
     name: 'The Crystal Cave',
     shape: 'octagon',
-    group: 'Goblins',
-    art: 'goblins',
+    group: 'Underworld dwellers',
+    art: 'underworld',
     waves: [
-      { mix: { brawler: 8, riveter: 3, rotor: 2 } },
-      { mix: { brawler: 10, rotor: 3, riveter: 3, lobber: 2, tinkerer: 2 } },
-      { mix: { brawler: 6, riveter: 2, lobber: 2 }, boss: 'scrapboss' },
+      { mix: { spider: 6, ooze: 2, sporecrawler: 2 } },
+      { mix: { spider: 6, ooze: 3, sporecrawler: 2, mushroom: 2, mold: 1 } },
+      { mix: { spider: 4, ooze: 2, mushroom: 1 }, boss: 'caveworm' },
     ],
     half: 30,
     pillars: [[-7, -14], [7, 14]], // off the centre line so the entry view is clear
@@ -156,12 +156,12 @@ export const ROOMS: RoomDef[] = [
   {
     name: 'The Flooded Hall',
     shape: 'octagon',
-    group: 'Underworld dwellers',
-    art: 'underworld',
+    group: 'Goblins',
+    art: 'goblins',
     waves: [
-      { mix: { spider: 7, ooze: 3, sporecrawler: 2 } },
-      { mix: { spider: 6, ooze: 3, sporecrawler: 2, mushroom: 2, mold: 1 } },
-      { mix: { spider: 4, ooze: 2, mushroom: 1 }, boss: 'caveworm' },
+      { mix: { brawler: 8, riveter: 3, rotor: 2 } },
+      { mix: { brawler: 8, rotor: 3, riveter: 3, lobber: 2, tinkerer: 2 } },
+      { mix: { brawler: 6, riveter: 2, lobber: 2 }, boss: 'scrapboss' },
     ],
     half: 28,
     pillars: [[-9, -15], [9, -15], [-9, -5], [9, -5], [-9, 5], [9, 5], [-9, 15], [9, 15]],

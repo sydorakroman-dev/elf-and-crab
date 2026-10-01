@@ -20,8 +20,8 @@ export const HEALING = {
 
 /** What the monsters' bolts do to the hero. */
 export const MONSTER_SHOTS = {
-  /** Goblin rivets: quick and light. */
-  rivet: 8,
+  /** Goblin rivets: quick and stinging. */
+  rivet: 14,
   /** Skeleton and orc archers. */
   arrow: 13,
   /** The Necromancer's soul bolts. */
@@ -29,11 +29,11 @@ export const MONSTER_SHOTS = {
   /** Orc shaman magic. */
   magic: 12,
   /** Cave slime (and worm) acid: slows the hero. */
-  acid: { damage: 12, slowSeconds: 1.5, slowFactor: 0.6 },
+  acid: { damage: 9, slowSeconds: 1.5, slowFactor: 0.6 },
 };
 
 /** Poisonous spore clouds (spore crawlers, mushroom monsters): hurt while you stand in them. */
-export const POISON = { seconds: 4, dps: 8 };
+export const POISON = { seconds: 4, dps: 6 };
 
 /** What the elementals' bolts do to the hero. */
 export const ELEMENTAL_ATTACKS = {
