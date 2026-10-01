@@ -88,7 +88,8 @@ export class Hud {
     this.hud = root.querySelector('.hud')!;
     this.overlay = root.querySelector('.overlay')!;
     // Painted title art, once (and only if) it loads; until then the title keeps the plain dim.
-    const landingUrl = `${import.meta.env.BASE_URL}art/landing.jpg`;
+    // Absolute: a relative url() in a CSS variable resolves against the stylesheet (assets/) in the build.
+    const landingUrl = new URL(`${import.meta.env.BASE_URL}art/landing.jpg`, location.href).href;
     const landing = new Image();
     landing.onload = () => {
       if (this.overlay.dataset.started) return;
