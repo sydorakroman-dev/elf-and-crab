@@ -111,6 +111,13 @@ export class Sfx {
     });
   }
 
+  /** The crab's Magic Burst: a shimmering whoosh down into a soft boom. */
+  burst(): void {
+    this.hiss(0.35, 0.16, 2500, 'bandpass');
+    this.tone('sine', 880, 110, 0.45, 0.14);
+    [0, 5, 9].forEach((semi, i) => this.tone('triangle', 1320 * Math.pow(2, semi / 12), 1320, 0.25, 0.04, i * 0.04));
+  }
+
   /** Glassy crack when the shield absorbs a hit. */
   shieldBreak(): void {
     this.hiss(0.25, 0.18, 4000, 'highpass');

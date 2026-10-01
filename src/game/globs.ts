@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { segmentCircleHit, type Circle, type Point } from './combat';
 import type { Spit } from './enemies';
 import { glowTexture } from '../util/glow';
+import { q, type GlobTuple } from '../net/snapshot';
 
 const SPEED = 11;
 const RADIUS = 0.3;
@@ -60,6 +61,30 @@ export class Globs {
     g.dirZ = spit.dirZ;
     g.mesh.position.set(spit.x, HEIGHT, spit.z);
     g.mesh.visible = true;
+  }
+
+  snapshot(): GlobTuple[] {
+    const out: GlobTuple[] = [];
+    this.globs.forEach((g, i) => {
+      if (g.active) out.push([i, q(g.mesh.position.x), q(g.mesh.position.z)]);
+    });
+    return out;
+  }
+
+  /** Shows exactly these globs (familiar's view; no simulation). */
+  sync(list: readonly GlobTuple[], time: number): void {
+    const seen = new Set<number>();
+    for (const [i, x, z] of list) {
+      const g = this.globs[i];
+      if (!g) continue;
+      seen.add(i);
+      g.mesh.visible = true;
+      g.mesh.position.set(x, HEIGHT + Math.sin(time * 18 + i) * 0.06, z);
+      g.mesh.rotation.y = time * 6;
+    }
+    this.globs.forEach((g, i) => {
+      if (!seen.has(i)) g.mesh.visible = false;
+    });
   }
 
   clear(): void {

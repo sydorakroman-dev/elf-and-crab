@@ -1,6 +1,10 @@
 import type { Best } from '../game/highscore';
 import type { InputMode } from '../player/controls';
-import { POWER_UPS, type PowerUpType } from '../game/powerups';
+import type { PowerUpType } from '../game/powerups';
+import { Popups, heartsHtml, powerChipsHtml, powerChipsKey, waveText } from './shared';
+import { normalizeCode } from '../net/protocol';
+import type { ConnStatus } from '../net/client';
+import QRCode from 'qrcode';
 
 const KEYS_MOUSE =
   '<kbd>W A S D</kbd> move · <kbd>Mouse</kbd> aim · <kbd>Click</kbd> shoot (hold) · <kbd>Space</kbd> dash · <kbd>Scroll</kbd> zoom · <kbd>M</kbd> mute · <kbd>Esc</kbd> pause';
@@ -13,45 +17,59 @@ export class Hud {
   private readonly score: HTMLElement;
   private readonly muted: HTMLElement;
   private readonly powers: HTMLElement;
-  private readonly toastEl: HTMLElement;
   private powersKey = '';
-  private toastTimer = 0;
-  private readonly bannerEl: HTMLElement;
-  private readonly hurt: HTMLElement;
+  private readonly popups: Popups;
   private readonly hud: HTMLElement;
   private readonly overlay: HTMLElement;
   private readonly title: HTMLElement;
   private readonly message: HTMLElement;
   private readonly button: HTMLButtonElement;
   private readonly best: HTMLElement;
+  private readonly familiarBadge: HTMLElement;
+  private readonly qr: HTMLCanvasElement;
+  private readonly codeEl: HTMLElement;
+  private readonly linkEl: HTMLElement;
+  private readonly inviteStatus: HTMLElement;
   private readonly maxHealth: number;
-  private bannerTimer = 0;
 
   constructor(root: HTMLElement, maxHealth: number, mode: InputMode, onPlay: () => void) {
     this.maxHealth = maxHealth;
     root.insertAdjacentHTML(
       'beforeend',
-      `<div class="hurt"></div>
-       <div class="hud" hidden>
+      `<div class="hud" hidden>
          <div class="left">
            <div class="hearts" data-hearts></div>
            <div class="powers" data-powers></div>
          </div>
          <div class="wave" data-wave></div>
          <div class="right">
+           <span class="familiar-badge" data-familiar hidden title="Familiar connected">🦀</span>
            <span class="muted" data-muted hidden>🔇</span>
            <div class="score" data-score>0</div>
          </div>
        </div>
-       <div class="banner" data-banner></div>
-       <div class="toast" data-toast></div>
        <div class="overlay">
          <div class="card">
            <h1 data-title>Elf &amp; Crab</h1>
-           <p data-message>Slimes are pouring out of the dungeon gates.<br/>Hold them off with your bow — your crab has your back.</p>
+           <p data-message>Slimes are pouring out of the dungeon gates.<br/>Hold them off with your bow — alone, or with a friend as your crab familiar.</p>
            <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
-           <button type="button">Enter the dungeon</button>
+           <button type="button" data-play>Enter the dungeon</button>
            <p class="best" data-best hidden></p>
+           <div class="invite" data-invite>
+             <canvas class="qr" data-qr width="112" height="112" hidden></canvas>
+             <div class="invite-text">
+               <div class="invite-title">🦀 Play together</div>
+               <div class="invite-sub">A friend joins as your crab familiar on a tablet or phone:</div>
+               <div class="code" data-code>····</div>
+               <div class="invite-link" data-link></div>
+               <div class="invite-status" data-istatus>Connecting to the server…</div>
+             </div>
+           </div>
+           <form class="join" data-join>
+             <span>Got a code?</span>
+             <input data-join-code maxlength="5" placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" />
+             <button type="submit" class="join-btn">Join as familiar</button>
+           </form>
          </div>
        </div>`,
     );
@@ -60,16 +78,36 @@ export class Hud {
     this.score = root.querySelector('[data-score]')!;
     this.muted = root.querySelector('[data-muted]')!;
     this.powers = root.querySelector('[data-powers]')!;
-    this.toastEl = root.querySelector('[data-toast]')!;
-    this.bannerEl = root.querySelector('[data-banner]')!;
-    this.hurt = root.querySelector('.hurt')!;
+    this.popups = new Popups(root);
     this.hud = root.querySelector('.hud')!;
     this.overlay = root.querySelector('.overlay')!;
     this.title = root.querySelector('[data-title]')!;
     this.message = root.querySelector('[data-message]')!;
-    this.button = root.querySelector('.overlay button')!;
+    this.button = root.querySelector('[data-play]')!;
     this.best = root.querySelector('[data-best]')!;
-    this.overlay.addEventListener('click', onPlay);
+    this.familiarBadge = root.querySelector('[data-familiar]')!;
+    this.qr = root.querySelector('[data-qr]')!;
+    this.codeEl = root.querySelector('[data-code]')!;
+    this.linkEl = root.querySelector('[data-link]')!;
+    this.inviteStatus = root.querySelector('[data-istatus]')!;
+    // Clicking anywhere on the overlay plays — except inside the invite / join controls.
+    this.overlay.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('[data-invite], [data-join]')) return;
+      onPlay();
+    });
+    const joinForm = root.querySelector<HTMLFormElement>('[data-join]')!;
+    const joinInput = root.querySelector<HTMLInputElement>('[data-join-code]')!;
+    joinForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const code = normalizeCode(joinInput.value);
+      if (!code) {
+        joinInput.classList.add('bad');
+        joinInput.focus();
+        return;
+      }
+      location.search = `?join=${code}`;
+    });
+    joinInput.addEventListener('input', () => joinInput.classList.remove('bad'));
   }
 
   /** `inGame`: a run is in progress (so un-pausing resumes it). */
@@ -84,33 +122,42 @@ export class Hud {
   }
 
   setHealth(health: number): void {
-    this.hearts.innerHTML = Array.from({ length: this.maxHealth }, (_, i) => `<span class="${i < health ? 'full' : ''}">♥</span>`).join('');
+    this.hearts.innerHTML = heartsHtml(health, this.maxHealth);
   }
 
   /** Active power-up chips with a countdown bar; only touches the DOM when something visible changes. */
   setPowers(list: { type: PowerUpType; remaining: number }[]): void {
-    const key = list.map((p) => `${p.type}:${Math.ceil(p.remaining * 4)}`).join('|');
+    const key = powerChipsKey(list);
     if (key === this.powersKey) return;
     this.powersKey = key;
-    this.powers.innerHTML = list
-      .map(({ type, remaining }) => {
-        const def = POWER_UPS[type];
-        const color = `#${def.color.toString(16).padStart(6, '0')}`;
-        const pct = Math.min(100, (remaining / def.duration) * 100);
-        const low = remaining < 3 ? ' low' : '';
-        return `<div class="chip${low}" style="--c:${color}" title="${def.label}"><span>${def.icon}</span><b>${Math.ceil(remaining)}</b><i style="width:${pct}%"></i></div>`;
-      })
-      .join('');
+    this.powers.innerHTML = powerChipsHtml(list);
   }
 
   toast(text: string, color: number): void {
-    this.toastEl.textContent = text;
-    this.toastEl.style.color = `#${color.toString(16).padStart(6, '0')}`;
-    this.toastEl.classList.remove('show');
-    void this.toastEl.offsetWidth;
-    this.toastEl.classList.add('show');
-    clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('show'), 1400);
+    this.popups.toast(text, color);
+  }
+
+  /** Room code for inviting a familiar: shows the code, a join link and a QR code for the tablet. */
+  setInviteCode(code: string): void {
+    const link = `${location.origin}${location.pathname}?join=${code}`;
+    this.codeEl.textContent = code;
+    this.linkEl.textContent = link.replace(/^https?:\/\//, '');
+    this.qr.hidden = false;
+    void QRCode.toCanvas(this.qr, link, { width: 112, margin: 1, color: { dark: '#1a1005', light: '#ffd36e' } });
+  }
+
+  setInviteStatus(status: ConnStatus, familiarConnected: boolean): void {
+    this.familiarBadge.hidden = !familiarConnected;
+    this.inviteStatus.classList.toggle('ok', familiarConnected);
+    this.inviteStatus.textContent = familiarConnected
+      ? '🦀 Familiar connected!'
+      : status === 'open'
+        ? 'Waiting for a familiar to join…'
+        : status === 'unavailable'
+          ? 'Multiplayer unavailable right now — solo works fine.'
+          : status === 'reconnecting'
+            ? 'Reconnecting…'
+            : 'Connecting to the server… (can take a minute to wake up)';
   }
 
   setMuted(muted: boolean): void {
@@ -127,23 +174,16 @@ export class Hud {
   }
 
   setWave(wave: number, remaining: number): void {
-    const text = wave === 0 ? 'Get ready…' : `Wave ${wave} · ${remaining} slime${remaining === 1 ? '' : 's'} left`;
+    const text = waveText(wave, remaining);
     if (this.wave.textContent !== text) this.wave.textContent = text;
   }
 
   banner(text: string): void {
-    this.bannerEl.textContent = text;
-    this.bannerEl.classList.remove('show');
-    void this.bannerEl.offsetWidth; // restart the CSS animation
-    this.bannerEl.classList.add('show');
-    clearTimeout(this.bannerTimer);
-    this.bannerTimer = window.setTimeout(() => this.bannerEl.classList.remove('show'), 1800);
+    this.popups.banner(text);
   }
 
   flashHurt(): void {
-    this.hurt.classList.remove('flash');
-    void this.hurt.offsetWidth;
-    this.hurt.classList.add('flash');
+    this.popups.flashHurt();
   }
 
   showGameOver(wave: number, score: number, isBest: boolean): void {

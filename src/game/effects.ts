@@ -12,8 +12,14 @@ interface Particle {
 }
 
 /** Little cube particles for slime splats and hit sparks; one instanced mesh. */
+const RING_TIME = 0.55;
+
 export class Effects {
   readonly mesh: THREE.InstancedMesh;
+  /** Add this to the scene too (for ring effects). */
+  readonly rings = new THREE.Group();
+  private readonly ringGeo = new THREE.RingGeometry(0.85, 1, 48).rotateX(-Math.PI / 2);
+  private readonly activeRings: { mesh: THREE.Mesh; age: number; radius: number }[] = [];
   private readonly particles: Particle[] = [];
   private readonly m = new THREE.Matrix4();
   private readonly q = new THREE.Quaternion();
@@ -32,6 +38,17 @@ export class Effects {
       this.mesh.setMatrixAt(i, this.m.makeScale(0, 0, 0));
       this.mesh.setColorAt(i, new THREE.Color());
     }
+  }
+
+  /** An expanding glowing ring on the floor (e.g. the crab's Magic Burst). */
+  ring(x: number, z: number, color: THREE.Color | number, radius: number): void {
+    const mesh = new THREE.Mesh(
+      this.ringGeo,
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    mesh.position.set(x, 0.08, z);
+    this.rings.add(mesh);
+    this.activeRings.push({ mesh, age: 0, radius });
   }
 
   burst(x: number, y: number, z: number, color: THREE.Color, count: number, power = 6, size = 0.18): void {
@@ -53,9 +70,25 @@ export class Effects {
 
   clear(): void {
     for (const p of this.particles) p.life = 0;
+    for (const r of this.activeRings) this.rings.remove(r.mesh);
+    this.activeRings.length = 0;
   }
 
   update(dt: number): void {
+    for (let i = this.activeRings.length - 1; i >= 0; i--) {
+      const r = this.activeRings[i];
+      r.age += dt;
+      const k = r.age / RING_TIME;
+      if (k >= 1) {
+        this.rings.remove(r.mesh);
+        (r.mesh.material as THREE.Material).dispose();
+        this.activeRings.splice(i, 1);
+        continue;
+      }
+      const ease = 1 - (1 - k) ** 3;
+      r.mesh.scale.setScalar(0.3 + ease * r.radius);
+      (r.mesh.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - k);
+    }
     this.particles.forEach((p, i) => {
       if (p.life <= 0) {
         this.mesh.setMatrixAt(i, this.m.makeScale(0, 0, 0));

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { segmentCircleHit, type Circle } from './combat';
 import type { Slime } from './enemies';
 import { glowTexture } from '../util/glow';
+import { q, type ArrowTuple } from '../net/snapshot';
 
 const SPEED = 42;
 const LIFETIME = 1.4;
@@ -77,6 +78,32 @@ export class Arrows {
     a.mesh.position.set(x, HEIGHT, z);
     a.mesh.rotation.set(0, Math.atan2(a.dir.x, a.dir.z), 0);
     a.mesh.visible = true;
+  }
+
+  /** Visible arrows (flying or stuck) for a network snapshot. */
+  snapshot(): ArrowTuple[] {
+    const out: ArrowTuple[] = [];
+    this.arrows.forEach((a, i) => {
+      if (a.active) out.push([i, q(a.mesh.position.x), q(a.mesh.position.z), q(a.mesh.rotation.y), a.pierce ? 1 : 0]);
+    });
+    return out;
+  }
+
+  /** Shows exactly these arrows (familiar's view; no simulation). */
+  sync(list: readonly ArrowTuple[]): void {
+    const seen = new Set<number>();
+    for (const [i, x, z, yaw, pierce] of list) {
+      const a = this.arrows[i];
+      if (!a) continue;
+      seen.add(i);
+      a.mesh.visible = true;
+      a.mesh.position.set(x, HEIGHT, z);
+      a.mesh.rotation.set(0, yaw, 0);
+      a.mesh.userData.glow.visible = pierce === 1;
+    }
+    this.arrows.forEach((a, i) => {
+      if (!seen.has(i)) a.mesh.visible = false;
+    });
   }
 
   clear(): void {

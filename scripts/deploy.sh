@@ -3,6 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REMOTE=$(git remote get-url origin)
+# The Pages copy talks to the multiplayer server on Render (if configured).
+export VITE_SERVER_URL="${VITE_SERVER_URL:-$(cat .server-url 2>/dev/null || true)}"
 npm run build
 cd dist
 touch .nojekyll

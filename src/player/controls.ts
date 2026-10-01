@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clampToArena, pushOutOfCircles, type Circle } from '../game/combat';
-import type { Elf } from './elf';
+import type { Elf, ElfMotion } from './elf';
 import { angleDelta } from './crab';
 
 const WALK_SPEED = 7.5;
@@ -47,6 +47,8 @@ export class Player {
   /** Fires when play starts or stops (pointer lock gained/lost, or touch play toggled). */
   onActiveChange?: (active: boolean) => void;
   onDash?: () => void;
+  /** What the elf did on the last step (sent to the familiar's tablet). */
+  readonly motion: ElfMotion = { speed: 0, moveYaw: 0, facing: 0, aiming: false, dashing: false };
 
   private readonly camera: THREE.PerspectiveCamera;
   private readonly dom: HTMLElement;
@@ -262,13 +264,13 @@ export class Player {
     const g = this.elf.group;
     g.position.copy(pos);
     g.rotation.y = this.facing;
-    this.elf.update(dt, {
-      speed: Math.min(groundSpeed, WALK_SPEED),
-      moveYaw: groundSpeed > 0.3 ? Math.atan2(this.velocity.x, this.velocity.z) : this.facing,
-      facing: this.facing,
-      aiming,
-      dashing: this.dashTimer > 0,
-    });
+    const m = this.motion;
+    m.speed = Math.min(groundSpeed, WALK_SPEED);
+    m.moveYaw = groundSpeed > 0.3 ? Math.atan2(this.velocity.x, this.velocity.z) : this.facing;
+    m.facing = this.facing;
+    m.aiming = aiming;
+    m.dashing = this.dashTimer > 0;
+    this.elf.update(dt, m);
 
     this.updateCamera(dt);
   }

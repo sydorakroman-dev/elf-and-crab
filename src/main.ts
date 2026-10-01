@@ -4,6 +4,9 @@ import { Game } from './game/Game';
 import { Elf } from './player/elf';
 import { Crab } from './player/crab';
 import type { InputMode } from './player/controls';
+import { FamiliarGame } from './familiar/FamiliarGame';
+import { FamiliarSession, HeroSession } from './net/client';
+import { normalizeCode } from './net/protocol';
 
 const CRAB_SCALE = 0.32; // companion-sized: ~1.4 m across with claws
 
@@ -17,9 +20,11 @@ async function boot(): Promise<void> {
     root.innerHTML = '<p class="error">WebGL 2 isn’t available in this browser, so the game can’t run.</p>';
     return;
   }
+  // ?join=CODE → this device is the familiar (crab); otherwise it's the hero (elf).
+  const joinCode = normalizeCode(new URLSearchParams(location.search).get('join') ?? '');
   // Touch-first devices get the on-screen controls and a lighter render load.
   const mode: InputMode = matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse';
-  renderer.setPixelRatio(Math.min(devicePixelRatio, mode === 'touch' ? 1.5 : 2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, mode === 'touch' || joinCode ? 1.5 : 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -28,7 +33,9 @@ async function boot(): Promise<void> {
 
   const base = import.meta.env.BASE_URL;
   const [elf, crab] = await Promise.all([Elf.load(`${base}models/elf.glb`), Crab.load(`${base}models/crab.glb`, CRAB_SCALE)]);
-  const game = new Game(renderer, root, elf, crab, mode);
+  const game = joinCode
+    ? new FamiliarGame(renderer, root, elf, crab, new FamiliarSession(joinCode))
+    : new Game(renderer, root, elf, crab, mode, multiplayerAvailable() ? new HeroSession() : null);
   game.start();
 
   if (import.meta.env.DEV) {
@@ -37,9 +44,14 @@ async function boot(): Promise<void> {
       stats.dom.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:10;';
       root.appendChild(stats.dom);
       game.setFrameHook(() => stats.update());
-      (window as unknown as { __game: Game }).__game = game;
+      (window as unknown as { __game: Game | FamiliarGame }).__game = game;
     });
   }
+}
+
+/** A build served without a multiplayer server (e.g. GitHub Pages with no VITE_SERVER_URL) is solo-only. */
+function multiplayerAvailable(): boolean {
+  return Boolean(import.meta.env.VITE_SERVER_URL) || !location.hostname.endsWith('github.io');
 }
 
 boot().catch((err) => {

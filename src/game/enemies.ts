@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { clampToArena, pushOutOfCircles, rangeIntent, waveSpec, type Circle, type WaveSpec } from './combat';
+import { glowTexture } from '../util/glow';
 
 export type SlimeKind = 'small' | 'big' | 'spitter';
 
-const KINDS: Record<SlimeKind, { radius: number; speed: number; color: number; score: number; hopRate: number; push: number }> = {
+export const SLIME_KINDS: Record<SlimeKind, { radius: number; speed: number; color: number; score: number; hopRate: number; push: number }> = {
   small: { radius: 0.7, speed: 3.6, color: 0x62d46a, score: 10, hopRate: 1.8, push: 9 },
   big: { radius: 1.25, speed: 2.6, color: 0xa35ee0, score: 40, hopRate: 1.3, push: 5 },
   spitter: { radius: 0.85, speed: 3.2, color: 0x4fb3ff, score: 25, hopRate: 1.6, push: 7 },
@@ -21,54 +22,43 @@ const pupilGeo = new THREE.SphereGeometry(0.11, 8, 6);
 const mouthGeo = new THREE.TorusGeometry(0.16, 0.05, 6, 10);
 const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
 const pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
+const STUN_TINT = new THREE.Color(0xd8ecff);
 
-export interface Spit {
+/**
+ * Everything needed to draw a slime at one moment. The simulation produces it every step; the
+ * familiar's tablet receives it over the network and draws the same thing.
+ */
+export interface SlimePose {
   x: number;
   z: number;
-  dirX: number;
-  dirZ: number;
+  yaw: number;
+  /** Body lift while hopping. */
+  y: number;
+  sx: number;
+  sy: number;
+  sz: number;
+  /** Hit flash 0..1. */
+  flash: number;
+  /** 1 while stunned. */
+  stun: number;
+  /** Death shrink 0 (alive) → 1 (gone). */
+  death: number;
 }
 
-export class Slime {
+/** A slime's meshes, driven entirely by a SlimePose. Shared by the game and the familiar view. */
+export class SlimeVisual {
   readonly group = new THREE.Group();
-  readonly kind: SlimeKind;
-  readonly radius: number;
-  readonly score: number;
-  readonly color: THREE.Color;
-  hp: number;
-  /** Set once hp hits 0; the slime shrinks away, then `removed` is set. */
-  dying = false;
-  removed = false;
-  private readonly speed: number;
-  private readonly hopRate: number;
-  private readonly push: number;
   private readonly body: THREE.Mesh;
   private readonly material: THREE.MeshStandardMaterial;
-  private readonly knock = new THREE.Vector2();
-  private hopPhase = Math.random();
-  private flash = 0;
-  private deathTimer = 0;
-  private spitTimer = SPIT_INTERVAL * (0.5 + Math.random() * 0.5);
-  private windup = 0; // > 0 while swelling up to spit
-  private strafeSign = Math.random() < 0.5 ? -1 : 1;
+  private readonly baseColor: THREE.Color;
+  private readonly stars: THREE.Group;
+  private readonly radius: number;
 
-  constructor(kind: SlimeKind, x: number, z: number, speedBonus: number, hp: number) {
-    const k = KINDS[kind];
-    this.kind = kind;
+  constructor(kind: SlimeKind) {
+    const k = SLIME_KINDS[kind];
     this.radius = k.radius;
-    this.hp = hp;
-    this.score = k.score;
-    this.speed = k.speed + speedBonus;
-    this.hopRate = k.hopRate;
-    this.push = k.push;
-    this.color = new THREE.Color(k.color);
-    this.material = new THREE.MeshStandardMaterial({
-      color: k.color,
-      roughness: 0.35,
-      flatShading: true,
-      emissive: 0xff2020,
-      emissiveIntensity: 0,
-    });
+    this.baseColor = new THREE.Color(k.color);
+    this.material = new THREE.MeshStandardMaterial({ color: k.color, roughness: 0.35, flatShading: true, emissive: 0xff2020, emissiveIntensity: 0 });
     this.body = new THREE.Mesh(bodyGeo, this.material);
     this.body.castShadow = true;
     for (const side of [-1, 1]) {
@@ -84,21 +74,113 @@ export class Slime {
       mouth.position.set(0, 0.85, 0.97);
       this.body.add(mouth);
     }
-    this.group.add(this.body);
+    // Dizzy stars circling the head while stunned.
+    this.stars = new THREE.Group();
+    const starMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xfff27a, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+    for (let i = 0; i < 3; i++) {
+      const s = new THREE.Sprite(starMat);
+      s.scale.setScalar(0.45);
+      const a = (i / 3) * Math.PI * 2;
+      s.position.set(Math.cos(a) * 0.75, 0, Math.sin(a) * 0.75);
+      this.stars.add(s);
+    }
+    this.stars.position.y = 2.3;
+    this.stars.visible = false;
+    this.group.add(this.body, this.stars);
     this.group.scale.setScalar(this.radius);
-    this.group.position.set(x, 0, z);
+  }
+
+  apply(p: SlimePose, time: number): void {
+    this.group.position.set(p.x, 0, p.z);
+    this.group.rotation.y = p.yaw;
+    this.body.position.y = p.y;
+    this.body.scale.set(p.sx, p.sy, p.sz);
+    const s = 1 - p.death;
+    this.group.scale.set(this.radius * (1 + p.death * 0.6), this.radius * s, this.radius * (1 + p.death * 0.6));
+    this.material.emissiveIntensity = p.flash * 1.5;
+    const stunned = p.stun > 0.5 && p.death === 0;
+    this.material.color.copy(this.baseColor);
+    if (stunned) this.material.color.lerp(STUN_TINT, 0.55);
+    this.stars.visible = stunned;
+    this.body.rotation.z = stunned ? Math.sin(time * 11) * 0.18 : 0;
+    if (stunned) this.stars.rotation.y = time * 4;
+  }
+}
+
+export interface Spit {
+  x: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+}
+
+let nextSlimeId = 1;
+
+export class Slime {
+  readonly id = nextSlimeId++;
+  readonly visual: SlimeVisual;
+  readonly kind: SlimeKind;
+  readonly radius: number;
+  readonly score: number;
+  readonly color: THREE.Color;
+  readonly pose: SlimePose;
+  hp: number;
+  /** Set once hp hits 0; the slime shrinks away, then `removed` is set. */
+  dying = false;
+  removed = false;
+  private readonly speed: number;
+  private readonly hopRate: number;
+  private readonly push: number;
+  private readonly knock = new THREE.Vector2();
+  private hopPhase = Math.random();
+  private flash = 0;
+  private deathTimer = 0;
+  private stunTimer = 0;
+  private time = 0;
+  private spitTimer = SPIT_INTERVAL * (0.5 + Math.random() * 0.5);
+  private windup = 0; // > 0 while swelling up to spit
+  private strafeSign = Math.random() < 0.5 ? -1 : 1;
+
+  constructor(kind: SlimeKind, x: number, z: number, speedBonus: number, hp: number) {
+    const k = SLIME_KINDS[kind];
+    this.kind = kind;
+    this.radius = k.radius;
+    this.hp = hp;
+    this.score = k.score;
+    this.speed = k.speed + speedBonus;
+    this.hopRate = k.hopRate;
+    this.push = k.push;
+    this.color = new THREE.Color(k.color);
+    this.visual = new SlimeVisual(kind);
+    this.pose = { x, z, yaw: 0, y: 0, sx: 1, sy: 1, sz: 1, flash: 0, stun: 0, death: 0 };
+    this.visual.apply(this.pose, 0);
+  }
+
+  get group(): THREE.Group {
+    return this.visual.group;
   }
 
   get x(): number {
-    return this.group.position.x;
+    return this.pose.x;
   }
 
   get z(): number {
-    return this.group.position.z;
+    return this.pose.z;
   }
 
   get alive(): boolean {
     return !this.dying;
+  }
+
+  get stunned(): boolean {
+    return this.stunTimer > 0;
+  }
+
+  /** Teleport (used by tests and spawning). */
+  setPosition(x: number, z: number): void {
+    this.pose.x = x;
+    this.pose.z = z;
+    this.visual.apply(this.pose, this.time);
   }
 
   /** Returns true if this hit killed it. */
@@ -111,20 +193,48 @@ export class Slime {
     return this.dying;
   }
 
+  /** Freezes the slime in place (no moving, spitting or contact damage) for `seconds`. */
+  stun(seconds: number): void {
+    if (this.dying) return;
+    this.stunTimer = Math.max(this.stunTimer, seconds);
+    this.windup = 0; // an interrupted spit is lost
+  }
+
   /** Moves the slime; returns a spit when a spitter lets one fly this step. */
   update(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit | null {
+    this.time += dt;
+    const spit = this.step(dt, target, others, obstacles, half);
+    this.pose.flash = this.flash;
+    this.pose.stun = this.stunTimer > 0 ? 1 : 0;
+    this.visual.apply(this.pose, this.time);
+    return spit;
+  }
+
+  private step(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit | null {
     this.flash = Math.max(0, this.flash - dt * 5);
-    this.material.emissiveIntensity = this.flash * 1.5;
+    const p = this.pose;
 
     if (this.dying) {
       this.deathTimer += dt;
-      const s = Math.max(0, 1 - this.deathTimer / 0.18);
-      this.group.scale.set(this.radius * (1 + (1 - s) * 0.6), this.radius * s, this.radius * (1 + (1 - s) * 0.6));
-      if (s === 0) this.removed = true;
+      p.death = Math.min(1, this.deathTimer / 0.18);
+      if (p.death === 1) this.removed = true;
       return null;
     }
 
-    const p = this.group.position;
+    if (this.stunTimer > 0) {
+      // Stunned: only knockback still slides it a little; squash settles to rest.
+      this.stunTimer = Math.max(0, this.stunTimer - dt);
+      p.x += this.knock.x * dt;
+      p.z += this.knock.y * dt;
+      this.knock.multiplyScalar(Math.exp(-8 * dt));
+      pushOutOfCircles(p, this.radius, obstacles);
+      clampToArena(p, half, this.radius);
+      p.y = 0;
+      p.sx = p.sz = 1.08;
+      p.sy = 0.88;
+      return null;
+    }
+
     let tx = target.x - p.x;
     let tz = target.z - p.z;
     const dist = Math.hypot(tx, tz) || 1;
@@ -132,19 +242,19 @@ export class Slime {
     tz /= dist;
 
     // Spitters freeze and swell up, then spit at where the target is now.
-    let spit: Spit | null = null;
     if (this.kind === 'spitter') {
       if (this.windup > 0) {
         this.windup -= dt;
         const swell = 1 - this.windup / SPIT_WINDUP;
-        this.body.position.y = 0;
-        this.body.scale.set(1 + swell * 0.25, 1 + swell * 0.35, 1 + swell * 0.25);
-        this.group.rotation.y = Math.atan2(tx, tz);
+        p.y = 0;
+        p.sx = p.sz = 1 + swell * 0.25;
+        p.sy = 1 + swell * 0.35;
+        p.yaw = Math.atan2(tx, tz);
         if (this.windup <= 0) {
-          spit = { x: p.x + tx * this.radius, z: p.z + tz * this.radius, dirX: tx, dirZ: tz };
           this.spitTimer = SPIT_INTERVAL * (0.8 + Math.random() * 0.4);
+          return { x: p.x + tx * this.radius, z: p.z + tz * this.radius, dirX: tx, dirZ: tz };
         }
-        return spit;
+        return null;
       }
       this.spitTimer -= dt;
       if (this.spitTimer <= 0 && dist < SPIT_RANGE_MAX + 4) {
@@ -194,9 +304,10 @@ export class Slime {
     pushOutOfCircles(p, this.radius, obstacles);
     clampToArena(p, half, this.radius);
 
-    this.group.rotation.y = Math.atan2(target.x - p.x, target.z - p.z);
-    this.body.position.y = air * 0.7;
-    this.body.scale.set(1 + squash * 0.25 - air * 0.08, 1 - squash * 0.3 + air * 0.12, 1 + squash * 0.25 - air * 0.08);
+    p.yaw = Math.atan2(target.x - p.x, target.z - p.z);
+    p.y = air * 0.7;
+    p.sx = p.sz = 1 + squash * 0.25 - air * 0.08;
+    p.sy = 1 - squash * 0.3 + air * 0.12;
     return null;
   }
 }
@@ -234,6 +345,13 @@ export class Enemies {
     for (const s of this.slimes) this.group.remove(s.group);
     this.slimes.length = 0;
     this.queue = [];
+  }
+
+  /** Stuns every living slime within `radius` of (x, z); returns the slimes hit. */
+  stunAround(x: number, z: number, radius: number, seconds: number): Slime[] {
+    const hit = this.slimes.filter((s) => s.alive && Math.hypot(s.x - x, s.z - z) <= radius + s.radius);
+    for (const s of hit) s.stun(seconds);
+    return hit;
   }
 
   /** Updates all slimes; returns the spits launched this step. */

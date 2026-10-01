@@ -1,0 +1,194 @@
+/**
+ * World snapshots streamed from the hero (who runs the game) to the familiar's tablet, plus the
+ * interpolation the tablet uses to render smoothly between them. Pure; unit tested.
+ * Arrays instead of objects for the many-entity lists keep each snapshot small.
+ */
+
+export type GameState = 'ready' | 'playing' | 'paused' | 'over';
+
+export const SLIME_KIND_CODES = ['small', 'big', 'spitter'] as const;
+export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart'] as const;
+
+/** [id, kind, x, z, yaw, y, sx, sy, sz, flash, stun, death] */
+export type SlimeTuple = [number, number, number, number, number, number, number, number, number, number, number, number];
+/** [poolIndex, x, z, yaw, pierce(0/1)] */
+export type ArrowTuple = [number, number, number, number, number];
+/** [poolIndex, x, z] */
+export type GlobTuple = [number, number, number];
+/** [id, power, x, z, visible(0/1)] */
+export type PickupTuple = [number, number, number, number, number];
+
+export interface HeroState {
+  x: number;
+  z: number;
+  /** Facing yaw. */
+  f: number;
+  /** Ground speed. */
+  s: number;
+  /** Direction of travel yaw. */
+  m: number;
+  /** Aiming (0/1). */
+  a: number;
+  /** Dashing (0/1). */
+  d: number;
+  /** Visible (0 while blinking after a hit). */
+  v: number;
+}
+
+export interface CrabState {
+  x: number;
+  z: number;
+  /** Heading yaw. */
+  h: number;
+  s: number;
+}
+
+/** One-off things that happened, so the tablet can play effects and sounds. */
+export type GameEvent =
+  | { e: 'splat'; x: number; z: number; c: number; big: boolean }
+  | { e: 'hit'; x: number; z: number; c: number }
+  | { e: 'spit' }
+  | { e: 'twang' }
+  | { e: 'glob'; x: number; z: number }
+  | { e: 'burst'; x: number; z: number }
+  | { e: 'pinch' }
+  | { e: 'pickup'; p: number; x: number; z: number }
+  | { e: 'hurt' }
+  | { e: 'shield'; x: number; z: number }
+  | { e: 'banner'; text: string };
+
+export interface Snapshot {
+  /** Hero simulation time, seconds. */
+  t: number;
+  state: GameState;
+  hero: HeroState;
+  crab: CrabState | null;
+  slimes: SlimeTuple[];
+  arrows: ArrowTuple[];
+  globs: GlobTuple[];
+  pickups: PickupTuple[];
+  wave: number;
+  remaining: number;
+  health: number;
+  maxHealth: number;
+  score: number;
+  /** [power, secondsLeft] */
+  powers: [number, number][];
+  /** Seconds until Magic Burst is ready. */
+  burstCd: number;
+  ev: GameEvent[];
+}
+
+/** Rounds to centimetres / centiradians to keep JSON short. */
+export function q(v: number): number {
+  return Math.round(v * 100) / 100;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function lerpAngle(a: number, b: number, t: number): number {
+  const d = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  return a + d * t;
+}
+
+/** Entities that jumped further than this between snapshots are snapped, not slid (pool reuse). */
+const TELEPORT = 6;
+
+/**
+ * State between snapshots `a` and `b` at fraction `t` (0..1). Positions and angles blend;
+ * entities are matched by id / pool index; ones present only in `b` appear as in `b`.
+ * Events are not interpolated (the caller plays each snapshot's events once).
+ */
+export function interpolate(a: Snapshot, b: Snapshot, t: number): Snapshot {
+  const k = Math.max(0, Math.min(1, t));
+  const byId = <T extends number[]>(list: T[]) => new Map(list.map((e) => [e[0], e]));
+
+  const prevSlimes = byId(a.slimes);
+  const slimes = b.slimes.map((s) => {
+    const p = prevSlimes.get(s[0]);
+    if (!p) return s;
+    return [s[0], s[1], lerp(p[2], s[2], k), lerp(p[3], s[3], k), lerpAngle(p[4], s[4], k), lerp(p[5], s[5], k), lerp(p[6], s[6], k), lerp(p[7], s[7], k), lerp(p[8], s[8], k), lerp(p[9], s[9], k), s[10], lerp(p[11], s[11], k)] as SlimeTuple;
+  });
+
+  const prevArrows = byId(a.arrows);
+  const arrows = b.arrows.map((r) => {
+    const p = prevArrows.get(r[0]);
+    if (!p || Math.hypot(p[1] - r[1], p[2] - r[2]) > TELEPORT * 2) return r;
+    return [r[0], lerp(p[1], r[1], k), lerp(p[2], r[2], k), r[3], r[4]] as ArrowTuple;
+  });
+
+  const prevGlobs = byId(a.globs);
+  const globs = b.globs.map((g) => {
+    const p = prevGlobs.get(g[0]);
+    if (!p || Math.hypot(p[1] - g[1], p[2] - g[2]) > TELEPORT) return g;
+    return [g[0], lerp(p[1], g[1], k), lerp(p[2], g[2], k)] as GlobTuple;
+  });
+
+  const hero: HeroState = {
+    ...b.hero,
+    x: lerp(a.hero.x, b.hero.x, k),
+    z: lerp(a.hero.z, b.hero.z, k),
+    f: lerpAngle(a.hero.f, b.hero.f, k),
+    m: lerpAngle(a.hero.m, b.hero.m, k),
+    s: lerp(a.hero.s, b.hero.s, k),
+  };
+  if (Math.hypot(a.hero.x - b.hero.x, a.hero.z - b.hero.z) > TELEPORT) {
+    hero.x = b.hero.x;
+    hero.z = b.hero.z;
+  }
+
+  let crab = b.crab;
+  if (a.crab && b.crab && Math.hypot(a.crab.x - b.crab.x, a.crab.z - b.crab.z) <= TELEPORT) {
+    crab = { x: lerp(a.crab.x, b.crab.x, k), z: lerp(a.crab.z, b.crab.z, k), h: lerpAngle(a.crab.h, b.crab.h, k), s: lerp(a.crab.s, b.crab.s, k) };
+  }
+
+  return { ...b, t: lerp(a.t, b.t, k), hero, crab, slimes, arrows, globs, ev: [] };
+}
+
+/**
+ * Buffers incoming snapshots and answers "what should be on screen now", rendering a little
+ * in the past (`delay`) so there's always a pair to blend between despite network jitter.
+ */
+export class SnapshotBuffer {
+  private readonly items: Snapshot[] = [];
+  /** Estimated (local clock − hero clock); the minimum seen, i.e. the least-delayed arrival. */
+  private offset: number | null = null;
+  private readonly delay: number;
+
+  constructor(delay = 0.1) {
+    this.delay = delay;
+  }
+
+  get latest(): Snapshot | null {
+    return this.items.at(-1) ?? null;
+  }
+
+  push(s: Snapshot, localTime: number): void {
+    // A restarted hero clock (new run / reconnect) resets the buffer.
+    const last = this.items.at(-1);
+    if (last && s.t < last.t - 1) {
+      this.items.length = 0;
+      this.offset = null;
+    }
+    const off = localTime - s.t;
+    this.offset = this.offset === null ? off : Math.min(this.offset, off);
+    this.items.push(s);
+    if (this.items.length > 40) this.items.shift();
+  }
+
+  /** The interpolated snapshot to show at local time `now`, or null before anything arrived. */
+  sample(now: number): Snapshot | null {
+    if (!this.items.length || this.offset === null) return null;
+    const target = now - this.offset - this.delay;
+    const items = this.items;
+    if (target <= items[0].t) return items[0];
+    for (let i = items.length - 1; i > 0; i--) {
+      const a = items[i - 1];
+      const b = items[i];
+      if (a.t <= target && target <= b.t) return interpolate(a, b, (target - a.t) / (b.t - a.t || 1));
+    }
+    return items[items.length - 1]; // ahead of the newest: hold the latest
+  }
+}

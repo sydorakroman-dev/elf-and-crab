@@ -149,6 +149,61 @@ kbd {
   box-shadow: 0 0 24px rgba(255, 150, 60, 0.5);
 }
 .best { margin-top: 18px; font-size: 14px; color: #ffd36e; opacity: 0.85; }
+.familiar-badge { font-size: 22px; filter: drop-shadow(0 0 6px rgba(111, 232, 214, 0.8)); }
+.invite {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin: 18px auto 0;
+  padding: 12px 14px;
+  max-width: 420px;
+  border: 1px solid rgba(111, 232, 214, 0.35);
+  border-radius: 14px;
+  background: rgba(10, 8, 16, 0.55);
+  text-align: left;
+  cursor: default;
+}
+.qr { width: 112px; height: 112px; border-radius: 8px; flex: none; }
+.invite-text { min-width: 0; }
+.invite-title { font-weight: 700; color: #6fe8d6; }
+.invite-sub { font-size: 12px; opacity: 0.8; margin: 2px 0 6px; }
+.code { font-size: 30px; font-weight: 800; letter-spacing: 0.18em; font-variant-numeric: tabular-nums; color: #ffd36e; }
+.invite-link { font-size: 11px; opacity: 0.6; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.invite-status { font-size: 12px; margin-top: 6px; opacity: 0.85; }
+.invite-status.ok { color: #6fe8d6; font-weight: 700; opacity: 1; }
+.join {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+  font-size: 13px;
+  cursor: default;
+}
+.join input {
+  width: 6.5em;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 8px;
+  background: rgba(10, 8, 16, 0.6);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-align: center;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.join input.bad { border-color: #ff4d5e; }
+.card .join-btn {
+  margin: 0;
+  padding: 7px 14px;
+  font-size: 13px;
+  background: #6fe8d6;
+  box-shadow: none;
+}
 .error { padding: 24px; text-align: center; }
 
 /* Touch controls */
@@ -211,3 +266,63 @@ kbd {
   width: 44px;
   height: 44px;
 }
+
+/* Familiar (tablet) */
+.fam-hud .role-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(111, 232, 214, 0.6);
+  color: #6fe8d6;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: rgba(10, 8, 16, 0.55);
+}
+.fam-status {
+  position: fixed;
+  left: 50%;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(10, 8, 16, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+.burst-btn {
+  --p: 1;
+  position: fixed;
+  right: calc(28px + env(safe-area-inset-right, 0px));
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  touch-action: none;
+  /* Cooldown ring: fills clockwise as the burst recharges. */
+  background:
+    radial-gradient(circle at center, rgba(10, 8, 16, 0.85) 0 58%, transparent 59%),
+    conic-gradient(#6fe8d6 calc(var(--p) * 360deg), rgba(255, 255, 255, 0.12) 0);
+  opacity: 0.85;
+}
+.burst-btn.ready {
+  opacity: 1;
+  box-shadow: 0 0 28px rgba(111, 232, 214, 0.8);
+  animation: burstready 1.2s ease-in-out infinite;
+}
+.burst-btn:active { transform: scale(0.94); }
+@keyframes burstready { 50% { box-shadow: 0 0 44px rgba(111, 232, 214, 1); } }
+.burst-icon { font-size: 40px; line-height: 1; }
+.burst-label { font-size: 15px; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+.fam-overlay { cursor: default; }
+.fam-solo { margin-top: 16px; font-size: 13px; }
+.fam-solo a { color: rgba(255, 255, 255, 0.7); }

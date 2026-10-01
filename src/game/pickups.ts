@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Point } from './combat';
 import { POWER_UPS, type PowerUpType } from './powerups';
+import { POWER_CODES, q, type PickupTuple } from '../net/snapshot';
 import { glowTexture } from '../util/glow';
 
 const LIFETIME = 14;
@@ -9,6 +10,7 @@ const PICKUP_RADIUS = 1.4;
 const FLOAT_HEIGHT = 1.1;
 
 interface Pickup {
+  id: number;
   type: PowerUpType;
   group: THREE.Group;
   icon: THREE.Object3D;
@@ -20,6 +22,7 @@ interface Pickup {
 export class Pickups {
   readonly group = new THREE.Group();
   private readonly items: Pickup[] = [];
+  private nextId = 1;
   private readonly icons: Record<PowerUpType, () => THREE.Object3D>;
   private readonly ringGeo = new THREE.RingGeometry(0.85, 1.2, 32).rotateX(-Math.PI / 2);
 
@@ -104,7 +107,7 @@ export class Pickups {
     return this.items.length;
   }
 
-  spawn(type: PowerUpType, x: number, z: number): void {
+  spawn(type: PowerUpType, x: number, z: number, id = this.nextId++): number {
     const color = POWER_UPS[type].color;
     const group = new THREE.Group();
     group.position.set(x, 0, z);
@@ -124,7 +127,31 @@ export class Pickups {
     group.add(icon, glow, ring);
     group.scale.setScalar(0.01);
     this.group.add(group);
-    this.items.push({ type, group, icon, life: LIFETIME, age: 0 });
+    this.items.push({ id, type, group, icon, life: LIFETIME, age: 0 });
+    return id;
+  }
+
+  snapshot(): PickupTuple[] {
+    return this.items.map((p) => [p.id, POWER_CODES.indexOf(p.type), q(p.group.position.x), q(p.group.position.z), p.group.visible ? 1 : 0]);
+  }
+
+  /** Shows exactly these pickups (familiar's view): creates new ones, removes gone ones, animates. */
+  sync(list: readonly PickupTuple[], dt: number, time: number): void {
+    const wanted = new Map(list.map((t) => [t[0], t]));
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      if (wanted.has(this.items[i].id)) continue;
+      this.group.remove(this.items[i].group);
+      this.items.splice(i, 1);
+    }
+    for (const [id, code, x, z, visible] of list) {
+      if (!this.items.some((p) => p.id === id)) this.spawn(POWER_CODES[code] ?? 'multishot', x, z, id);
+      const p = this.items.find((it) => it.id === id)!;
+      p.age += dt;
+      p.group.scale.setScalar(Math.min(1, p.age / 0.25));
+      p.icon.position.y = FLOAT_HEIGHT + Math.sin(time * 2.4 + x) * 0.15;
+      p.icon.rotation.y = time * 2;
+      p.group.visible = visible === 1;
+    }
   }
 
   clear(): void {
