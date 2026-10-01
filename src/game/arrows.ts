@@ -135,7 +135,7 @@ export class Arrows {
       let bestT = Infinity;
       let hitSlime: Enemy | null = null;
       for (const s of slimes) {
-        if (!s.alive || a.hitSlimes.has(s)) continue;
+        if (!s.alive || s.hidden || a.hitSlimes.has(s)) continue;
         const t = segmentCircleHit(p.x, p.z, bx, bz, { x: s.x, z: s.z, radius: s.radius + 0.15 });
         if (t !== null && t < bestT) {
           bestT = t;

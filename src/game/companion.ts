@@ -147,7 +147,7 @@ export class Companion {
     if (!this.leap) {
       let best = BITE_REACH;
       for (const s of slimes) {
-        if (!s.alive) continue;
+        if (!s.alive || s.hidden) continue;
         const gap = Math.hypot(s.x - this.position.x, s.z - this.position.z) - s.radius - def.radius;
         if (gap < best) {
           best = gap;
@@ -219,7 +219,7 @@ export class Companion {
     this._height = Math.sin(leap.t * Math.PI) * LEAP_HEIGHT;
     // Everything along this step's stretch of the path gets hit once.
     for (const s of slimes) {
-      if (!s.alive || leap.hit.has(s)) continue;
+      if (!s.alive || s.hidden || leap.hit.has(s)) continue;
       if (distanceToSegment(s, prev, this.position) <= s.radius + radius + POUNCE_WIDTH) {
         leap.hit.add(s);
         result.pounceHits.push(s);

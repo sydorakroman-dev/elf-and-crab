@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampToArena, pickAimTarget, pushOutOfCircles, rangeIntent, segmentCircleHit, waveSpec } from './combat';
+import { clampToArena, pickAimTarget, pushOutOfCircles, rangeIntent, segmentCircleHit } from './combat';
 
 describe('pushOutOfCircles', () => {
   it('moves a point out to the touching distance', () => {
@@ -66,35 +66,6 @@ describe('pickAimTarget', () => {
 
   it('returns -1 when nothing is inside the cone', () => {
     expect(pickAimTarget(origin, 0, 1, targets, 0.35, 30)).toBe(-1);
-  });
-});
-
-describe('waveSpec', () => {
-  it('starts gently', () => {
-    expect(waveSpec(1)).toMatchObject({ small: 6, big: 0, spitters: 0, speedBonus: 0, smallHp: 10, bigHp: 40, spitterHp: 20, packSize: 1 });
-    expect(waveSpec(2).spitters).toBe(0);
-    expect(waveSpec(3).spitters).toBe(1);
-  });
-
-  it('gets harder every wave', () => {
-    for (let w = 1; w < 12; w++) {
-      const a = waveSpec(w);
-      const b = waveSpec(w + 1);
-      expect(b.small + b.big + b.spitters).toBeGreaterThanOrEqual(a.small + a.big + a.spitters);
-      expect(b.speedBonus).toBeGreaterThanOrEqual(a.speedBonus);
-      expect(b.spawnInterval).toBeLessThanOrEqual(a.spawnInterval);
-    }
-  });
-
-  it('gives whole slime counts for fractional difficulty levels', () => {
-    for (const w of [1.8, 2.6, 3.4, 7.4, 8.2]) {
-      const s = waveSpec(w);
-      for (const n of [s.small, s.big, s.spitters, s.packSize, s.smallHp, s.bigHp, s.spitterHp]) expect(Number.isInteger(n)).toBe(true);
-    }
-  });
-
-  it('is capped', () => {
-    expect(waveSpec(1000)).toMatchObject({ small: 30, big: 12, spitters: 8, speedBonus: 3, packSize: 5, spawnInterval: 0.7 });
   });
 });
 

@@ -5,6 +5,7 @@ import { Elf } from './player/elf';
 import { loadFamiliarBodies } from './player/beasts';
 import { loadBeastTemplates } from './game/beastVisual';
 import { loadElementalTemplates } from './game/elementalVisual';
+import { loadMonsterTemplates } from './game/monsterVisual';
 import type { InputMode } from './player/controls';
 import { FamiliarGame } from './familiar/FamiliarGame';
 import { FamiliarSession, HeroSession } from './net/client';
@@ -39,6 +40,7 @@ async function boot(): Promise<void> {
     loadFamiliarBodies(base, CRAB_SCALE),
     loadBeastTemplates(base),
     loadElementalTemplates(base),
+    loadMonsterTemplates(base),
   ]);
   const game = joinCode
     ? new FamiliarGame(renderer, root, elf, familiars, new FamiliarSession(joinCode))

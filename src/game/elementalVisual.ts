@@ -53,9 +53,10 @@ export class ElementalVisual {
   private readonly scale: number;
   private phase = Math.random() * 10;
 
-  constructor(kind: ElementalKind) {
+  /** `height` overrides the model's usual size (the giant Inferno). */
+  constructor(kind: ElementalKind, height = ELEMENTAL_MODELS[kind].height) {
     this.kind = kind;
-    this.scale = ELEMENTAL_MODELS[kind].height / MODEL_HEIGHT;
+    this.scale = height / MODEL_HEIGHT;
     this.group.add(this.body);
     this.body.scale.setScalar(this.scale);
     const template = templates.get(kind);
@@ -73,7 +74,7 @@ export class ElementalVisual {
       s.position.set(Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55);
       this.stars.add(s);
     }
-    this.stars.position.y = ELEMENTAL_MODELS[kind].height + 0.3;
+    this.stars.position.y = height + 0.3;
     this.stars.visible = false;
     this.group.add(this.stars);
   }

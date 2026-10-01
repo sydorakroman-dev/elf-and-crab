@@ -4,7 +4,7 @@
 //   npm run balance -- 10      # 10 runs per bot
 // Bots: "stand" never moves (a weak player); "kite" strafes, backs off, dashes out of melee and
 // through incoming globs (a decent one).
-// Both aim perfectly at the nearest slime, so real players will take hits earlier.
+// Both aim perfectly at the nearest enemy, so real players will take hits earlier.
 import { chromium } from 'playwright-core';
 const TRIALS = +(process.argv[2] ?? 6);
 const URL = process.env.GAME_URL ?? 'http://localhost:5173/';

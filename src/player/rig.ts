@@ -18,7 +18,10 @@ export async function loadParts(url: string): Promise<Map<string, THREE.Mesh>> {
     o.quaternion.identity();
     o.scale.set(1, 1, 1);
     o.castShadow = true;
-    parts.set(o.name, o);
+    let name = o.name;
+    while (parts.has(name)) name += '_'; // keep parts that share a name
+    o.name = name;
+    parts.set(name, o);
   });
   return parts;
 }

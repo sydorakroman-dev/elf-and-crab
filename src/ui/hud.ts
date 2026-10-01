@@ -54,7 +54,7 @@ export class Hud {
        <div class="overlay">
          <div class="card">
            <h1 data-title>Elf &amp; Crab</h1>
-           <p data-message>Slimes are pouring out of every gate. Fight your way from the woodland down through the dungeon to the King Slime's throne — alone, or with a friend as your familiar.</p>
+           <p data-message>Goblins, the undead, orcs and worse are pouring out of every gate. Fight from the woodland down through the dungeon to the Inferno in the lava chamber — alone, or with a friend as your familiar.</p>
            <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
            <button type="button" data-play>Begin the hunt</button>
            <p class="best" data-best hidden></p>
@@ -121,7 +121,7 @@ export class Hud {
     if (!paused) this.hud.hidden = false;
     if (paused && inGame) {
       this.title.textContent = 'Paused';
-      this.message.innerHTML = 'The slimes will wait. Probably.';
+      this.message.innerHTML = 'The monsters will wait. Probably.';
       this.button.textContent = 'Resume';
     }
   }
@@ -185,7 +185,7 @@ export class Hud {
     this.score.textContent = String(score);
   }
 
-  /** The run label (room, wave, slimes left…). */
+  /** The run label (room, wave, foes left…). */
   setWave(text: string): void {
     if (this.wave.textContent !== text) this.wave.textContent = text;
   }
@@ -202,7 +202,7 @@ export class Hud {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60).toString().padStart(2, '0');
     this.title.textContent = '👑 Victory!';
-    this.message.innerHTML = `The King Slime is no more. You cleared all five rooms in <strong>${m}:${s}</strong> with <strong>${score}</strong> points${isBest ? ' — a new best!' : '.'}`;
+    this.message.innerHTML = `The Inferno is snuffed out. You cleared all six rooms in <strong>${m}:${s}</strong> with <strong>${score}</strong> points${isBest ? ' — a new best!' : '.'}`;
     this.button.textContent = 'Play again';
     this.overlay.hidden = false;
   }

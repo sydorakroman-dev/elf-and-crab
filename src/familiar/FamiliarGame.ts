@@ -6,7 +6,8 @@ import { BeastVisual } from '../game/beastVisual';
 import { ElementalVisual } from '../game/elementalVisual';
 import type { Elf } from '../player/elf';
 import type { FamiliarBody } from '../player/beasts';
-import { ELEMENTAL_KIND_LIST, SLIME_KIND_LIST, SlimeVisual, type BeastKind, type ElementalKind, type SlimeKind, type SlimePose } from '../game/enemies';
+import { BEAST_KIND_LIST, ELEMENTAL_KIND_LIST, type BeastKind, type ElementalKind, type MonsterKind } from '../game/enemies';
+import { createMonsterVisual, type MonsterLook } from '../game/monsters';
 import { Arrows } from '../game/arrows';
 import { Globs, PROJECTILES, PROJECTILE_KINDS } from '../game/globs';
 import { Pickups } from '../game/pickups';
@@ -47,7 +48,7 @@ export class FamiliarGame {
   private readonly hud: FamiliarHud;
   private readonly buffer = new SnapshotBuffer(0.1);
   /** Every enemy on screen, keyed by id: slimes and beasts draw differently. */
-  private readonly slimes = new Map<number, SlimeVisual | BeastVisual | ElementalVisual>();
+  private readonly slimes = new Map<number, MonsterLook>();
   private readonly arrows = new Arrows();
   private readonly globs = new Globs();
   private readonly pickups = new Pickups();
@@ -181,7 +182,7 @@ export class FamiliarGame {
           this.effects.burst(ev.x, 0.8, ev.z, new THREE.Color(ev.c), 6, 4, 0.12);
           break;
         case 'glob':
-          this.effects.burst(ev.x, 1, ev.z, new THREE.Color(PROJECTILES[PROJECTILE_KINDS[ev.k ?? 0] ?? 'glob'].color), 10, 4, 0.12);
+          this.effects.burst(ev.x, 1, ev.z, new THREE.Color(PROJECTILES[PROJECTILE_KINDS[ev.k ?? 0] ?? 'acid'].color), 10, 4, 0.12);
           break;
         case 'spit':
           this.sfx.spit();
@@ -232,6 +233,10 @@ export class FamiliarGame {
           this.sfx.land();
           break;
         }
+        case 'ring':
+          this.effects.ring(ev.x, ev.z, ev.c, ev.r);
+          this.effects.burst(ev.x, 1.5, ev.z, new THREE.Color(ev.c), 16, 4, 0.1);
+          break;
         case 'door':
           this.sfx.door();
           this.hud.popups.toast('↑ The elf can head through the north door', 0xffe0a0);
@@ -323,22 +328,17 @@ export class FamiliarGame {
     const seen = new Set<number>();
     for (const t of s.slimes) {
       const [id, code] = t;
-      const kind = SLIME_KIND_CODES[code] ?? 'small';
+      const kind = SLIME_KIND_CODES[code] ?? 'beetle';
       seen.add(id);
       let v = this.slimes.get(id);
       if (!v) {
-        if ((SLIME_KIND_LIST as string[]).includes(kind)) v = new SlimeVisual(kind as SlimeKind);
+        if ((BEAST_KIND_LIST as string[]).includes(kind)) v = new BeastVisual(kind as BeastKind);
         else if ((ELEMENTAL_KIND_LIST as string[]).includes(kind)) v = new ElementalVisual(kind as ElementalKind);
-        else v = new BeastVisual(kind as BeastKind);
+        else v = createMonsterVisual(kind as MonsterKind);
         this.slimes.set(id, v);
         this.scene.add(v.group);
       }
-      if (v instanceof SlimeVisual) {
-        const pose: SlimePose = { x: t[2], z: t[3], yaw: t[4], y: t[5], sx: t[6], sy: t[7], sz: t[8], flash: t[9], stun: t[10], death: t[11], calm: t[12] ?? 0 };
-        v.apply(pose, this.time);
-      } else {
-        v.apply({ x: t[2], z: t[3], yaw: t[4], y: t[5], speed: t[6], act: t[7], mode: t[8], flash: t[9], stun: t[10], death: t[11], calm: t[12] ?? 0 }, dt, this.time);
-      }
+      v.apply({ x: t[2], z: t[3], yaw: t[4], y: t[5], speed: t[6], act: t[7], mode: t[8], flash: t[9], stun: t[10], death: t[11], calm: t[12] ?? 0 }, dt, this.time);
     }
     for (const [id, v] of this.slimes) {
       if (seen.has(id)) continue;

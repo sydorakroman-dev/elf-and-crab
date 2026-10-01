@@ -70,6 +70,8 @@ export type GameEvent =
   | { e: 'shield'; x: number; z: number }
   | { e: 'banner'; text: string }
   | { e: 'slam'; x: number; z: number; r: number }
+  /** A coloured ring (an orc shaman healing its friends). */
+  | { e: 'ring'; x: number; z: number; r: number; c: number }
   | { e: 'door' };
 
 export interface Snapshot {

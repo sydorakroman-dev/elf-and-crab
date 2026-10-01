@@ -25,7 +25,7 @@ interface Flame {
 /**
  * One room of the dungeon, built from a RoomDef: tiled floor, brick walls with a gate on each side,
  * pillars, a centrepiece (brazier, puddles, lava pit, crystals or a throne), torches and lights.
- * Slimes come in through the west, east and north gates; the elf enters by the south gate and
+ * Enemies come in through the west, east and north gates; the elf enters by the south gate and
  * leaves by the north door once it opens. Static geometry is instanced; dispose() frees it all.
  */
 export class Dungeon {
@@ -33,7 +33,7 @@ export class Dungeon {
   readonly room: RoomDef;
   readonly half: number;
   readonly obstacles: Circle[] = [];
-  /** Just inside each enemy gate — where slimes enter. */
+  /** Just inside each enemy gate — where enemies enter. */
   readonly gates: THREE.Vector3[] = [];
   /** Where the elf arrives (inside the south gate). */
   readonly entry = new THREE.Vector3();

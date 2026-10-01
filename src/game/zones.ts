@@ -1,10 +1,16 @@
 import * as THREE from 'three';
 import { glowTexture } from '../util/glow';
 
-/** [id, x, z, radius, secondsLeft, kind] — kind 0: a Soothing Spring pool, 1: burning ground. */
+/** [id, x, z, radius, secondsLeft, kind] — kind 0: a Soothing Spring pool, 1: burning ground, 2: poison spores. */
 export type ZoneTuple = [number, number, number, number, number, number?];
 export const ZONE_SPRING = 0;
 export const ZONE_FIRE = 1;
+export const ZONE_POISON = 2;
+/** Disc, rim and particle colours for the harmful zones. */
+const HAZARD: Record<number, { disc: number; rim: number; mote: number }> = {
+  [ZONE_FIRE]: { disc: 0x7a2008, rim: 0xff7a2a, mote: 0xff8a3d },
+  [ZONE_POISON]: { disc: 0x2f5a12, rim: 0x9be04a, mote: 0xb8f070 },
+};
 
 const WATER = 0x2fa6d0;
 const FADE = 0.4; // seconds to fade in / out
@@ -19,8 +25,8 @@ interface PoolVisual {
 }
 
 /**
- * Ground zones: Soothing Spring pools (warm water, steam) and burning ground (embers). Visuals for Soothing Spring pools: a shimmering disc of warm water with a glowing rim and
- * rising steam. Driven entirely by a list of zone tuples (hero sim and familiar view alike).
+ * Ground zones: Soothing Spring pools (warm water, rising steam), burning ground (embers) and
+ * poison spores (green motes). Driven entirely by a list of zone tuples (hero sim and familiar view alike).
  */
 export class SpringPools {
   readonly group = new THREE.Group();
@@ -39,7 +45,7 @@ export class SpringPools {
       p.group.position.set(x, 0.05, z);
       p.group.scale.setScalar(r);
       const fade = Math.min(1, p.age / FADE, left / FADE);
-      const fire = p.kind === ZONE_FIRE;
+      const fire = p.kind !== ZONE_SPRING;
       (p.water.material as THREE.MeshBasicMaterial).opacity = (fire ? 0.75 : 0.6) * fade * (0.9 + Math.sin(time * (fire ? 9 : 3)) * 0.1);
       (p.rim.material as THREE.MeshBasicMaterial).opacity = (fire ? 0.8 : 0.45) * fade;
       p.steam.forEach((s, i) => {
@@ -58,15 +64,16 @@ export class SpringPools {
   }
 
   private create(id: number, kind: number): PoolVisual {
-    const fire = kind === ZONE_FIRE;
+    const hazard = HAZARD[kind];
+    const fire = !!hazard;
     const group = new THREE.Group();
-    const water = new THREE.Mesh(this.discGeo, new THREE.MeshBasicMaterial({ color: fire ? 0x7a2008 : WATER, transparent: true, opacity: 0, depthWrite: false }));
-    const rim = new THREE.Mesh(this.rimGeo, new THREE.MeshBasicMaterial({ color: fire ? 0xff7a2a : 0x6fdcf5, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const water = new THREE.Mesh(this.discGeo, new THREE.MeshBasicMaterial({ color: hazard?.disc ?? WATER, transparent: true, opacity: 0, depthWrite: false }));
+    const rim = new THREE.Mesh(this.rimGeo, new THREE.MeshBasicMaterial({ color: hazard?.rim ?? 0x6fdcf5, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
     rim.position.y = 0.01;
     const steamMat = this.steamMat.clone();
-    if (fire) {
-      // Embers instead of steam.
-      steamMat.color.setHex(0xff8a3d);
+    if (hazard) {
+      // Embers / spores instead of steam.
+      steamMat.color.setHex(hazard.mote);
       steamMat.blending = THREE.AdditiveBlending;
     }
     const steam = Array.from({ length: fire ? 9 : 6 }, () => new THREE.Sprite(steamMat.clone()));

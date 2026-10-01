@@ -28,7 +28,7 @@ export function powerChipsKey(list: { type: PowerUpType; remaining: number }[]):
 }
 
 export function waveText(wave: number, remaining: number): string {
-  return wave === 0 ? 'Get ready…' : `Wave ${wave} · ${remaining} slime${remaining === 1 ? '' : 's'} left`;
+  return wave === 0 ? 'Get ready…' : `Wave ${wave} · ${remaining} foe${remaining === 1 ? '' : 's'} left`;
 }
 
 export function cssColor(hex: number): string {
@@ -76,7 +76,7 @@ export class Popups {
   }
 }
 
-/** The King Slime's health bar across the top of the screen. */
+/** A boss's health bar across the top of the screen. */
 export class BossBar {
   private readonly el: HTMLElement;
   private readonly fill: HTMLElement;

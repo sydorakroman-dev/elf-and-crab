@@ -1,6 +1,6 @@
 /**
  * Health and damage numbers in one place (the hero has 100 HP). Enemy stats live with each enemy
- * (SLIME_KINDS in enemies.ts, BEASTS in beasts.ts); wave sizes in combat.ts / rooms.ts.
+ * (BEASTS in beasts.ts, ELEMENTALS in elementals.ts, MONSTERS in monsters.ts); waves in rooms.ts.
  */
 export const HERO = {
   maxHp: 100,
@@ -18,11 +18,22 @@ export const HEALING = {
   spring: 25,
 };
 
-/** Damage the hero takes from slime attacks other than touching them (touch damage is per kind). */
-export const SLIME_ATTACKS = {
-  glob: 20,
-  kingSlam: 30,
+/** What the monsters' bolts do to the hero. */
+export const MONSTER_SHOTS = {
+  /** Goblin rivets: quick and light. */
+  rivet: 8,
+  /** Skeleton and orc archers. */
+  arrow: 13,
+  /** The Necromancer's soul bolts. */
+  soul: 14,
+  /** Orc shaman magic. */
+  magic: 12,
+  /** Cave slime (and worm) acid: slows the hero. */
+  acid: { damage: 12, slowSeconds: 1.5, slowFactor: 0.6 },
 };
+
+/** Poisonous spore clouds (spore crawlers, mushroom monsters): hurt while you stand in them. */
+export const POISON = { seconds: 4, dps: 8 };
 
 /** What the elementals' bolts do to the hero. */
 export const ELEMENTAL_ATTACKS = {

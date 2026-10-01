@@ -42,7 +42,7 @@ export const BOAR = { minRange: 5, maxRange: 16, paw: 0.8, chargeSpeed: 15, char
 // Crystal bear: swipes up close, ground-pounds every few seconds, roars for beetles at half health.
 export const BEAR = { swipeRange: 3.2, swipeWindup: 0.5, swipeRadius: 2.8, swipeDamage: 25, poundEvery: 6, poundWindup: 1.0, poundRadius: 4.5, poundDamage: 25, roar: 0.8, roarBeetles: 4 };
 
-let nextBeastId = 100000; // separate from slime ids
+let nextBeastId = 100000; // separate from other enemy ids
 
 type Mode = 'chase' | 'windup' | 'attack' | 'recover' | 'retreat' | 'dazed';
 

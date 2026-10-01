@@ -1,7 +1,7 @@
 # Elf & Crab
 
 A small third-person WebGL arena game built with [Three.js](https://threejs.org), Vite and TypeScript.
-An elf archer holds off waves of slimes pouring out of a dungeon's gates — solo, or with a friend
+An elf archer fights through a forest and five dungeon rooms of goblins, undead, orcs, cave dwellers and elementals — solo, or with a friend
 playing her crab familiar on a tablet.
 
 **Play:** https://elf-and-crab.onrender.com (also mirrored at https://sydorakroman-dev.github.io/elf-and-crab/)
@@ -24,24 +24,26 @@ Aim assist is wider on touch.
 
 ## The run
 
-Six rooms, three waves each. Clear a room and its north door opens — walk through to the next one (your familiar
-comes along, and you're healed to full). The last room ends with the **King Slime**; beat it to win.
+Six rooms, three waves each; every room's third wave brings its boss. Clear a room and its north door opens — walk
+through to the next one (your familiar comes along, and you're healed to full). The last room ends with **the
+Inferno**; beat it to win.
 
-| Room | |
-| --- | --- |
-| 1 · The Woodland | a sunny clearing: grass, low-poly trees, hedge walls, fireflies; forest beasts and the Crystal Bear |
-| 2 · The Crystal Cave | big, with glowing crystal clusters to fight around; wind elementals and rock golems |
-| 3 · The Crypt | warm torches, a central brazier, four pillars; thorn vines and treants |
-| 4 · The Throne Room | a colonnade, a red carpet and a throne against the west wall; golems, vines, wind |
-| 5 · The Flooded Hall | two rows of pillars, cold blue light, puddles; water elementals and vines |
-| 6 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it); fire elementals and golems in waves 1–2, then the King Slime |
+| Room | Who lives there | Boss |
+| --- | --- | --- |
+| 1 · The Woodland — a sunny clearing, trees, hedges | forest beasts | 🐻 The Crystal Bear |
+| 2 · The Crystal Cave — glowing crystal clusters | goblins | ⚙️ The Scrap Boss |
+| 3 · The Crypt — torches, a brazier, four pillars | the undead | 💀 The Necromancer |
+| 4 · The Throne Room — a colonnade and a throne | orcs | 🪓 The Orc Chieftain |
+| 5 · The Flooded Hall — pillars, cold light, puddles | underworld dwellers | 🪱 The Giant Cave Worm |
+| 6 · The Lava Chamber — a lava pit (arrows fly over it) | nature elementals | 🔥 The Inferno (final boss) |
 
 ## Enemies
 
 Full tables with every number: [`docs/enemies.csv`](docs/enemies.csv) and [`docs/waves.csv`](docs/waves.csv),
-generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 10.
+generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 10. Each room's group is tougher than
+the last.
 
-**The Woodland** — forest beasts (all melee):
+**Woodland — forest beasts** (all melee)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
@@ -49,33 +51,68 @@ generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 
 | Venomous Snake | normal | 25 | 10 | coils, then lunges (18) |
 | Dire Wolf | tough | 45 | 15 | very fast; bites, backs off, comes again |
 | Thorn Boar | elite | 80 | 15 | paws the ground, then charges (30); dazed if it hits a tree or wall |
-| Crystal Bear | mini-boss | 300 | 20 | swipe (25), ground pound with warning ring (25), roars in beetles at half health |
+| **Crystal Bear** | boss | 300 | 20 | swipe (25), ground pound with warning ring (25), roars in beetles at half health |
 
-**The dungeon** — slimes:
+**Crystal Cave — goblins** (small, quick, fragile, full of gadgets)
 
-| | HP | Damage | Special |
-| --- | --- | --- | --- |
-| Small slime | 10+ | 20 | — |
-| Big slime | 40+ | 35 | — |
-| Spitter | 20+ | 15 | keeps its distance and spits globs (20) |
-| 👑 King Slime | 900 | 30 | leaping slam with warning ring (30), 5-glob volleys, splits off small slimes |
-
-**Nature elementals** — mixed into the dungeon's slime waves (1 per wave at first, up to 4 later):
-
-| | Type · tier | HP | Damage | Special |
+| | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| Thorn Vine | melee · normal | 30 | 10 | lashes from 3 m (15) |
-| Wind Elemental | ranged · normal | 35 | 8 | gust bolts (8) with a big shove |
-| Water Elemental | ranged · normal | 45 | 10 | water bolts (12) that slow you for 2 s |
-| Fire Elemental | ranged · tough | 60 | 15 | fireballs (15) that leave burning ground (10 HP/s) |
-| Treant | melee · elite | 120 | 15 | roots erupt where you stand, after a warning ring (22 + slow) |
-| Rock Golem | melee · elite | 140 | 15 | slow; heavy punch (30) with huge knockback |
+| Scrap Brawler | weak | 15 | 10 | mechanical-fist punch |
+| Rotor Scout | weak | 12 | 12 | flies; dives at you |
+| Rivet Shooter | normal | 18 | 8 | keeps its distance, fires rivets |
+| Bomb Lobber | normal | 20 | 18 | bombs land where you stand, after a warning ring |
+| Boiler Tinkerer | tough | 45 | 14 | steam burst around itself |
+| **Scrap Boss** | boss | 400 | 25 | stomp shockwave, mech punches; drops 4 brawlers at half health |
 
-The elementals' models are built in code by `scripts/models/build-elementals.mjs` (→ `public/models/elementals/`).
+**Crypt — the undead**
 
-Waves get bigger, faster and tougher room by room (`roomWaveDifficulty` in `src/world/rooms.ts` feeds `waveSpec` in
-`src/game/combat.ts`; elementals per wave come from `roomElementals`). Health and damage numbers live in
-`src/game/balance.ts`, `SLIME_KINDS` (`enemies.ts`), `BEASTS` (`beasts.ts`) and `ELEMENTALS` (`elementals.ts`).
+| | Tier | HP | Damage | Special |
+| --- | --- | --- | --- | --- |
+| Skeleton Warrior | normal | 30 | 14 | sword slash |
+| Skeleton Archer | normal | 25 | 13 | arrows from afar |
+| Ghost | normal | 25 | 12 | floats straight through pillars |
+| Zombie Brute | tough | 90 | 25 | slow; fist slam |
+| Undead Knight | elite | 130 | 22 | its shield halves arrows to the front — hit it from the side |
+| **Necromancer** | boss | 500 | 14 / 20 | 5-bolt soul volleys, soul blasts at your spot; raises skeletons every 10 s |
+
+**Throne Room — orcs**
+
+| | Tier | HP | Damage | Special |
+| --- | --- | --- | --- | --- |
+| Orc Scout | normal | 35 | 12 | fast; stabs, then backs off |
+| Orc Archer | normal | 45 | 13 | arrows from afar |
+| Orc Warrior | tough | 60 | 20 | axe swing |
+| Orc Shaman | tough | 50 | 12 | magic bolts; heals nearby orcs (green ring) — kill it first |
+| Orc Shield Guard | elite | 150 | 22 | its shield blocks almost every arrow to the front |
+| **Orc Chieftain** | boss | 650 | 28 / 30 | hammer swings, ground slam with warning ring, long charges; war-cry brings 3 warriors |
+
+**Flooded Hall — underworld dwellers**
+
+| | Tier | HP | Damage | Special |
+| --- | --- | --- | --- | --- |
+| Cave Spider | normal | 40 | 18 | leaps at you |
+| Cave Slime | normal | 50 | 12 | acid spit that slows you |
+| Spore Crawler | normal | 45 | 10 | spore bombs leave poison clouds (8 HP/s) |
+| Mushroom Monster | tough | 110 | 18 | poison spore burst around itself |
+| Living Mold | elite | 160 | 28 | slow, hard punch; regrows when you stop hitting it |
+| **Giant Cave Worm** | boss | 800 | 30 | burrows (can't be hit), bursts up under you after a warning ring; acid fans; calls spiders |
+
+**Lava Chamber — nature elementals**
+
+| | Tier | HP | Damage | Special |
+| --- | --- | --- | --- | --- |
+| Thorn Vine | normal | 50 | 15 | lashes from 3 m |
+| Wind Elemental | normal | 55 | 8 | gust bolts with a big shove |
+| Water Elemental | normal | 70 | 12 | water bolts that slow you for 2 s |
+| Fire Elemental | tough | 90 | 15 | fireballs that leave burning ground (10 HP/s) |
+| Treant | elite | 190 | 22 | roots erupt where you stand, after a warning ring, and slow |
+| Rock Golem | elite | 220 | 30 | slow; heavy punch with huge knockback |
+| **The Inferno** | final boss | 1200 | 30 / 15 / 22 | flame ring around itself, 5-fireball fans, meteors at your spot (all leave fire); calls fire elementals |
+
+The models (`public/models/`) are static, part-named meshes; `src/game/monsterVisual.ts`, `beastVisual.ts` and
+`elementalVisual.ts` rig them in code. Health and damage live in `src/game/balance.ts` and the `BEASTS`
+(`beasts.ts`), `ELEMENTALS` (`elementals.ts`) and `MONSTERS` (`monsters.ts`) tables; each room's waves in
+`src/world/rooms.ts`.
 
 ## Playing together (asymmetric co-op)
 
@@ -83,14 +120,14 @@ Two roles:
 
 - **Hero (the elf)** plays as usual on a computer (or phone). The title screen shows a room code and a QR code.
 - **Familiar** scans the QR code or opens the link (`…/?join=CODE`) on a tablet, or types the code under
-  "Got a code?", then **picks a creature**. Tap or drag on the floor to move — it bites any slime it touches.
+  "Got a code?", then **picks a creature**. Tap or drag on the floor to move — it bites any enemy it touches.
   Spell buttons have their own cooldowns. The creature can be changed between runs or while the elf is paused.
 
 | Familiar | Speed | Spells |
 | --- | --- | --- |
-| 🦀 Crab | medium | ✨ **Magic Burst** — stun every slime within 5.5 m for 2.5 s (12 s) · 🐚 **Shell Shield** — the elf gets a bubble that blocks the next hit (18 s) |
-| 🦫 Capybara | slow | ♨️ **Soothing Spring** — a 6 m pool for 6 s: slimes in it are 60% slower, the elf heals 1 heart in it (16 s) · 🌸 **Calm Aura** — slimes within 7 m stop chasing and wander off, harmless, for 5 s (14 s) |
-| 🐺 Wolf | fast | 🐾 **Pounce** — leap up to 10 m toward where you tapped, 2 damage to every slime on the way (8 s) |
+| 🦀 Crab | medium | ✨ **Magic Burst** — stun every enemy within 5.5 m for 2.5 s (12 s) · 🐚 **Shell Shield** — the elf gets a bubble that blocks the next hit (18 s) |
+| 🦫 Capybara | slow | ♨️ **Soothing Spring** — a 6 m pool for 6 s: enemies in it are 60% slower, the elf heals 1 heart in it (16 s) · 🌸 **Calm Aura** — enemies within 7 m stop chasing and wander off, harmless, for 5 s (14 s) |
+| 🐺 Wolf | fast | 🐾 **Pounce** — leap up to 10 m toward where you tapped, 2 damage to every enemy on the way (8 s) |
 
 Solo is just the elf; the familiar only appears while a second player is connected.
 
@@ -105,13 +142,13 @@ the built game, so one URL does everything.
 ## Power-ups
 
 They appear at random on the floor every 10-18 s (max two at a time, gone after 14 s) and are sometimes
-dropped by slimes (big ones most often). Walk over one to collect it; timed ones stack and extend.
+dropped by defeated enemies (tougher ones more often). Walk over one to collect it; timed ones stack and extend.
 
 | | Power-up | Effect |
 | --- | --- | --- |
 | 🔱 | Multishot | 3 arrows in a spread (12 s) |
 | ⚡ | Rapid fire | Double fire rate (10 s) |
-| ➶ | Piercing arrows | Arrows pass through every slime in a line (12 s) |
+| ➶ | Piercing arrows | Arrows pass through every enemy in a line (12 s) |
 | 🛡️ | Shield | Absorbs the next hit (up to 20 s) |
 | ❤️ | Heart | +1 heart (only appears when you're hurt) |
 
@@ -145,8 +182,8 @@ URL; free instances sleep when idle and take ~30-60 s to wake). The GitHub Pages
 - `src/familiar/` — the familiar's tablet view: creature picker, top-down camera, tap-to-move, spell buttons, HUD.
 - `src/game/familiars.ts` — the creature roster and spells (data + pure math); `src/player/beasts.ts` — their bodies.
 - `src/player/controls.ts` — third-person camera and movement (mouse or touch input); `src/ui/touch.ts` — on-screen touch controls.
-- `src/game/` — the game loop, slimes (small, big, spitter), forest beasts (`beasts.ts`), nature elementals
-  (`elementals.ts`, rigged in `elementalVisual.ts`), arrows and enemy bolts (`globs.ts`), crab companion AI,
+- `src/game/` — the game loop; enemies: forest beasts (`beasts.ts`), nature elementals (`elementals.ts`), and the
+  data-driven monsters and bosses (`monsters.ts`: stats plus shared attacks — melee, shoot, area, lunge, burrow),
+  spawned by `enemies.ts`; arrows and enemy bolts (`globs.ts`), ground zones (`zones.ts`), crab companion AI,
   particles, power-ups (`powerups.ts` rules, `pickups.ts` visuals), sound (WebAudio, no files: effects plus
-  positional fire ambience), high score, and pure
-  combat helpers in `combat.ts` including the wave difficulty curve (unit tested).
+  positional fire ambience), high score, and pure combat helpers in `combat.ts` (unit tested).

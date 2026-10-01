@@ -1,23 +1,22 @@
 import * as THREE from 'three';
 import { Dungeon, WALL_HEIGHT } from '../world/dungeon';
-import { ROOMS, WAVES_PER_ROOM, isBossWave, roomElementals, roomWaveDifficulty, runLabel, type RunPhase } from '../world/rooms';
+import { ROOMS, WAVES_PER_ROOM, runLabel, type RunPhase } from '../world/rooms';
 import { TelegraphRings } from './telegraph';
 import { Player, type Arena, type InputMode } from '../player/controls';
 import { TouchControls } from '../ui/touch';
 import type { Elf } from '../player/elf';
 import type { FamiliarBody } from '../player/beasts';
-import { Enemies, WOODLAND_WAVES, type Enemy, type Strike } from './enemies';
-import { Beast } from './beasts';
+import { Enemies, type Enemy, type Strike } from './enemies';
 import { Arrows } from './arrows';
 import { Globs, PROJECTILES, PROJECTILE_KINDS, type GlobImpact } from './globs';
 import { Effects } from './effects';
 import { Companion } from './companion';
-import { ELEMENTAL_ATTACKS, HEALING, HERO, SLIME_ATTACKS, VICTORY_SCORE_PER_HP } from './balance';
+import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_PER_HP } from './balance';
 import { FAMILIARS, FAMILIAR_KINDS, POUNCE_DAMAGE, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
-import { SpringPools, ZONE_FIRE, ZONE_SPRING, type ZoneTuple } from './zones';
-import { ELEMENTALS, Elemental } from './elementals';
+import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
+import { Monster } from './monsters';
 import type { FamiliarCommand } from '../net/protocol';
-import { pickAimTarget, waveSpec } from './combat';
+import { pickAimTarget } from './combat';
 import { fireAmbience } from './ambience';
 import { Hud } from '../ui/hud';
 import { Sfx } from './audio';
@@ -41,14 +40,12 @@ const MULTISHOT_SPREAD = 0.2; // radians between arrows
 const PICKUP_INTERVAL_MIN = 10; // seconds between random floor spawns
 const PICKUP_INTERVAL_MAX = 18;
 const MAX_PICKUPS = 2;
-/** Chance a killed slime drops a power-up. */
-/** Chance a killed slime drops a power-up (beasts carry their own in BEASTS). */
-const SLIME_DROP_CHANCE: Record<string, number> = { small: 0.04, spitter: 0.1, big: 0.25, boss: 0 };
 const SNAPSHOT_EVERY = 3; // steps → 20 Hz while playing
 const IDLE_SNAPSHOT_EVERY = 12; // 5 Hz on menus / pause
 const STUN_STAR = new THREE.Color(0xfff27a);
 const CALM_PINK = new THREE.Color(0xffb8dc);
 const SPRING_BLUE = new THREE.Color(0x8fe8f5);
+const HEAL_GREEN = 0x7dff8a;
 
 type State = 'ready' | 'playing' | 'over' | 'won';
 const DOOR_FADE = 0.5; // seconds of black before the next room appears
@@ -278,6 +275,7 @@ export class Game {
       this.events.push({ e: 'spit' });
     }
     for (const strike of strikes) this.enemyStrike(strike);
+    this.showHealPulses();
     this.syncBoss();
     this.updateGlobs(dt);
 
@@ -307,8 +305,8 @@ export class Game {
 
     const p = this.player.position;
     const dir = this.player.aimDirection(this.aim);
-    // Gentle aim assist: snap to a slime near the crosshair line.
-    const alive = this.enemies.all.filter((s) => s.alive);
+    // Gentle aim assist: snap to an enemy near the crosshair line.
+    const alive = this.enemies.all.filter((s) => s.alive && !s.hidden);
     const assist = this.mode === 'touch' ? TOUCH_AIM_ASSIST_ANGLE : AIM_ASSIST_ANGLE;
     const i = pickAimTarget(p, dir.x, dir.z, alive, assist, AIM_ASSIST_RANGE);
     if (i >= 0) dir.set(alive[i].x - p.x, 0, alive[i].z - p.z).normalize();
@@ -394,11 +392,11 @@ export class Game {
   /** Soothing Spring pools slow enemies and heal the elf once; burning ground hurts while the elf stands in it. */
   private updateZones(dt: number): void {
     const p = this.player.position;
-    let burning = false;
+    let burning = 0; // damage per second from fire / poison underfoot
     for (const z of this.zones) {
       z.t -= dt;
-      if (z.kind === ZONE_FIRE) {
-        if (Math.hypot(p.x - z.x, p.z - z.z) <= z.r + PLAYER_RADIUS * 0.5) burning = true;
+      if (z.kind !== ZONE_SPRING) {
+        if (Math.hypot(p.x - z.x, p.z - z.z) <= z.r + PLAYER_RADIUS * 0.5) burning = Math.max(burning, z.kind === ZONE_FIRE ? ELEMENTAL_ATTACKS.fire.burnDps : POISON.dps);
         continue;
       }
       for (const s of this.enemies.all) {
@@ -415,14 +413,14 @@ export class Game {
     }
     this.zones = this.zones.filter((z) => z.t > 0);
     this.springPools.sync(this.zoneTuples(), dt, this.time);
-    this.updateBurn(dt, burning && !this.player.dashing);
+    this.updateBurn(dt, this.player.dashing ? 0 : burning);
   }
 
-  /** Standing in fire: a few HP every half second (no knockback, no invulnerability). */
-  private updateBurn(dt: number, burning: boolean): void {
+  /** Standing in fire or poison: a few HP every half second (no knockback, no invulnerability). */
+  private updateBurn(dt: number, dps: number): void {
     this.burnTick = Math.max(0, this.burnTick - dt);
-    if (!burning) return;
-    this.burn += ELEMENTAL_ATTACKS.fire.burnDps * dt;
+    if (!dps) return;
+    this.burn += dps * dt;
     if (this.burnTick > 0 || this.burn < 1) return;
     this.burnTick = 0.5;
     const amount = Math.floor(this.burn);
@@ -523,14 +521,14 @@ export class Game {
   private damage(slime: Enemy, dirX: number, dirZ: number, amount = HERO.arrowDamage): void {
     const killed = slime.hurt(amount, dirX, dirZ);
     const y = slime.radius;
-    const big = slime.kind === 'big';
+    const big = slime.radius >= 1.2;
     if (killed) {
       this.score += slime.score;
       this.hud.setScore(this.score);
       this.effects.burst(slime.x, y, slime.z, slime.color, big ? 40 : 22, big ? 8 : 6);
       this.sfx.splat(big);
       this.events.push({ e: 'splat', x: q(slime.x), z: q(slime.z), c: slime.color.getHex(), big });
-      const drop = slime instanceof Beast || slime instanceof Elemental ? slime.def.drop : (SLIME_DROP_CHANCE[slime.kind] ?? 0);
+      const drop = (slime as Enemy & { def?: { drop: number } }).def?.drop ?? 0; // each kind carries its own chance
       if (Math.random() < drop && this.pickups.count < MAX_PICKUPS + 1) {
         this.pickups.spawn(pickPowerUp(Math.random, this.health, MAX_HEALTH), slime.x, slime.z);
       }
@@ -545,7 +543,7 @@ export class Game {
     if (this.invulnerable > 0 || this.player.dashing) return;
     const p = this.player.position;
     for (const s of this.enemies.all) {
-      if (!s.alive || s.harmless) continue; // stunned or calmed slimes don't hurt
+      if (!s.alive || s.harmless) continue; // stunned, calmed or burrowed foes don't hurt
       const dx = p.x - s.x;
       const dz = p.z - s.z;
       const d = Math.hypot(dx, dz);
@@ -623,8 +621,17 @@ export class Game {
   private projectileHit(hit: GlobImpact, dirX: number, dirZ: number): void {
     const shielded = this.powers.has('shield');
     switch (hit.kind) {
-      case 'glob':
-        this.hurtPlayer(SLIME_ATTACKS.glob, dirX, dirZ);
+      case 'acid': {
+        const a = MONSTER_SHOTS.acid;
+        this.hurtPlayer(a.damage, dirX, dirZ);
+        if (!shielded) this.player.slow(a.slowSeconds, a.slowFactor);
+        break;
+      }
+      case 'rivet':
+      case 'arrow':
+      case 'soul':
+      case 'magic':
+        this.hurtPlayer(MONSTER_SHOTS[hit.kind], dirX, dirZ);
         break;
       case 'gust':
         this.hurtPlayer(ELEMENTAL_ATTACKS.gust.damage, dirX, dirZ, ELEMENTAL_ATTACKS.gust.knock);
@@ -644,7 +651,13 @@ export class Game {
   /** A fireball leaves a patch of burning ground where it bursts. */
   private igniteGround(hit: GlobImpact): void {
     const f = ELEMENTAL_ATTACKS.fire;
-    this.zones.push({ id: this.nextZoneId++, kind: ZONE_FIRE, x: hit.x, z: hit.z, r: f.burnRadius, t: f.burnSeconds, healed: true });
+    this.addHazard(ZONE_FIRE, hit.x, hit.z, f.burnRadius);
+  }
+
+  /** Burning or poisonous ground that hurts while the elf stands in it. */
+  private addHazard(kind: number, x: number, z: number, r: number): void {
+    const t = kind === ZONE_FIRE ? ELEMENTAL_ATTACKS.fire.burnSeconds : POISON.seconds;
+    this.zones.push({ id: this.nextZoneId++, kind, x, z, r, t, healed: true });
   }
 
   private hurtPlayer(amount: number, dirX: number, dirZ: number, knock = 16): void {
@@ -711,32 +724,18 @@ export class Game {
   private startNextWave(): void {
     this.waveInRoom++;
     this.wave++;
-    const d = roomWaveDifficulty(this.room, this.waveInRoom);
-    if (ROOMS[this.room].enemies === 'beasts') {
-      const w = WOODLAND_WAVES[Math.min(this.waveInRoom, WOODLAND_WAVES.length) - 1];
-      const at = { x: 0, z: -this.dungeon.half + 8 };
-      this.enemies.startBeastWave(w, at.x, at.z);
-      if (w.bear) {
-        this.effects.ring(at.x, at.z, 0xb08aff, 4);
-        this.effects.burst(at.x, 2, at.z, new THREE.Color(0xb08aff), 40, 8, 0.18);
-        this.banner('🐻 The Crystal Bear!');
-        this.sfx.burst();
-      } else {
-        this.banner(`Wave ${this.waveInRoom}/${WAVES_PER_ROOM}`);
-      }
-    } else if (isBossWave(this.room, this.waveInRoom)) {
-      const at = { x: 0, z: -this.dungeon.half + 8 };
-      this.enemies.startBossWave(d, at.x, at.z);
-      this.effects.ring(at.x, at.z, 0xc0303a, 5);
-      this.effects.burst(at.x, 2, at.z, new THREE.Color(0xc0303a), 50, 9, 0.2);
-      this.banner('👑 The King Slime!');
+    const room = ROOMS[this.room];
+    const w = room.waves[Math.min(this.waveInRoom, room.waves.length) - 1];
+    const at = { x: 0, z: -this.dungeon.half + 8 };
+    const boss = this.enemies.startRoomWave(w, at.x, at.z);
+    if (boss) {
+      const color = boss.color.getHex();
+      this.effects.ring(at.x, at.z, color, 5);
+      this.effects.burst(at.x, 2, at.z, boss.color, 50, 9, 0.2);
+      this.banner(`⚔️ ${boss.bossName}!`);
       this.sfx.burst();
     } else {
-      const elementals = roomElementals(this.room, this.waveInRoom);
-      this.enemies.startWave(d, elementals);
-      const newSpitters = waveSpec(d).spitters > 0 && waveSpec(d - 1).spitters === 0;
-      const fresh = this.waveInRoom === 1 && elementals.length ? ELEMENTALS[elementals[0]].name : null;
-      this.banner(fresh ? `Wave 1 · ${fresh}!` : newSpitters ? `Wave ${this.waveInRoom} · Spitters!` : `Wave ${this.waveInRoom}/${WAVES_PER_ROOM}`);
+      this.banner(`Wave ${this.waveInRoom}/${WAVES_PER_ROOM}`);
     }
     this.sfx.wave();
   }
@@ -782,6 +781,17 @@ export class Game {
     }
   }
 
+  /** Orc shamans patching up their friends: a green ring (and green sparkles on those healed). */
+  private showHealPulses(): void {
+    for (const s of this.enemies.all) {
+      if (!(s instanceof Monster) || !s.healPulse) continue;
+      const h = s.healPulse;
+      this.effects.ring(h.x, h.z, HEAL_GREEN, h.r);
+      this.effects.burst(h.x, 1.5, h.z, new THREE.Color(HEAL_GREEN), 16, 4, 0.1);
+      this.events.push({ e: 'ring', x: q(h.x), z: q(h.z), r: h.r, c: HEAL_GREEN });
+    }
+  }
+
   /** An enemy's area attack lands (a slam, a pound, a lunge, a swipe): the elf is hit if inside (dashing dodges it). */
   private enemyStrike(s: Strike): void {
     const big = s.r >= 3;
@@ -794,6 +804,7 @@ export class Game {
       this.effects.burst(s.x, 0.6, s.z, new THREE.Color(0xffffff), 8, 3, 0.1);
     }
     this.events.push({ e: 'slam', x: q(s.x), z: q(s.z), r: s.r });
+    if (s.zone) this.addHazard(s.zone === 'fire' ? ZONE_FIRE : ZONE_POISON, s.x, s.z, s.r * 0.85);
     const p = this.player.position;
     const d = Math.hypot(p.x - s.x, p.z - s.z);
     if (d <= s.r + PLAYER_RADIUS && this.invulnerable === 0 && !this.player.dashing) {

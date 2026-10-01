@@ -19,7 +19,7 @@ export interface FamiliarDef {
   speed: number;
   /** How it walks: crabs scuttle sideways, others face where they go. */
   gait: 'sideways' | 'forward';
-  /** Auto-attack on slimes in reach: damage and seconds between bites. */
+  /** Auto-attack on enemies in reach: damage and seconds between bites. */
   biteDamage: number;
   biteCooldown: number;
   /** Body radius for collisions. */
@@ -82,18 +82,18 @@ export interface SpellDef {
 }
 
 export const SPELLS: Record<SpellId, SpellDef> = {
-  burst: { name: 'Magic Burst', icon: '✨', cooldown: 12, radius: 5.5, duration: 2.5, description: 'Stuns every slime around you.' },
+  burst: { name: 'Magic Burst', icon: '✨', cooldown: 12, radius: 5.5, duration: 2.5, description: 'Stuns every enemy around you.' },
   shell: { name: 'Shell Shield', icon: '🐚', cooldown: 18, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next hit.' },
-  spring: { name: 'Soothing Spring', icon: '♨️', cooldown: 16, radius: 3, duration: 6, description: 'A warm pool: slimes in it slow down, the elf heals a heart in it.' },
-  calm: { name: 'Calm Aura', icon: '🌸', cooldown: 14, radius: 7, duration: 5, description: 'Slimes near you stop chasing and wander off.' },
-  pounce: { name: 'Pounce', icon: '🐾', cooldown: 8, radius: 0, duration: 0.35, description: 'Leap toward where you tapped, hitting every slime on the way.' },
+  spring: { name: 'Soothing Spring', icon: '♨️', cooldown: 16, radius: 3, duration: 6, description: 'A warm pool: enemies in it slow down, the elf heals a heart in it.' },
+  calm: { name: 'Calm Aura', icon: '🌸', cooldown: 14, radius: 7, duration: 5, description: 'Enemies near you stop chasing and wander off.' },
+  pounce: { name: 'Pounce', icon: '🐾', cooldown: 8, radius: 0, duration: 0.35, description: 'Leap toward where you tapped, hitting every enemy on the way.' },
 };
 
-/** Soothing Spring: slimes inside move at this fraction of their speed (60% slower). */
+/** Soothing Spring: enemies inside move at this fraction of their speed (60% slower). */
 export const SPRING_SLOW = 0.4;
 export const POUNCE_RANGE = 10;
 export const POUNCE_DAMAGE = 25;
-/** How close (beyond body radii) a slime must be to the pounce path to get hit. */
+/** How close (beyond body radii) an enemy must be to the pounce path to get hit. */
 export const POUNCE_WIDTH = 0.8;
 
 /** Seconds left on each spell's cooldown. */

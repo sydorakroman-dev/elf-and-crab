@@ -9,7 +9,7 @@ import { ENEMY_KIND_LIST } from './enemyKinds';
 import { q } from '../net/snapshot';
 
 /**
- * The nature elementals (dungeon rooms). Melee ones walk up and hit hard; ranged ones hold a
+ * The nature elementals (the Lava Chamber, the last and hardest room). Melee ones walk up and hit hard; ranged ones hold a
  * distance and throw bolts (gust / water / fire, see globs.ts; effects in balance.ts).
  */
 export interface ElementalDef {
@@ -27,12 +27,12 @@ export interface ElementalDef {
 }
 
 export const ELEMENTALS: Record<ElementalKind, ElementalDef> = {
-  vine: { name: 'Thorn Vine', tier: 'normal', style: 'melee', hp: 30, speed: 3.4, radius: 0.8, touch: 10, push: 6, score: 20, color: 0x4f9a3a, drop: 0.08 },
-  wind: { name: 'Wind Elemental', tier: 'normal', style: 'ranged', hp: 35, speed: 3.8, radius: 0.85, touch: 8, push: 7, score: 25, color: 0xcfe6f2, drop: 0.08 },
-  water: { name: 'Water Elemental', tier: 'normal', style: 'ranged', hp: 45, speed: 3.0, radius: 0.9, touch: 10, push: 6, score: 30, color: 0x3fa8e0, drop: 0.1 },
-  fire: { name: 'Fire Elemental', tier: 'tough', style: 'ranged', hp: 60, speed: 3.2, radius: 0.85, touch: 15, push: 5, score: 45, color: 0xff7a2a, drop: 0.15 },
-  treant: { name: 'Treant', tier: 'elite', style: 'melee', hp: 120, speed: 2.4, radius: 1.3, touch: 15, push: 2, score: 70, color: 0x7a5a32, drop: 0.25 },
-  golem: { name: 'Rock Golem', tier: 'elite', style: 'melee', hp: 140, speed: 2.2, radius: 1.3, touch: 15, push: 1.5, score: 80, color: 0x8a8378, drop: 0.25 },
+  vine: { name: 'Thorn Vine', tier: 'normal', style: 'melee', hp: 50, speed: 3.4, radius: 0.8, touch: 10, push: 6, score: 20, color: 0x4f9a3a, drop: 0.08 },
+  wind: { name: 'Wind Elemental', tier: 'normal', style: 'ranged', hp: 55, speed: 3.8, radius: 0.85, touch: 8, push: 7, score: 25, color: 0xcfe6f2, drop: 0.08 },
+  water: { name: 'Water Elemental', tier: 'normal', style: 'ranged', hp: 70, speed: 3.0, radius: 0.9, touch: 10, push: 6, score: 30, color: 0x3fa8e0, drop: 0.1 },
+  fire: { name: 'Fire Elemental', tier: 'tough', style: 'ranged', hp: 90, speed: 3.2, radius: 0.85, touch: 15, push: 5, score: 45, color: 0xff7a2a, drop: 0.15 },
+  treant: { name: 'Treant', tier: 'elite', style: 'melee', hp: 190, speed: 2.4, radius: 1.3, touch: 15, push: 2, score: 70, color: 0x7a5a32, drop: 0.25 },
+  golem: { name: 'Rock Golem', tier: 'elite', style: 'melee', hp: 220, speed: 2.2, radius: 1.3, touch: 15, push: 1.5, score: 80, color: 0x8a8378, drop: 0.25 },
 };
 
 // Thorn vine: rears back, then lashes a vine out in front.
@@ -48,7 +48,7 @@ export const CASTERS: Record<'wind' | 'water' | 'fire', { min: number; max: numb
   fire: { min: 9, max: 14, interval: 3.2, windup: 0.7, shot: 'fire' },
 };
 
-let nextElementalId = 200000; // separate from slime and beast ids
+let nextElementalId = 200000; // separate from beast ids
 
 type Mode = 'chase' | 'windup' | 'recover';
 

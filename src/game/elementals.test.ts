@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { CASTERS, ELEMENTALS, Elemental, GOLEM, TREANT, VINE } from './elementals';
 import type { Spit, Strike } from './enemies';
-import { roomElementals, ROOMS, WAVES_PER_ROOM } from '../world/rooms';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 
 const HALF = 24;
@@ -71,20 +70,5 @@ describe('nature elementals', () => {
   it('elites are tougher than the rest, and every kind has a wire code', () => {
     for (const k of ['vine', 'wind', 'water', 'fire'] as const) expect(ELEMENTALS.golem.hp).toBeGreaterThan(ELEMENTALS[k].hp);
     for (const k of Object.keys(ELEMENTALS)) expect(ENEMY_KIND_LIST).toContain(k);
-  });
-});
-
-describe('elementals in rooms', () => {
-  it('the Woodland has none; dungeon rooms bring more in later waves', () => {
-    expect(roomElementals(0, 1)).toEqual([]);
-    expect(roomElementals(1, 1)).toHaveLength(1);
-    expect(roomElementals(1, 3).length).toBeGreaterThan(roomElementals(1, 1).length);
-    expect(roomElementals(4, 1).length).toBeGreaterThan(roomElementals(1, 1).length);
-  });
-
-  it('only the room’s own kinds appear, and none join the King Slime', () => {
-    for (let r = 1; r < ROOMS.length; r++)
-      for (let w = 1; w <= WAVES_PER_ROOM; w++) for (const k of roomElementals(r, w)) expect(ROOMS[r].elementals).toContain(k);
-    expect(roomElementals(ROOMS.length - 1, WAVES_PER_ROOM)).toEqual([]);
   });
 });

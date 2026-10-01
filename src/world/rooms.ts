@@ -1,4 +1,4 @@
-import type { ElementalKind } from '../game/enemies';
+import type { RoomWave } from '../game/enemies';
 
 /** The rooms of the dungeon run, as data. The Dungeon builds whichever one is current. */
 
@@ -23,10 +23,8 @@ export interface RoomDef {
   trees?: [number, number][];
   /** Outdoors: hedge walls with wooden gates, daylight and open sky instead of brick and torches. */
   outdoor?: boolean;
-  /** Who lives here: forest beasts or (default) slimes. */
-  enemies?: 'beasts' | 'slimes';
-  /** Nature elementals mixed into the slime waves (lighter ones first). */
-  elementals?: ElementalKind[];
+  /** The room's three waves; the last one brings its boss. */
+  waves: RoomWave[];
   torchLight: number;
   torchFlame: number;
   floor: Hsl;
@@ -51,7 +49,11 @@ export const ROOMS: RoomDef[] = [
     feature: 'woodland',
     trees: [[-12, -12], [11, -14], [-15, 2], [15, -2], [-8, 4], [9, 5], [-13, 15], [14, 14], [0, -6]],
     outdoor: true,
-    enemies: 'beasts',
+    waves: [
+      { mix: { beetle: 8, snake: 2 } },
+      { mix: { beetle: 8, snake: 4, direwolf: 2, boar: 1 } },
+      { mix: { beetle: 6, direwolf: 2 }, boss: 'bear' },
+    ],
     torchLight: 0xffe7b0,
     torchFlame: 0xfff3c0,
     floor: { h: 0.27, s: 0.42, l: 0.3 },
@@ -66,7 +68,11 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Crystal Cave',
-    elementals: ['wind', 'golem'],
+    waves: [
+      { mix: { brawler: 8, riveter: 3, rotor: 2 } },
+      { mix: { brawler: 10, rotor: 3, riveter: 3, lobber: 2, tinkerer: 2 } },
+      { mix: { brawler: 6, riveter: 2, lobber: 2 }, boss: 'scrapboss' },
+    ],
     half: 30,
     pillars: [[-7, -14], [7, 14]], // off the centre line so the entry view is clear
     feature: 'crystals',
@@ -85,7 +91,11 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Crypt',
-    elementals: ['vine', 'treant'],
+    waves: [
+      { mix: { skeleton: 8, skelarcher: 2, ghost: 2 } },
+      { mix: { skeleton: 8, skelarcher: 3, ghost: 3, zombie: 2, knight: 1 } },
+      { mix: { skeleton: 4, skelarcher: 2, zombie: 1 }, boss: 'necromancer' },
+    ],
     half: 24,
     pillars: [[-9, -9], [9, -9], [-9, 9], [9, 9]],
     feature: 'brazier',
@@ -103,7 +113,11 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Throne Room',
-    elementals: ['vine', 'wind', 'golem'],
+    waves: [
+      { mix: { orcwarrior: 4, orcscout: 4, orcarcher: 2 } },
+      { mix: { orcwarrior: 5, orcscout: 4, orcarcher: 3, shaman: 2, shieldguard: 1 } },
+      { mix: { orcwarrior: 3, orcarcher: 2, shaman: 1 }, boss: 'chieftain' },
+    ],
     half: 30,
     pillars: [[-13, -16], [13, -16], [-13, -4], [13, -4], [-13, 8], [13, 8], [-13, 20], [13, 20]],
     feature: 'throne',
@@ -123,7 +137,11 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Flooded Hall',
-    elementals: ['water', 'vine'],
+    waves: [
+      { mix: { spider: 6, ooze: 3, sporecrawler: 2 } },
+      { mix: { spider: 6, ooze: 3, sporecrawler: 2, mushroom: 2, mold: 1 } },
+      { mix: { spider: 4, ooze: 2, mushroom: 1 }, boss: 'caveworm' },
+    ],
     half: 28,
     pillars: [[-9, -15], [9, -15], [-9, -5], [9, -5], [-9, 5], [9, 5], [-9, 15], [9, 15]],
     feature: 'puddles',
@@ -141,7 +159,11 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Lava Chamber',
-    elementals: ['fire', 'golem'],
+    waves: [
+      { mix: { vine: 5, wind: 3, water: 2, fire: 2 } },
+      { mix: { vine: 5, wind: 3, water: 3, fire: 3, golem: 1, treant: 1 } },
+      { mix: { vine: 3, fire: 2, golem: 1 }, boss: 'inferno' },
+    ],
     half: 26,
     pillars: [[7.5, -13], [15, 0], [7.5, 13], [-7.5, 13], [-15, 0], [-7.5, -13]],
     feature: 'lava',
@@ -155,30 +177,11 @@ export const ROOMS: RoomDef[] = [
     moonIntensity: 1.2,
     hemiSky: 0x9b6b5f,
     hemiGround: 0x1a0805,
-    hasExit: false, // the final room: the King Slime waits here
+    hasExit: false, // the final room: the Inferno waits here
   },
 ];
 
 export const WAVES_PER_ROOM = 3;
-
-/** Difficulty level for wave `wave` (1-based) of room `room` (0-based), fed to waveSpec(). */
-export function roomWaveDifficulty(room: number, wave: number): number {
-  // Smooth ramp over the whole run: 1, 1.65, 2.3 | 2.3, 2.95, 3.6 | … | 7.5, 8.15 (+ boss).
-  return 1 + room * 1.3 + (wave - 1) * 0.65;
-}
-
-/** Elementals joining wave `wave` (1-based) of room `room`: more of them in later rooms and waves. */
-export function roomElementals(room: number, wave: number): ElementalKind[] {
-  const kinds = ROOMS[room]?.elementals ?? [];
-  if (!kinds.length || isBossWave(room, wave)) return [];
-  const count = wave + Math.floor(room / 3);
-  return Array.from({ length: count }, (_, i) => kinds[i % kinds.length]);
-}
-
-/** The final room's last wave is the King Slime. */
-export function isBossWave(room: number, wave: number): boolean {
-  return room === ROOMS.length - 1 && wave === WAVES_PER_ROOM;
-}
 
 export type RunPhase = 'fight' | 'cleared' | 'transition';
 
@@ -189,6 +192,5 @@ export function runLabel(room: number, wave: number, remaining: number, phase: R
   if (phase === 'transition') return 'Onward…';
   if (wave === 0) return `${name} · get ready…`;
   if (bossName) return `${name} · ${bossName}`;
-  const foes = ROOMS[room]?.enemies === 'beasts' ? (remaining === 1 ? 'beast' : 'beasts') : remaining === 1 ? 'foe' : 'foes';
-  return `${name} · Wave ${wave}/${WAVES_PER_ROOM} · ${remaining} ${foes} left`;
+  return `${name} · Wave ${wave}/${WAVES_PER_ROOM} · ${remaining} ${remaining === 1 ? 'foe' : 'foes'} left`;
 }

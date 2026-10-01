@@ -4,22 +4,27 @@ import type { Spit } from './enemies';
 import { glowTexture } from '../util/glow';
 import { q, type GlobTuple } from '../net/snapshot';
 
-/** Enemy projectiles: spitter globs, and the wind / water / fire elementals' bolts. */
-export type ProjectileKind = 'glob' | 'gust' | 'water' | 'fire';
-export const PROJECTILE_KINDS: ProjectileKind[] = ['glob', 'gust', 'water', 'fire'];
+/** Enemy projectiles: the elementals' gusts / water / fire, and the monsters' acid, rivets, arrows and spells. */
+export type ProjectileKind = 'acid' | 'gust' | 'water' | 'fire' | 'rivet' | 'arrow' | 'soul' | 'magic';
+export const PROJECTILE_KINDS: ProjectileKind[] = ['acid', 'gust', 'water', 'fire', 'rivet', 'arrow', 'soul', 'magic'];
+/** Kinds that fly point-first instead of tumbling. */
+const POINTED: ProjectileKind[] = ['rivet', 'arrow'];
 
 /** How each kind looks and flies. Damage and effects are applied by the game (see balance.ts). */
 export const PROJECTILES: Record<ProjectileKind, { speed: number; radius: number; color: number }> = {
-  glob: { speed: 11, radius: 0.3, color: 0x6fd0ff },
+  acid: { speed: 11, radius: 0.3, color: 0x9be04a },
   gust: { speed: 14, radius: 0.35, color: 0xdfeaff },
   water: { speed: 12, radius: 0.3, color: 0x2f9fd8 },
   fire: { speed: 13, radius: 0.32, color: 0xff7a2a },
+  rivet: { speed: 16, radius: 0.22, color: 0xc8ccd4 },
+  arrow: { speed: 17, radius: 0.22, color: 0xd8c8a0 },
+  soul: { speed: 10, radius: 0.32, color: 0x6ff0c8 },
+  magic: { speed: 12, radius: 0.3, color: 0xb070ff },
 };
 
 const LIFETIME = 2.2;
 const HEIGHT = 1.0;
 const POOL = 40;
-export const GLOB_COLOR = new THREE.Color(PROJECTILES.glob.color);
 
 interface Glob {
   mesh: THREE.Group;
@@ -50,12 +55,27 @@ export class Globs {
       s.scale.setScalar(size);
       return s;
     };
-    const glob = () => {
+    const orb = (kind: ProjectileKind, core: number, size: number, glowSize: number) => {
       const g = new THREE.Group();
       g.add(
-        new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 1), new THREE.MeshStandardMaterial({ color: 0x5cc8ff, emissive: GLOB_COLOR, emissiveIntensity: 0.8, flatShading: true })),
-        glow(PROJECTILES.glob.color, 1.6),
+        new THREE.Mesh(new THREE.IcosahedronGeometry(size, 1), new THREE.MeshStandardMaterial({ color: core, emissive: PROJECTILES[kind].color, emissiveIntensity: 0.9, flatShading: true })),
+        glow(PROJECTILES[kind].color, glowSize),
       );
+      return g;
+    };
+    const rivet = () => {
+      const g = new THREE.Group();
+      const metal = new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.8, roughness: 0.3, flatShading: true });
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.4, 6).rotateX(Math.PI / 2), metal));
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 8).rotateX(Math.PI / 2).translate(0, 0, -0.2), metal));
+      g.add(glow(0xfff0c0, 0.6));
+      return g;
+    };
+    const arrow = () => {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 5).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x7a5a32 })));
+      g.add(new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 5).rotateX(Math.PI / 2).translate(0, 0, 0.55), new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.6 })));
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.18).translate(0, 0, -0.45), new THREE.MeshStandardMaterial({ color: 0xe8e0d0 })));
       return g;
     };
     const gust = () => {
@@ -89,11 +109,20 @@ export class Globs {
     };
     for (let i = 0; i < POOL; i++) {
       const mesh = new THREE.Group();
-      const looks = { glob: glob(), gust: gust(), water: water(), fire: fire() };
+      const looks = {
+        acid: orb('acid', 0x7bc23a, 0.3, 1.4),
+        gust: gust(),
+        water: water(),
+        fire: fire(),
+        rivet: rivet(),
+        arrow: arrow(),
+        soul: orb('soul', 0xbff8e8, 0.26, 1.8),
+        magic: orb('magic', 0xd8b0ff, 0.26, 1.6),
+      };
       for (const l of Object.values(looks)) mesh.add(l);
       mesh.visible = false;
       this.group.add(mesh);
-      this.globs.push({ mesh, looks, kind: 'glob', dirX: 0, dirZ: 0, life: 0, active: false });
+      this.globs.push({ mesh, looks, kind: 'acid', dirX: 0, dirZ: 0, life: 0, active: false });
     }
   }
 
@@ -109,7 +138,7 @@ export class Globs {
     g.life = LIFETIME;
     g.dirX = spit.dirX;
     g.dirZ = spit.dirZ;
-    this.show(g, spit.kind ?? 'glob');
+    this.show(g, spit.kind);
     g.mesh.position.set(spit.x, HEIGHT, spit.z);
     g.mesh.rotation.y = Math.atan2(spit.dirX, spit.dirZ);
     g.mesh.visible = true;
@@ -130,10 +159,13 @@ export class Globs {
       const g = this.globs[i];
       if (!g) continue;
       seen.add(i);
-      this.show(g, PROJECTILE_KINDS[k ?? 0] ?? 'glob');
+      const kind = PROJECTILE_KINDS[k ?? 0] ?? 'acid';
+      const was = g.mesh.visible && g.kind === kind ? { x: g.mesh.position.x, z: g.mesh.position.z } : null;
+      this.show(g, kind);
       g.mesh.visible = true;
       g.mesh.position.set(x, HEIGHT + Math.sin(time * 18 + i) * 0.06, z);
-      g.mesh.rotation.y = time * 6;
+      if (!POINTED.includes(kind)) g.mesh.rotation.y = time * 6;
+      else if (was && Math.hypot(x - was.x, z - was.z) > 0.01) g.mesh.rotation.y = Math.atan2(x - was.x, z - was.z);
     }
     this.globs.forEach((g, i) => {
       if (!seen.has(i)) g.mesh.visible = false;
@@ -191,7 +223,7 @@ export class Globs {
       p.x = bx;
       p.z = bz;
       p.y = HEIGHT + Math.sin(time * 18 + g.dirX * 10) * 0.06;
-      g.mesh.rotation.y += dt * (g.kind === 'gust' ? 14 : 6);
+      if (!POINTED.includes(g.kind)) g.mesh.rotation.y += dt * (g.kind === 'gust' ? 14 : 6);
     }
     return impacts;
   }

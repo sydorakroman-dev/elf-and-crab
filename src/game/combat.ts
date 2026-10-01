@@ -87,38 +87,6 @@ export function pickAimTarget(origin: Point, dx: number, dz: number, targets: re
   return best;
 }
 
-export interface WaveSpec {
-  small: number;
-  big: number;
-  /** Ranged slimes that keep their distance and spit globs (from wave 3). */
-  spitters: number;
-  /** Added to every slime's base speed (player walks at 7.5). */
-  speedBonus: number;
-  smallHp: number;
-  bigHp: number;
-  spitterHp: number;
-  /** Slimes that come through a gate together. */
-  packSize: number;
-  /** Seconds between packs. */
-  spawnInterval: number;
-}
-
-/** Everything that makes a wave harder. Tuned with the bot simulator (`npm run balance`); all values capped. */
-export function waveSpec(wave: number): WaveSpec {
-  const w = Math.max(1, wave);
-  return {
-    small: Math.min(30, Math.floor(3 + w * 3)), // levels can be fractional (room ramp); counts can't
-    big: Math.min(12, Math.floor(w * 0.8)),
-    spitters: Math.min(8, Math.floor(w / 3)),
-    speedBonus: Math.min(3, (w - 1) * 0.35),
-    smallHp: 10 * (1 + Math.floor((w - 1) / 5)),
-    bigHp: 10 * (4 + Math.floor((w - 1) / 3)),
-    spitterHp: 10 * (2 + Math.floor((w - 1) / 4)),
-    packSize: Math.min(5, 1 + Math.floor(w / 2)),
-    spawnInterval: Math.max(0.7, 1.6 - w * 0.1),
-  };
-}
-
 /**
  * Ranged enemies hold a distance band: +1 to close in (too far), -1 to back off (too close),
  * 0 to circle (in range).
