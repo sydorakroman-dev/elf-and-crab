@@ -68,7 +68,8 @@ export class Dungeon {
     // Far enough in that the camera behind the elf can sit up over the south wall.
     this.entry.set(0, 0, h - 12);
     this.exit.set(0, 0, -h + 0.6);
-    this.gates.push(new THREE.Vector3(-(h - 1.5), 0, 0), new THREE.Vector3(h - 1.5, 0, 0));
+    if (!room.solidWest) this.gates.push(new THREE.Vector3(-(h - 1.5), 0, 0));
+    this.gates.push(new THREE.Vector3(h - 1.5, 0, 0));
     if (room.hasExit) this.gates.push(new THREE.Vector3(0, 0, -(h - 1.5)));
     scene.add(this.group);
   }
@@ -185,7 +186,7 @@ export class Dungeon {
 
     SIDES.forEach((side, k) => {
       rot.makeRotationY((k * Math.PI) / 2);
-      const throneWall = side === 'north' && !this.room.hasExit;
+      const throneWall = (side === 'north' && !this.room.hasExit) || (side === 'west' && !!this.room.solidWest);
       for (let row = 0; row < rows; row++) {
         const offset = row % 2 ? brickW / 2 : 0;
         for (let b = 0; b < perRow; b++) {
@@ -458,9 +459,16 @@ export class Dungeon {
         crown.position.set(0, 5.75, -1.3);
         throne.add(seat, back, backVelvet, crown);
         throne.traverse((o) => (o.castShadow = o.receiveShadow = true));
-        throne.position.set(0, 0, -h + 2.5);
+        if (room.hasExit) {
+          // Against the west wall, facing into the room (the north wall has the exit door).
+          throne.position.set(-h + 2.5, 0, 0);
+          throne.rotation.y = Math.PI / 2;
+          this.obstacles.push({ x: -h + 2.3, z: 0, radius: 3 });
+        } else {
+          throne.position.set(0, 0, -h + 2.5);
+          this.obstacles.push({ x: 0, z: -h + 2.3, radius: 3 });
+        }
         this.group.add(throne);
-        this.obstacles.push({ x: 0, z: -h + 2.3, radius: 3 });
         // A long red carpet from the entry to the throne.
         const carpet = new THREE.Mesh(new THREE.PlaneGeometry(4, h * 2 - 6).rotateX(-Math.PI / 2), velvet);
         carpet.position.set(0, 0.03, 1);
@@ -541,7 +549,8 @@ export class Dungeon {
     sc.far = 100;
     moon.shadow.bias = -0.0005;
     moon.shadow.normalBias = 0.04;
-    this.group.add(moon, new THREE.HemisphereLight(room.hemiSky, room.hemiGround, 0.9));
+    // Indoors gets a stronger fill so the dungeon reads clearly.
+    this.group.add(moon, new THREE.HemisphereLight(room.hemiSky, room.hemiGround, room.outdoor ? 0.9 : 1.5));
 
     if (room.outdoor) return; // daylight: no torches
     const bracketMat = new THREE.MeshStandardMaterial({ color: 0x2a2626, metalness: 0.5, roughness: 0.6 });
@@ -560,7 +569,7 @@ export class Dungeon {
         bracket.position.set(wx, 3.2, wz);
         bracket.rotation.y = -a;
         this.group.add(bracket);
-        this.addFlame(wx - nx * 0.2, 3.75, wz - nz * 0.2, 1.3, 14, 22, room.torchLight, room.torchFlame, 1);
+        this.addFlame(wx - nx * 0.2, 3.75, wz - nz * 0.2, 1.3, 20, 26, room.torchLight, room.torchFlame, 1);
       }
     }
   }

@@ -4,7 +4,7 @@ import { ROOMS, WAVES_PER_ROOM, isBossWave, roomWaveDifficulty, runLabel } from 
 describe('rooms', () => {
   it('has six rooms, starting in the woodland, only the last without an exit', () => {
     expect(ROOMS).toHaveLength(6);
-    expect(ROOMS[0].name).toBe('The Woodland');
+    expect(ROOMS.map((r) => r.name)).toEqual(['The Woodland', 'The Crystal Cave', 'The Crypt', 'The Throne Room', 'The Flooded Hall', 'The Lava Chamber']);
     expect(ROOMS.map((r) => r.hasExit)).toEqual([true, true, true, true, true, false]);
     for (const r of ROOMS) {
       expect(Number.isInteger(r.half)).toBe(true);
@@ -46,7 +46,7 @@ describe('rooms', () => {
 
   it('labels each phase of the run', () => {
     expect(runLabel(0, 2, 5, 'fight', null)).toBe('The Woodland · Wave 2/3 · 5 beasts left');
-    expect(runLabel(1, 2, 1, 'fight', null)).toBe('The Crypt · Wave 2/3 · 1 slime left');
+    expect(runLabel(1, 2, 1, 'fight', null)).toBe('The Crystal Cave · Wave 2/3 · 1 slime left');
     expect(runLabel(1, 3, 0, 'cleared', null)).toContain('north door');
     expect(runLabel(5, 3, 7, 'fight', 'The King Slime')).toContain('King Slime');
   });

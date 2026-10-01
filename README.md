@@ -30,11 +30,11 @@ comes along, and you're healed to full). The last room ends with the **King Slim
 | Room | |
 | --- | --- |
 | 1 · The Woodland | a sunny clearing: grass, low-poly trees, hedge walls, fireflies; forest beasts and the Crystal Bear |
-| 2 · The Crypt | warm torches, a central brazier, four pillars |
-| 3 · The Flooded Hall | two rows of pillars, cold blue light, puddles |
-| 4 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it), a ring of pillars |
-| 5 · The Crystal Cave | big, with glowing crystal clusters to fight around |
-| 6 · The Throne Room | a colonnade and a throne; waves 1–2, then the King Slime |
+| 2 · The Crystal Cave | big, with glowing crystal clusters to fight around |
+| 3 · The Crypt | warm torches, a central brazier, four pillars |
+| 4 · The Throne Room | a colonnade, a red carpet and a throne against the west wall |
+| 5 · The Flooded Hall | two rows of pillars, cold blue light, puddles |
+| 6 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it); waves 1–2, then the King Slime |
 
 ## Enemies
 
