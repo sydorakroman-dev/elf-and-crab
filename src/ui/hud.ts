@@ -54,9 +54,9 @@ export class Hud {
        <div class="overlay">
          <div class="card">
            <h1 data-title>Elf &amp; Crab</h1>
-           <p data-message>Slimes are pouring out of the dungeon gates.<br/>Hold them off with your bow — alone, or with a friend as your familiar.</p>
+           <p data-message>Slimes are pouring out of every gate. Fight your way from the woodland down through the dungeon to the King Slime's throne — alone, or with a friend as your familiar.</p>
            <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
-           <button type="button" data-play>Enter the dungeon</button>
+           <button type="button" data-play>Begin the hunt</button>
            <p class="best" data-best hidden></p>
            <div class="invite" data-invite>
              <canvas class="qr" data-qr width="112" height="112" hidden></canvas>

@@ -1,6 +1,6 @@
 /** The five rooms of the dungeon run, as data. The Dungeon builds whichever one is current. */
 
-export type RoomFeature = 'brazier' | 'puddles' | 'lava' | 'crystals' | 'throne';
+export type RoomFeature = 'woodland' | 'brazier' | 'puddles' | 'lava' | 'crystals' | 'throne';
 
 export interface Hsl {
   h: number;
@@ -17,6 +17,10 @@ export interface RoomDef {
   feature: RoomFeature;
   /** Crystal clusters (crystal cave): positions; they block like pillars. */
   crystals?: [number, number][];
+  /** Trees (woodland): positions; they block like pillars. */
+  trees?: [number, number][];
+  /** Outdoors: hedge walls with wooden gates, daylight and open sky instead of brick and torches. */
+  outdoor?: boolean;
   torchLight: number;
   torchFlame: number;
   floor: Hsl;
@@ -32,6 +36,25 @@ export interface RoomDef {
 }
 
 export const ROOMS: RoomDef[] = [
+  {
+    name: 'The Woodland',
+    half: 24,
+    pillars: [],
+    feature: 'woodland',
+    trees: [[-12, -12], [11, -14], [-15, 2], [15, -2], [-8, 4], [9, 5], [-13, 15], [14, 14], [0, -6]],
+    outdoor: true,
+    torchLight: 0xffe7b0,
+    torchFlame: 0xfff3c0,
+    floor: { h: 0.27, s: 0.42, l: 0.3 },
+    wall: { h: 0.3, s: 0.45, l: 0.22 },
+    stone: 0x6b4a2b,
+    fog: 0x9fcbe0,
+    moon: 0xfff1d6,
+    moonIntensity: 2.4,
+    hemiSky: 0xbfe3ff,
+    hemiGround: 0x3a5a2a,
+    hasExit: true,
+  },
   {
     name: 'The Crypt',
     half: 24,
@@ -124,8 +147,8 @@ export const WAVES_PER_ROOM = 3;
 
 /** Difficulty level for wave `wave` (1-based) of room `room` (0-based), fed to waveSpec(). */
 export function roomWaveDifficulty(room: number, wave: number): number {
-  // Smooth ramp over the whole run: 1, 1.8, 2.6 | 2.6, 3.4, 4.2 | … | 7.4, 8.2 (+ boss).
-  return 1 + room * 1.6 + (wave - 1) * 0.8;
+  // Smooth ramp over the whole run: 1, 1.65, 2.3 | 2.3, 2.95, 3.6 | … | 7.5, 8.15 (+ boss).
+  return 1 + room * 1.3 + (wave - 1) * 0.65;
 }
 
 /** The final room's last wave is the King Slime. */

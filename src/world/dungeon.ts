@@ -48,13 +48,14 @@ export class Dungeon {
   private exitLight: THREE.PointLight | null = null;
   private exitOpen = 0; // 0 closed → 1 open (animated)
   private exitTarget = 0;
+  private readonly fireflies: { sprite: THREE.Sprite; base: THREE.Vector3; seed: number }[] = [];
 
   constructor(scene: THREE.Scene, room: RoomDef, shadowMapSize = 2048) {
     this.room = room;
     this.half = room.half;
     const rng = mulberry32(room.half * 7919 + room.pillars.length);
     scene.background = new THREE.Color(room.fog);
-    scene.fog = new THREE.Fog(room.fog, 30, 80);
+    scene.fog = room.outdoor ? new THREE.Fog(room.fog, 45, 120) : new THREE.Fog(room.fog, 30, 80);
 
     this.buildFloor(rng);
     this.buildWalls(rng);
@@ -90,6 +91,11 @@ export class Dungeon {
       f.sprite.scale.setScalar(f.sprite.userData.size * (0.9 + flicker * 0.15));
     }
     for (const [i, m] of this.glowing.entries()) m.emissiveIntensity = (m.userData.base as number) * (0.85 + Math.sin(time * 1.7 + i) * 0.15);
+    for (const f of this.fireflies) {
+      const t = time * 0.6 + f.seed;
+      f.sprite.position.set(f.base.x + Math.sin(t * 1.3) * 1.5, f.base.y + Math.sin(t * 2.1) * 0.5, f.base.z + Math.cos(t * 0.9) * 1.5);
+      f.sprite.material.opacity = 0.35 + 0.65 * Math.max(0, Math.sin(t * 3 + f.seed * 5));
+    }
 
     this.exitOpen += (this.exitTarget - this.exitOpen) * (1 - Math.exp(-3 * dt));
     if (this.exitBars) this.exitBars.position.y = this.exitOpen * (GATE_HEIGHT - 0.3);
@@ -135,7 +141,9 @@ export class Dungeon {
       for (let iz = 0; iz < n; iz++) {
         const x = -h + TILE / 2 + ix * TILE;
         const z = -h + TILE / 2 + iz * TILE;
-        m.makeRotationY((rng() - 0.5) * 0.03).setPosition(x, -0.15 + (rng() - 0.5) * 0.04, z);
+        // Grass is lumpier than flagstones.
+        const bump = this.room.outdoor ? 0.1 : 0.04;
+        m.makeRotationY((rng() - 0.5) * 0.03).setPosition(x, -0.15 + (rng() - 0.5) * bump, z);
         tiles.setMatrixAt(i, m);
         tiles.setColorAt(i, c.setHSL(floor.h + (rng() - 0.5) * 0.05, floor.s + (rng() - 0.5) * 0.06, floor.l + (rng() - 0.5) * 0.07));
         i++;
@@ -143,7 +151,10 @@ export class Dungeon {
     }
     tiles.receiveShadow = true;
     // Dark grout showing between the tiles.
-    const grout = new THREE.Mesh(new THREE.BoxGeometry(h * 2 + 4, 0.2, h * 2 + 4), new THREE.MeshStandardMaterial({ color: 0x0e0c10, roughness: 1 }));
+    const grout = new THREE.Mesh(
+      new THREE.BoxGeometry(h * 2 + 4, 0.2, h * 2 + 4),
+      new THREE.MeshStandardMaterial({ color: this.room.outdoor ? 0x22381a : 0x0e0c10, roughness: 1 }),
+    );
     grout.position.y = -0.25;
     this.group.add(tiles, grout);
   }
@@ -167,7 +178,10 @@ export class Dungeon {
     let count = 0;
     const voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const trimMat = new THREE.MeshStandardMaterial({ color: this.room.stone, roughness: 0.9, flatShading: true });
-    const ironMat = new THREE.MeshStandardMaterial({ color: 0x26221f, metalness: 0.6, roughness: 0.5, flatShading: true });
+    const ironMat = this.room.outdoor
+      ? new THREE.MeshStandardMaterial({ color: 0x5a3c22, roughness: 0.9, flatShading: true }) // wooden gate
+      : new THREE.MeshStandardMaterial({ color: 0x26221f, metalness: 0.6, roughness: 0.5, flatShading: true });
+    const hedge = this.room.outdoor;
 
     SIDES.forEach((side, k) => {
       rot.makeRotationY((k * Math.PI) / 2);
@@ -179,7 +193,16 @@ export class Dungeon {
           if (x - brickW / 2 > span) continue;
           // Leave an opening for the gate (the throne wall is solid).
           if (!throneWall && row < GATE_HEIGHT && Math.abs(x) - brickW / 2 < GATE_HALF_WIDTH) continue;
-          m.makeTranslation(x, row * brickH + brickH / 2, -(h + WALL_DEPTH / 2)).premultiply(rot);
+          if (hedge) {
+            // Leafy, uneven blocks for a hedge.
+            const s = 1 + rng() * 0.25;
+            m.makeRotationFromEuler(new THREE.Euler((rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3));
+            m.scale(new THREE.Vector3(s, s, 1 + rng() * 0.3));
+            m.setPosition(x, row * brickH + brickH / 2, -(h + WALL_DEPTH / 2 - (rng() - 0.5) * 0.3));
+            m.premultiply(rot);
+          } else {
+            m.makeTranslation(x, row * brickH + brickH / 2, -(h + WALL_DEPTH / 2)).premultiply(rot);
+          }
           bricks.setMatrixAt(count, m);
           bricks.setColorAt(count, c.setHSL(wall.h + (rng() - 0.5) * 0.08, wall.s + (rng() - 0.5) * 0.05, wall.l + (rng() - 0.5) * 0.08 - (row === 0 ? 0.03 : 0)));
           count++;
@@ -266,6 +289,75 @@ export class Dungeon {
   private buildFeature(rng: () => number): void {
     const room = this.room;
     switch (room.feature) {
+      case 'woodland': {
+        // Low-poly trees (trunk + stacked canopy), like the card art.
+        const bark = new THREE.MeshStandardMaterial({ color: 0x7a4a26, flatShading: true, roughness: 0.9 });
+        const leafColors = [0x4f8f3a, 0x5fa044, 0x3f7a32];
+        for (const [x, z] of room.trees ?? []) {
+          const tree = new THREE.Group();
+          const height = 3 + rng() * 1.5;
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, height, 7).translate(0, height / 2, 0), bark);
+          tree.add(trunk);
+          const leaf = new THREE.MeshStandardMaterial({ color: leafColors[Math.floor(rng() * leafColors.length)], flatShading: true, roughness: 0.85 });
+          for (let i = 0; i < 3; i++) {
+            const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(1.9 - i * 0.4, 0), leaf);
+            blob.position.set((rng() - 0.5) * 0.8, height + 0.6 + i * 1.1, (rng() - 0.5) * 0.8);
+            blob.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+            tree.add(blob);
+          }
+          tree.traverse((o) => (o.castShadow = o.receiveShadow = true));
+          tree.position.set(x, 0, z);
+          tree.rotation.y = rng() * Math.PI * 2;
+          this.group.add(tree);
+          this.obstacles.push({ x, z, radius: 0.9 });
+        }
+        // Undergrowth: grass tufts, mushrooms and flowers (decoration only).
+        const tufts = new THREE.InstancedMesh(
+          new THREE.ConeGeometry(0.12, 0.5, 3).translate(0, 0.25, 0),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }),
+          220,
+        );
+        const m = new THREE.Matrix4();
+        const c = new THREE.Color();
+        for (let i = 0; i < tufts.count; i++) {
+          const x = (rng() * 2 - 1) * (this.half - 1);
+          const z = (rng() * 2 - 1) * (this.half - 1);
+          m.compose(new THREE.Vector3(x, 0, z), new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * 0.5, rng() * 3, (rng() - 0.5) * 0.5)), new THREE.Vector3(1, 0.6 + rng(), 1));
+          tufts.setMatrixAt(i, m);
+          tufts.setColorAt(i, c.setHSL(0.26 + rng() * 0.06, 0.5, 0.25 + rng() * 0.12));
+        }
+        this.group.add(tufts);
+        const capMat = new THREE.MeshStandardMaterial({ color: 0xd8483a, flatShading: true });
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0xf2e6cc, flatShading: true });
+        const petal = [0xffd34d, 0xffffff, 0xd98cff].map((col) => new THREE.MeshStandardMaterial({ color: col, flatShading: true }));
+        for (let i = 0; i < 26; i++) {
+          const x = (rng() * 2 - 1) * (this.half - 2);
+          const z = (rng() * 2 - 1) * (this.half - 2);
+          const bit = new THREE.Group();
+          if (i % 2 === 0) {
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.3, 5).translate(0, 0.15, 0), stemMat);
+            const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
+            cap.position.y = 0.28;
+            bit.add(stem, cap);
+          } else {
+            const flower = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), petal[i % 3]);
+            flower.position.y = 0.3;
+            bit.add(flower);
+          }
+          bit.position.set(x, 0, z);
+          this.group.add(bit);
+        }
+        // Fireflies drifting about.
+        const glowMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xf4ff9a, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+        for (let i = 0; i < 28; i++) {
+          const sprite = new THREE.Sprite(glowMat.clone());
+          sprite.scale.setScalar(0.35);
+          const base = new THREE.Vector3((rng() * 2 - 1) * (this.half - 3), 0.8 + rng() * 2.5, (rng() * 2 - 1) * (this.half - 3));
+          this.fireflies.push({ sprite, base, seed: rng() * 10 });
+          this.group.add(sprite);
+        }
+        break;
+      }
       case 'brazier': {
         const iron = new THREE.MeshStandardMaterial({ color: 0x2a2626, roughness: 0.6, metalness: 0.5, flatShading: true, side: THREE.DoubleSide });
         const bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.7, 0.7, 10, 1, true), iron);
@@ -451,6 +543,7 @@ export class Dungeon {
     moon.shadow.normalBias = 0.04;
     this.group.add(moon, new THREE.HemisphereLight(room.hemiSky, room.hemiGround, 0.9));
 
+    if (room.outdoor) return; // daylight: no torches
     const bracketMat = new THREE.MeshStandardMaterial({ color: 0x2a2626, metalness: 0.5, roughness: 0.6 });
     const bracketGeo = new THREE.BoxGeometry(0.25, 0.7, 0.5);
     // Two torches per wall.

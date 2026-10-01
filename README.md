@@ -24,16 +24,17 @@ Aim assist is wider on touch.
 
 ## The run
 
-Five rooms, three waves each. Clear a room and its north door opens — walk through to the next one (your familiar
+Six rooms, three waves each. Clear a room and its north door opens — walk through to the next one (your familiar
 comes along, and you're healed to full). The last room ends with the **King Slime**; beat it to win.
 
 | Room | |
 | --- | --- |
-| 1 · The Crypt | warm torches, a central brazier, four pillars |
-| 2 · The Flooded Hall | two rows of pillars, cold blue light, puddles |
-| 3 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it), a ring of pillars |
-| 4 · The Crystal Cave | big, with glowing crystal clusters to fight around |
-| 5 · The Throne Room | a colonnade and a throne; waves 1–2, then the King Slime |
+| 1 · The Woodland | a sunny clearing: grass, low-poly trees, hedge walls, fireflies |
+| 2 · The Crypt | warm torches, a central brazier, four pillars |
+| 3 · The Flooded Hall | two rows of pillars, cold blue light, puddles |
+| 4 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it), a ring of pillars |
+| 5 · The Crystal Cave | big, with glowing crystal clusters to fight around |
+| 6 · The Throne Room | a colonnade and a throne; waves 1–2, then the King Slime |
 
 ## Enemies
 
@@ -104,7 +105,7 @@ URL; free instances sleep when idle and take ~30-60 s to wake). The GitHub Pages
 
 ## How it's put together
 
-- `src/world/rooms.ts` — the five rooms and the run's progression; `src/world/dungeon.ts` builds a room: instanced floor
+- `src/world/rooms.ts` — the six rooms and the run's progression; `src/world/dungeon.ts` builds a room: instanced floor
   tiles and wall bricks, gates and doors, pillars, its centrepiece, torches.
 - `src/player/elf.ts`, `src/player/crab.ts` — the two glTF models (`public/models/`). They're static, unrigged
   meshes, so `src/player/rig.ts` groups their named parts under pivots and the classes animate them in code.
