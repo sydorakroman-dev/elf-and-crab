@@ -52,7 +52,7 @@ export class Hud {
            <div class="score" data-score>0</div>
          </div>
        </div>
-       <div class="overlay landing">
+       <div class="overlay">
          <div class="card">
            <h1 data-title>Elf &amp; Crab</h1>
            <p data-message>Goblins, the undead, orcs and worse are pouring out of every gate. Fight from the woodland down through the dungeon to the Inferno in the lava chamber — alone, or with a friend as your familiar.</p>
@@ -87,7 +87,15 @@ export class Hud {
     this.fade = new Fade(root);
     this.hud = root.querySelector('.hud')!;
     this.overlay = root.querySelector('.overlay')!;
-    this.overlay.style.setProperty('--landing-art', `url(${import.meta.env.BASE_URL}art/landing.jpg)`);
+    // Painted title art, once (and only if) it loads; until then the title keeps the plain dim.
+    const landingUrl = `${import.meta.env.BASE_URL}art/landing.jpg`;
+    const landing = new Image();
+    landing.onload = () => {
+      if (this.overlay.dataset.started) return;
+      this.overlay.style.setProperty('--landing-art', `url(${landingUrl})`);
+      this.overlay.classList.add('landing');
+    };
+    landing.src = landingUrl;
     this.title = root.querySelector('[data-title]')!;
     this.message = root.querySelector('[data-message]')!;
     this.button = root.querySelector('[data-play]')!;
@@ -133,7 +141,10 @@ export class Hud {
   setPaused(paused: boolean, inGame: boolean): void {
     this.overlay.hidden = !paused;
     // The painted landing art is for the title screen only; pause and game-over use the plain dim.
-    if (!paused) this.overlay.classList.remove('landing');
+    if (!paused) {
+      this.overlay.dataset.started = '1';
+      this.overlay.classList.remove('landing');
+    }
     if (paused) this.setStartPrompt(false);
     if (!paused) this.hud.hidden = false;
     if (paused && inGame) {

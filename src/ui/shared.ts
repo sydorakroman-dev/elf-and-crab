@@ -101,6 +101,10 @@ export class BossBar {
   }
 }
 
+function roomArtUrl(room: (typeof ROOMS)[number]): string {
+  return `${import.meta.env.BASE_URL}art/${room.scene ?? room.art}.jpg`;
+}
+
 /** Full-screen fade to black between rooms, with the next room's intro card (its foes' illustration). */
 export class Fade {
   private readonly el: HTMLElement;
@@ -118,6 +122,8 @@ export class Fade {
     );
     this.el = root.querySelector('.fade')!;
     this.card = this.el.querySelector('.room-card')!;
+    // Fetch every room's art up front, so a card never waits on (or flashes) a half-loaded image.
+    for (const room of ROOMS) new Image().src = roomArtUrl(room);
   }
 
   /** `card`: index of the room whose card to show on the black (-1: just black). */
@@ -130,8 +136,14 @@ export class Fade {
     const room = ROOMS[card];
     const boss = room.waves[WAVES_PER_ROOM - 1].boss;
     const img = this.card.querySelector<HTMLImageElement>('.rc-art')!;
-    img.src = `${import.meta.env.BASE_URL}art/${room.scene ?? room.art}.jpg`;
+    // Hidden until the new picture is decoded — otherwise the previous room's art shows for a moment.
+    img.style.visibility = 'hidden';
+    img.src = roomArtUrl(room);
     img.classList.toggle('scene', !!room.scene);
+    const reveal = () => {
+      if (this.shown === card) img.style.visibility = '';
+    };
+    img.decode().then(reveal, reveal);
     this.card.querySelector('.rc-step')!.textContent = card === ROOMS.length - 1 ? `Room ${card + 1} of ${ROOMS.length} · the last one` : `Room ${card + 1} of ${ROOMS.length}`;
     this.card.querySelector('.rc-name')!.textContent = room.name;
     this.card.querySelector('.rc-who')!.textContent = `${room.group} · Boss: ${boss ? enemyName(boss) : '—'}`;
@@ -145,7 +157,7 @@ export function showLoading(root: HTMLElement): () => void {
   const room = pool[Math.floor(Math.random() * pool.length)];
   root.insertAdjacentHTML(
     'beforeend',
-    `<div class="loading"><img class="${room.scene ? 'scene' : ''}" src="${import.meta.env.BASE_URL}art/${room.scene ?? room.art}.jpg" alt="" /><p>Gathering the monsters…</p></div>`,
+    `<div class="loading"><img class="${room.scene ? 'scene' : ''}" src="${roomArtUrl(room)}" alt="" /><p>Gathering the monsters…</p></div>`,
   );
   const el = root.querySelector<HTMLElement>('.loading')!;
   return () => {
