@@ -164,6 +164,7 @@ export const ROOMS: RoomDef[] = [
     shape: 'octagon',
     group: 'Goblins',
     art: 'goblins',
+    scene: 'scene-flooded-hall',
     waves: [
       { mix: { brawler: 8, riveter: 3, rotor: 2 } },
       { mix: { brawler: 8, rotor: 3, riveter: 3, lobber: 2, tinkerer: 2 } },
