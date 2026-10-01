@@ -23,6 +23,7 @@ const MIME: Record<string, string> = {
   '.json': 'application/json',
   '.glb': 'model/gltf-binary',
   '.png': 'image/png',
+  '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
 };

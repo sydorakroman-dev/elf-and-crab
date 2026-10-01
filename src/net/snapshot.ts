@@ -4,13 +4,15 @@
  * Arrays instead of objects for the many-entity lists keep each snapshot small.
  */
 
+import type { ZoneTuple } from '../game/zones';
+
 export type GameState = 'ready' | 'playing' | 'paused' | 'over';
 
 export const SLIME_KIND_CODES = ['small', 'big', 'spitter'] as const;
 export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart'] as const;
 
-/** [id, kind, x, z, yaw, y, sx, sy, sz, flash, stun, death] */
-export type SlimeTuple = [number, number, number, number, number, number, number, number, number, number, number, number];
+/** [id, kind, x, z, yaw, y, sx, sy, sz, flash, stun, death, calm] */
+export type SlimeTuple = [number, number, number, number, number, number, number, number, number, number, number, number, number];
 /** [poolIndex, x, z, yaw, pierce(0/1)] */
 export type ArrowTuple = [number, number, number, number, number];
 /** [poolIndex, x, z] */
@@ -35,12 +37,16 @@ export interface HeroState {
   v: number;
 }
 
-export interface CrabState {
+export interface FamState {
+  /** Creature: index into FAMILIAR_KINDS. */
+  k: number;
   x: number;
   z: number;
   /** Heading yaw. */
   h: number;
   s: number;
+  /** Height above the floor (pouncing). */
+  y: number;
 }
 
 /** One-off things that happened, so the tablet can play effects and sounds. */
@@ -50,8 +56,13 @@ export type GameEvent =
   | { e: 'spit' }
   | { e: 'twang' }
   | { e: 'glob'; x: number; z: number }
-  | { e: 'burst'; x: number; z: number }
-  | { e: 'pinch' }
+  /** A familiar spell went off (id: index into SPELL_IDS). */
+  | { e: 'spell'; id: number; x: number; z: number }
+  | { e: 'bite' }
+  | { e: 'land'; x: number; z: number }
+  | { e: 'heal'; x: number; z: number }
+  /** The familiar creature appeared / changed / left. */
+  | { e: 'poof'; x: number; z: number }
   | { e: 'pickup'; p: number; x: number; z: number }
   | { e: 'hurt' }
   | { e: 'shield'; x: number; z: number }
@@ -62,11 +73,12 @@ export interface Snapshot {
   t: number;
   state: GameState;
   hero: HeroState;
-  crab: CrabState | null;
+  fam: FamState | null;
   slimes: SlimeTuple[];
   arrows: ArrowTuple[];
   globs: GlobTuple[];
   pickups: PickupTuple[];
+  zones: ZoneTuple[];
   wave: number;
   remaining: number;
   health: number;
@@ -74,8 +86,8 @@ export interface Snapshot {
   score: number;
   /** [power, secondsLeft] */
   powers: [number, number][];
-  /** Seconds until Magic Burst is ready. */
-  burstCd: number;
+  /** Familiar spell cooldowns: [spell index, seconds left]. */
+  cds: [number, number][];
   ev: GameEvent[];
 }
 
@@ -109,7 +121,7 @@ export function interpolate(a: Snapshot, b: Snapshot, t: number): Snapshot {
   const slimes = b.slimes.map((s) => {
     const p = prevSlimes.get(s[0]);
     if (!p) return s;
-    return [s[0], s[1], lerp(p[2], s[2], k), lerp(p[3], s[3], k), lerpAngle(p[4], s[4], k), lerp(p[5], s[5], k), lerp(p[6], s[6], k), lerp(p[7], s[7], k), lerp(p[8], s[8], k), lerp(p[9], s[9], k), s[10], lerp(p[11], s[11], k)] as SlimeTuple;
+    return [s[0], s[1], lerp(p[2], s[2], k), lerp(p[3], s[3], k), lerpAngle(p[4], s[4], k), lerp(p[5], s[5], k), lerp(p[6], s[6], k), lerp(p[7], s[7], k), lerp(p[8], s[8], k), lerp(p[9], s[9], k), s[10], lerp(p[11], s[11], k), s[12]] as SlimeTuple;
   });
 
   const prevArrows = byId(a.arrows);
@@ -139,12 +151,20 @@ export function interpolate(a: Snapshot, b: Snapshot, t: number): Snapshot {
     hero.z = b.hero.z;
   }
 
-  let crab = b.crab;
-  if (a.crab && b.crab && Math.hypot(a.crab.x - b.crab.x, a.crab.z - b.crab.z) <= TELEPORT) {
-    crab = { x: lerp(a.crab.x, b.crab.x, k), z: lerp(a.crab.z, b.crab.z, k), h: lerpAngle(a.crab.h, b.crab.h, k), s: lerp(a.crab.s, b.crab.s, k) };
+  let fam = b.fam;
+  // Pounces cover up to 10 m, so allow a larger jump before treating it as a teleport.
+  if (a.fam && b.fam && a.fam.k === b.fam.k && Math.hypot(a.fam.x - b.fam.x, a.fam.z - b.fam.z) <= TELEPORT * 2) {
+    fam = {
+      k: b.fam.k,
+      x: lerp(a.fam.x, b.fam.x, k),
+      z: lerp(a.fam.z, b.fam.z, k),
+      h: lerpAngle(a.fam.h, b.fam.h, k),
+      s: lerp(a.fam.s, b.fam.s, k),
+      y: lerp(a.fam.y, b.fam.y, k),
+    };
   }
 
-  return { ...b, t: lerp(a.t, b.t, k), hero, crab, slimes, arrows, globs, ev: [] };
+  return { ...b, t: lerp(a.t, b.t, k), hero, fam, slimes, arrows, globs, ev: [] };
 }
 
 /**

@@ -23,6 +23,7 @@ const mouthGeo = new THREE.TorusGeometry(0.16, 0.05, 6, 10);
 const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
 const pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
 const STUN_TINT = new THREE.Color(0xd8ecff);
+const CALM_TINT = new THREE.Color(0xf3c6ff); // soft lavender-pink: sleepy, not angry
 
 /**
  * Everything needed to draw a slime at one moment. The simulation produces it every step; the
@@ -43,6 +44,8 @@ export interface SlimePose {
   stun: number;
   /** Death shrink 0 (alive) → 1 (gone). */
   death: number;
+  /** 1 while calmed (wandering off, harmless). */
+  calm: number;
 }
 
 /** A slime's meshes, driven entirely by a SlimePose. Shared by the game and the familiar view. */
@@ -100,9 +103,11 @@ export class SlimeVisual {
     this.material.emissiveIntensity = p.flash * 1.5;
     const stunned = p.stun > 0.5 && p.death === 0;
     this.material.color.copy(this.baseColor);
+    const calm = !stunned && p.calm > 0.5 && p.death === 0;
     if (stunned) this.material.color.lerp(STUN_TINT, 0.55);
+    else if (calm) this.material.color.lerp(CALM_TINT, 0.65);
     this.stars.visible = stunned;
-    this.body.rotation.z = stunned ? Math.sin(time * 11) * 0.18 : 0;
+    this.body.rotation.z = stunned ? Math.sin(time * 11) * 0.18 : calm ? Math.sin(time * 2.5) * 0.08 : 0;
     if (stunned) this.stars.rotation.y = time * 4;
   }
 }
@@ -136,7 +141,11 @@ export class Slime {
   private flash = 0;
   private deathTimer = 0;
   private stunTimer = 0;
+  private calmTimer = 0;
+  private wanderAngle = Math.random() * Math.PI * 2;
   private time = 0;
+  /** Speed multiplier for this step (set by area effects like the Soothing Spring; resets after each update). */
+  slow = 1;
   private spitTimer = SPIT_INTERVAL * (0.5 + Math.random() * 0.5);
   private windup = 0; // > 0 while swelling up to spit
   private strafeSign = Math.random() < 0.5 ? -1 : 1;
@@ -152,7 +161,7 @@ export class Slime {
     this.push = k.push;
     this.color = new THREE.Color(k.color);
     this.visual = new SlimeVisual(kind);
-    this.pose = { x, z, yaw: 0, y: 0, sx: 1, sy: 1, sz: 1, flash: 0, stun: 0, death: 0 };
+    this.pose = { x, z, yaw: 0, y: 0, sx: 1, sy: 1, sz: 1, flash: 0, stun: 0, death: 0, calm: 0 };
     this.visual.apply(this.pose, 0);
   }
 
@@ -174,6 +183,15 @@ export class Slime {
 
   get stunned(): boolean {
     return this.stunTimer > 0;
+  }
+
+  get calmed(): boolean {
+    return this.calmTimer > 0;
+  }
+
+  /** Harmless right now (stunned or calmed): no contact damage. */
+  get harmless(): boolean {
+    return this.stunned || this.calmed;
   }
 
   /** Teleport (used by tests and spawning). */
@@ -200,13 +218,23 @@ export class Slime {
     this.windup = 0; // an interrupted spit is lost
   }
 
+  /** Makes the slime lose interest for `seconds`: it wanders away, won't spit or hurt anyone. */
+  calm(seconds: number): void {
+    if (this.dying) return;
+    this.calmTimer = Math.max(this.calmTimer, seconds);
+    this.windup = 0;
+    this.wanderAngle = Math.random() * Math.PI * 2;
+  }
+
   /** Moves the slime; returns a spit when a spitter lets one fly this step. */
   update(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit | null {
     this.time += dt;
     const spit = this.step(dt, target, others, obstacles, half);
     this.pose.flash = this.flash;
     this.pose.stun = this.stunTimer > 0 ? 1 : 0;
+    this.pose.calm = this.calmTimer > 0 ? 1 : 0;
     this.visual.apply(this.pose, this.time);
+    this.slow = 1;
     return spit;
   }
 
@@ -240,9 +268,11 @@ export class Slime {
     const dist = Math.hypot(tx, tz) || 1;
     tx /= dist;
     tz /= dist;
+    const calm = this.calmTimer > 0;
+    if (calm) this.calmTimer = Math.max(0, this.calmTimer - dt);
 
     // Spitters freeze and swell up, then spit at where the target is now.
-    if (this.kind === 'spitter') {
+    if (this.kind === 'spitter' && !calm) {
       if (this.windup > 0) {
         this.windup -= dt;
         const swell = 1 - this.windup / SPIT_WINDUP;
@@ -270,10 +300,14 @@ export class Slime {
     const air = airborne ? Math.sin((t / 0.6) * Math.PI) : 0;
     const squash = airborne ? 0 : Math.sin(((t - 0.6) / 0.4) * Math.PI);
 
-    // Melee slimes chase; spitters hold a distance band and circle inside it.
+    // Melee slimes chase; spitters hold a distance band and circle inside it; calm ones meander off.
     let dx = tx;
     let dz = tz;
-    if (this.kind === 'spitter') {
+    if (calm) {
+      this.wanderAngle += (Math.random() - 0.5) * dt * 3;
+      dx = -tx * 0.6 + Math.sin(this.wanderAngle) * 0.8;
+      dz = -tz * 0.6 + Math.cos(this.wanderAngle) * 0.8;
+    } else if (this.kind === 'spitter') {
       const intent = rangeIntent(dist, SPIT_RANGE_MIN, SPIT_RANGE_MAX);
       if (intent === 0) {
         dx = -tz * this.strafeSign;
@@ -297,14 +331,14 @@ export class Slime {
       }
     }
     const len = Math.hypot(dx, dz) || 1;
-    const speed = this.speed * (airborne ? 1.25 : 0.25);
+    const speed = this.speed * (airborne ? 1.25 : 0.25) * this.slow * (calm ? 0.45 : 1);
     p.x += ((dx / len) * speed + this.knock.x) * dt;
     p.z += ((dz / len) * speed + this.knock.y) * dt;
     this.knock.multiplyScalar(Math.exp(-8 * dt));
     pushOutOfCircles(p, this.radius, obstacles);
     clampToArena(p, half, this.radius);
 
-    p.yaw = Math.atan2(target.x - p.x, target.z - p.z);
+    p.yaw = calm ? Math.atan2(dx, dz) : Math.atan2(target.x - p.x, target.z - p.z);
     p.y = air * 0.7;
     p.sx = p.sz = 1 + squash * 0.25 - air * 0.08;
     p.sy = 1 - squash * 0.3 + air * 0.12;
@@ -351,6 +385,13 @@ export class Enemies {
   stunAround(x: number, z: number, radius: number, seconds: number): Slime[] {
     const hit = this.slimes.filter((s) => s.alive && Math.hypot(s.x - x, s.z - z) <= radius + s.radius);
     for (const s of hit) s.stun(seconds);
+    return hit;
+  }
+
+  /** Calms every living slime within `radius` of (x, z); returns the slimes affected. */
+  calmAround(x: number, z: number, radius: number, seconds: number): Slime[] {
+    const hit = this.slimes.filter((s) => s.alive && Math.hypot(s.x - x, s.z - z) <= radius + s.radius);
+    for (const s of hit) s.calm(seconds);
     return hit;
   }
 

@@ -27,11 +27,21 @@ Aim assist is wider on touch.
 Two roles:
 
 - **Hero (the elf)** plays as usual on a computer (or phone). The title screen shows a room code and a QR code.
-- **Familiar (the crab)** scans the QR code or opens the link (`…/?join=CODE`) on a tablet, or types the code
-  under "Got a code?". The crab appears beside the elf. Tap or drag on the floor to move — the crab pinches any
-  slime it touches. **✨ Burst** stuns every slime around the crab for 2.5 s (12 s cooldown).
+- **Familiar** scans the QR code or opens the link (`…/?join=CODE`) on a tablet, or types the code under
+  "Got a code?", then **picks a creature**. Tap or drag on the floor to move — it bites any slime it touches.
+  Spell buttons have their own cooldowns. The creature can be changed between runs or while the elf is paused.
 
-Solo is just the elf; the crab only appears while a familiar is connected.
+| Familiar | Speed | Spells |
+| --- | --- | --- |
+| 🦀 Crab | medium | ✨ **Magic Burst** — stun every slime within 5.5 m for 2.5 s (12 s) · 🐚 **Shell Shield** — the elf gets a bubble that blocks the next hit (18 s) |
+| 🦫 Capybara | slow | ♨️ **Soothing Spring** — a 6 m pool for 6 s: slimes in it are 60% slower, the elf heals 1 heart in it (16 s) · 🌸 **Calm Aura** — slimes within 7 m stop chasing and wander off, harmless, for 5 s (14 s) |
+| 🐺 Wolf | fast | 🐾 **Pounce** — leap up to 10 m toward where you tapped, 2 damage to every slime on the way (8 s) |
+
+Solo is just the elf; the familiar only appears while a second player is connected.
+
+The capybara and wolf use placeholder low-poly bodies built in code. Drop `capybara.glb` / `wolf.glb` into
+`public/models/` and they're used automatically (scaled to fit and animated as a whole). Card art lives in
+`public/art/`.
 
 How it works: the hero's browser runs the game and streams snapshots (20/s) to the familiar, who sends back taps.
 The small Node server in `server/` only manages rooms and relays messages over WebSockets (`/ws`), and also serves
@@ -75,7 +85,8 @@ URL; free instances sleep when idle and take ~30-60 s to wake). The GitHub Pages
   meshes, so `src/player/rig.ts` groups their named parts under pivots and the classes animate them in code.
 - `server/` — room manager (`rooms.ts`, unit tested) and the HTTP + WebSocket server (`index.ts`).
 - `src/net/` — wire protocol, reconnecting client sessions, and snapshots with interpolation (unit tested).
-- `src/familiar/` — the familiar's tablet view: top-down camera, tap-to-move, Burst button, HUD.
+- `src/familiar/` — the familiar's tablet view: creature picker, top-down camera, tap-to-move, spell buttons, HUD.
+- `src/game/familiars.ts` — the creature roster and spells (data + pure math); `src/player/beasts.ts` — their bodies.
 - `src/player/controls.ts` — third-person camera and movement (mouse or touch input); `src/ui/touch.ts` — on-screen touch controls.
 - `src/game/` — the game loop, slimes (small, big, spitter), arrows and spitter globs, crab companion AI,
   particles, power-ups (`powerups.ts` rules, `pickups.ts` visuals), sound (WebAudio, no files: effects plus

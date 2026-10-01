@@ -4,12 +4,15 @@ import { ARENA_HALF, Dungeon, WALL_HEIGHT } from '../world/dungeon';
 import { Player, type InputMode } from '../player/controls';
 import { TouchControls } from '../ui/touch';
 import type { Elf } from '../player/elf';
-import type { Crab } from '../player/crab';
+import type { FamiliarBody } from '../player/beasts';
 import { Enemies, type Slime } from './enemies';
 import { Arrows } from './arrows';
 import { GLOB_COLOR, Globs } from './globs';
 import { Effects } from './effects';
-import { BURST_RADIUS, BURST_STUN, Companion } from './companion';
+import { Companion } from './companion';
+import { FAMILIARS, FAMILIAR_KINDS, POUNCE_DAMAGE, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
+import { SpringPools, type ZoneTuple } from './zones';
+import type { FamiliarCommand } from '../net/protocol';
 import { pickAimTarget, waveSpec } from './combat';
 import { fireAmbience } from './ambience';
 import { Hud } from '../ui/hud';
@@ -39,7 +42,9 @@ const MAX_PICKUPS = 2;
 const DROP_CHANCE: Record<Slime['kind'], number> = { small: 0.04, spitter: 0.1, big: 0.25 };
 const SNAPSHOT_EVERY = 3; // steps → 20 Hz while playing
 const IDLE_SNAPSHOT_EVERY = 12; // 5 Hz on menus / pause
-const CRAB_COLOR = new THREE.Color(0x6fe8d6); // the crab's magic orbs
+const STUN_STAR = new THREE.Color(0xfff27a);
+const CALM_PINK = new THREE.Color(0xffb8dc);
+const SPRING_BLUE = new THREE.Color(0x8fe8f5);
 
 type State = 'ready' | 'playing' | 'over';
 
@@ -59,6 +64,10 @@ export class Game {
   private readonly powers = new ActivePowers();
   private readonly shieldBubble: THREE.Mesh;
   private nextPickup = 0;
+  private readonly springPools = new SpringPools();
+  /** Live Soothing Spring pools; `healed` = it already gave the elf their heart. */
+  private zones: { id: number; x: number; z: number; r: number; t: number; healed: boolean }[] = [];
+  private nextZoneId = 1;
   private readonly effects = new Effects();
   private readonly hud: Hud;
   private readonly touch: TouchControls | null = null;
@@ -80,20 +89,28 @@ export class Game {
   private invulnerable = 0;
   private onFrame?: () => void;
 
-  constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, crab: Crab, mode: InputMode, net: HeroSession | null) {
+  constructor(
+    renderer: THREE.WebGLRenderer,
+    root: HTMLElement,
+    elf: Elf,
+    familiars: Record<FamiliarKind, FamiliarBody>,
+    mode: InputMode,
+    net: HeroSession | null,
+  ) {
     this.renderer = renderer;
     this.net = net;
     this.elf = elf;
     this.mode = mode;
     this.dungeon = new Dungeon(this.scene, mulberry32(1337), mode === 'touch' ? 1024 : 2048);
     this.enemies = new Enemies(this.dungeon.gates);
-    this.companion = new Companion(crab);
+    this.companion = new Companion(familiars);
     this.shieldBubble = new THREE.Mesh(
       new THREE.IcosahedronGeometry(1.25, 2),
       new THREE.MeshBasicMaterial({ color: POWER_UPS.shield.color, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false }),
     );
     this.shieldBubble.visible = false;
-    this.scene.add(elf.group, crab.group, this.enemies.group, this.arrows.group, this.globs.group, this.pickups.group, this.shieldBubble, this.effects.mesh, this.effects.rings);
+    this.scene.add(...Object.values(familiars).map((b) => b.group));
+    this.scene.add(elf.group, this.springPools.group, this.enemies.group, this.arrows.group, this.globs.group, this.pickups.group, this.shieldBubble, this.effects.mesh, this.effects.rings);
 
     this.player = new Player(
       this.camera,
@@ -119,19 +136,21 @@ export class Game {
     });
     this.player.onDash = () => this.sfx.whoosh();
     elf.onStep = (strength) => this.sfx.footstep(strength);
-    crab.onStep = (strength) => this.sfx.scuttle(strength);
+    familiars.crab.onStep = (strength) => this.sfx.scuttle(strength);
+    familiars.capybara.onStep = (strength) => this.sfx.footstep(strength * 0.4);
+    familiars.wolf.onStep = (strength) => this.sfx.scuttle(strength * 0.6);
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
     });
 
     if (net) {
-      // Multiplayer: show the invite, bring the crab in when a familiar joins, obey their taps.
+      // Multiplayer: show the invite, bring the familiar's creature in when they pick it, obey their taps.
       net.onRoom = (code) => this.hud.setInviteCode(code);
-      net.onStatus = (status) => this.hud.setInviteStatus(status, net.familiarConnected);
+      net.onStatus = (status) => this.hud.setInviteStatus(status, net.familiarConnected, this.companion.kind);
       net.onFamiliar = (connected) => this.familiarChanged(connected);
-      net.onCommand = (cmd) => this.companion.command(cmd, ARENA_HALF);
+      net.onCommand = (cmd) => this.familiarCommand(cmd);
     } else {
-      this.hud.setInviteStatus('unavailable', false);
+      this.hud.setInviteStatus('unavailable', false, null);
     }
 
     this.hud.setBest(loadBest());
@@ -161,6 +180,8 @@ export class Game {
     // Start just south of the brazier, looking north across the arena.
     this.player.spawn(0, 8, 0);
     this.companion.reset(2.5, 10);
+    this.zones = [];
+    this.springPools.sync([], 0, 0);
     this.events = [];
   }
 
@@ -208,6 +229,7 @@ export class Game {
     this.elf.group.visible = this.invulnerable === 0 || Math.floor(this.time * 16) % 2 === 0;
 
     this.shoot(dt);
+    this.updateZones(dt);
     for (const spit of this.enemies.update(dt, this.player.position, this.dungeon.obstacles, ARENA_HALF)) {
       this.globs.fire(spit);
       this.sfx.spit();
@@ -219,16 +241,7 @@ export class Game {
       this.damage(hit.slime, hit.dirX, hit.dirZ);
     }
 
-    const crab = this.companion.update(dt, this.enemies.slimes, this.dungeon.obstacles, ARENA_HALF);
-    if (crab.pinched) {
-      const c = this.companion.position;
-      const dx = crab.pinched.x - c.x;
-      const dz = crab.pinched.z - c.z;
-      const d = Math.hypot(dx, dz) || 1;
-      this.damage(crab.pinched, dx / d, dz / d);
-      this.events.push({ e: 'pinch' });
-    }
-    if (crab.burst) this.magicBurst();
+    this.updateFamiliar(dt);
 
     this.checkContacts();
     this.updatePowerUps(dt);
@@ -266,33 +279,135 @@ export class Game {
     this.events.push({ e: 'twang' });
   }
 
-  /** The familiar's Magic Burst: stun every slime around the crab. */
-  private magicBurst(): void {
+  /** The familiar's creature: walking, biting, and whatever spells went off this step. */
+  private updateFamiliar(dt: number): void {
+    const r = this.companion.update(dt, this.enemies.slimes, this.dungeon.obstacles, ARENA_HALF);
     const c = this.companion.position;
-    const hit = this.enemies.stunAround(c.x, c.z, BURST_RADIUS, BURST_STUN);
-    this.effects.ring(c.x, c.z, CRAB_COLOR, BURST_RADIUS);
-    this.effects.burst(c.x, 0.8, c.z, CRAB_COLOR, 30, 7, 0.14);
-    for (const s of hit) this.effects.burst(s.x, s.radius * 1.6, s.z, new THREE.Color(0xfff27a), 6, 3, 0.1);
-    this.sfx.burst();
-    this.events.push({ e: 'burst', x: q(c.x), z: q(c.z) });
+    const push = (s: Slime, amount: number) => {
+      const dx = s.x - c.x;
+      const dz = s.z - c.z;
+      const d = Math.hypot(dx, dz) || 1;
+      this.damage(s, dx / d, dz / d, amount);
+    };
+    if (r.bitten) {
+      push(r.bitten, r.biteDamage);
+      this.events.push({ e: 'bite' });
+    }
+    for (const s of r.pounceHits) push(s, POUNCE_DAMAGE);
+    if (r.landed) {
+      this.effects.ring(c.x, c.z, 0xd9cbb0, 2.2);
+      this.effects.burst(c.x, 0.3, c.z, new THREE.Color(0xb8a98f), 16, 4, 0.12);
+      this.sfx.land();
+      this.events.push({ e: 'land', x: q(c.x), z: q(c.z) });
+    }
+    for (const id of r.cast) this.castSpell(id);
   }
 
-  /** A familiar connected or left: the crab poofs in beside the elf, or poofs away. */
-  private familiarChanged(connected: boolean): void {
-    const p = this.player.position;
+  /** Effects of a familiar spell (cooldown already started by the companion). */
+  private castSpell(id: SpellId): void {
     const c = this.companion.position;
-    if (connected) {
-      this.companion.appear(p.x + 2, p.z + 2);
-      this.effects.burst(c.x, 0.6, c.z, CRAB_COLOR, 30, 5, 0.14);
-      this.effects.ring(c.x, c.z, CRAB_COLOR, 2.5);
-      this.hud.toast('🦀 Familiar joined!', 0x6fe8d6);
-      this.sfx.powerUp();
-    } else if (this.companion.present) {
-      this.effects.burst(c.x, 0.6, c.z, CRAB_COLOR, 30, 5, 0.14);
-      this.companion.disappear();
-      this.hud.toast('🦀 Familiar left', 0x6fe8d6);
+    const p = this.player.position;
+    const spell = SPELLS[id];
+    const color = new THREE.Color(this.companion.kind ? FAMILIARS[this.companion.kind].color : 0xffffff);
+    switch (id) {
+      case 'burst': {
+        const hit = this.enemies.stunAround(c.x, c.z, spell.radius, spell.duration);
+        this.effects.ring(c.x, c.z, color, spell.radius);
+        this.effects.burst(c.x, 0.8, c.z, color, 30, 7, 0.14);
+        for (const s of hit) this.effects.burst(s.x, s.radius * 1.6, s.z, STUN_STAR, 6, 3, 0.1);
+        this.sfx.burst();
+        break;
+      }
+      case 'shell':
+        this.powers.add('shield');
+        this.effects.burst(p.x, 1.2, p.z, new THREE.Color(POWER_UPS.shield.color), 24, 5, 0.12);
+        this.effects.ring(p.x, p.z, POWER_UPS.shield.color, 1.8);
+        this.hud.toast('🐚 Shell Shield!', POWER_UPS.shield.color);
+        this.sfx.powerUp();
+        break;
+      case 'spring':
+        this.zones.push({ id: this.nextZoneId++, x: c.x, z: c.z, r: spell.radius, t: spell.duration, healed: false });
+        this.effects.ring(c.x, c.z, SPRING_BLUE, spell.radius);
+        this.effects.burst(c.x, 0.4, c.z, SPRING_BLUE, 20, 4, 0.1);
+        this.sfx.spring();
+        break;
+      case 'calm': {
+        const hit = this.enemies.calmAround(c.x, c.z, spell.radius, spell.duration);
+        this.effects.ring(c.x, c.z, CALM_PINK, spell.radius);
+        this.effects.burst(c.x, 1, c.z, CALM_PINK, 30, 5, 0.12);
+        for (const s of hit) this.effects.burst(s.x, s.radius * 1.6, s.z, CALM_PINK, 5, 2, 0.1);
+        this.sfx.calm();
+        break;
+      }
+      case 'pounce':
+        this.effects.burst(c.x, 0.3, c.z, new THREE.Color(0xb8a98f), 10, 3, 0.1);
+        this.sfx.whoosh();
+        break;
     }
-    this.hud.setInviteStatus('open', connected);
+    this.events.push({ e: 'spell', id: SPELL_IDS.indexOf(id), x: q(c.x), z: q(c.z) });
+  }
+
+  /** Soothing Spring pools: slow the slimes in them, heal the elf once, then dry up. */
+  private updateZones(dt: number): void {
+    const p = this.player.position;
+    for (const z of this.zones) {
+      z.t -= dt;
+      for (const s of this.enemies.slimes) {
+        if (Math.hypot(s.x - z.x, s.z - z.z) <= z.r + s.radius * 0.5) s.slow = Math.min(s.slow, SPRING_SLOW);
+      }
+      if (!z.healed && this.health < MAX_HEALTH && Math.hypot(p.x - z.x, p.z - z.z) <= z.r) {
+        z.healed = true;
+        this.health++;
+        this.hud.setHealth(this.health);
+        this.hud.toast('♨️ +1 heart', 0x8fe8f5);
+        this.effects.burst(p.x, 1.2, p.z, new THREE.Color(0xff4d5e), 14, 4, 0.12);
+        this.sfx.powerUp();
+        this.events.push({ e: 'heal', x: q(p.x), z: q(p.z) });
+      }
+    }
+    this.zones = this.zones.filter((z) => z.t > 0);
+    this.springPools.sync(this.zoneTuples(), dt, this.time);
+  }
+
+  private zoneTuples(): ZoneTuple[] {
+    return this.zones.map((z) => [z.id, q(z.x), q(z.z), z.r, q(z.t)]);
+  }
+
+  /** A familiar connected or left. They pick a creature next (a 'choose' command); leaving poofs it away. */
+  private familiarChanged(connected: boolean): void {
+    if (!connected && this.companion.kind) {
+      const kind = this.companion.kind;
+      this.poof(kind);
+      this.companion.disappear();
+      this.hud.toast(`${FAMILIARS[kind].emoji} ${FAMILIARS[kind].name} left`, FAMILIARS[kind].color);
+    }
+    this.hud.setInviteStatus('open', connected, this.companion.kind);
+  }
+
+  private familiarCommand(cmd: FamiliarCommand): void {
+    if (cmd.type !== 'choose') {
+      this.companion.command(cmd, ARENA_HALF);
+      return;
+    }
+    // Creatures can be picked any time at first, but only swapped between runs / while paused.
+    const running = this.state === 'playing' && this.player.isActive;
+    if (this.companion.kind === cmd.kind || (this.companion.kind && running)) return;
+    if (this.companion.kind) this.poof(this.companion.kind);
+    const p = this.player.position;
+    this.companion.appear(cmd.kind, p.x + 2, p.z + 2);
+    this.poof(cmd.kind);
+    const def = FAMILIARS[cmd.kind];
+    this.hud.toast(`${def.emoji} ${def.name} joined!`, def.color);
+    this.sfx.powerUp();
+    this.hud.setInviteStatus('open', true, cmd.kind);
+  }
+
+  private poof(kind: FamiliarKind): void {
+    const c = this.companion.position;
+    const color = FAMILIARS[kind].color;
+    this.effects.burst(c.x, 0.6, c.z, new THREE.Color(color), 30, 5, 0.14);
+    this.effects.ring(c.x, c.z, color, 2.5);
+    this.events.push({ e: 'poof', x: q(c.x), z: q(c.z) });
   }
 
   /** Everything the familiar's tablet needs to draw this moment. */
@@ -305,21 +420,24 @@ export class Game {
       t: q(this.time),
       state,
       hero: { x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0 },
-      crab: c.present ? { x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed) } : null,
+      fam: c.kind
+        ? { k: FAMILIAR_KINDS.indexOf(c.kind), x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed), y: q(c.height) }
+        : null,
       slimes: this.enemies.slimes.map((s) => {
         const o = s.pose;
-        return [s.id, SLIME_KIND_CODES.indexOf(s.kind), q(o.x), q(o.z), q(o.yaw), q(o.y), q(o.sx), q(o.sy), q(o.sz), q(o.flash), o.stun, q(o.death)];
+        return [s.id, SLIME_KIND_CODES.indexOf(s.kind), q(o.x), q(o.z), q(o.yaw), q(o.y), q(o.sx), q(o.sy), q(o.sz), q(o.flash), o.stun, q(o.death), o.calm];
       }),
       arrows: this.arrows.snapshot(),
       globs: this.globs.snapshot(),
       pickups: this.pickups.snapshot(),
+      zones: this.zoneTuples(),
       wave: this.wave,
       remaining: this.enemies.remaining,
       health: Math.max(0, this.health),
       maxHealth: MAX_HEALTH,
       score: this.score,
       powers: this.powers.list().map((pw) => [POWER_CODES.indexOf(pw.type), q(pw.remaining)]),
-      burstCd: q(c.burstCooldown),
+      cds: c.kind ? FAMILIARS[c.kind].spells.map((id) => [SPELL_IDS.indexOf(id), q(c.cooldowns.remaining(id))]) : [],
       ev: this.events,
     };
     this.events = [];
@@ -332,8 +450,8 @@ export class Game {
     this.events.push({ e: 'banner', text });
   }
 
-  private damage(slime: Slime, dirX: number, dirZ: number): void {
-    const killed = slime.hurt(1, dirX, dirZ);
+  private damage(slime: Slime, dirX: number, dirZ: number, amount = 1): void {
+    const killed = slime.hurt(amount, dirX, dirZ);
     const y = slime.radius;
     const big = slime.kind === 'big';
     if (killed) {
@@ -356,7 +474,7 @@ export class Game {
     if (this.invulnerable > 0 || this.player.dashing) return;
     const p = this.player.position;
     for (const s of this.enemies.slimes) {
-      if (!s.alive || s.stunned) continue; // stunned slimes are harmless
+      if (!s.alive || s.harmless) continue; // stunned or calmed slimes don't hurt
       const dx = p.x - s.x;
       const dz = p.z - s.z;
       const d = Math.hypot(dx, dz);

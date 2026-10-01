@@ -11,6 +11,6 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["server/**/*.ts", "src/net/protocol.ts"],
+  "include": ["server/**/*.ts", "src/net/protocol.ts", "src/game/familiars.ts"],
   "exclude": ["server/**/*.test.ts", "server/dist"]
 }

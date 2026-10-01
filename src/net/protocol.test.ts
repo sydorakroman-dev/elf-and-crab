@@ -35,9 +35,13 @@ describe('parseServerMsg', () => {
 });
 
 describe('parseFamiliarCommand', () => {
-  it('accepts moves and bursts, rejects the rest', () => {
+  it('accepts moves, spells and creature picks, rejects the rest', () => {
     expect(parseFamiliarCommand({ type: 'move', x: 1.5, z: -2 })).toEqual({ type: 'move', x: 1.5, z: -2 });
-    expect(parseFamiliarCommand({ type: 'burst' })).toEqual({ type: 'burst' });
+    expect(parseFamiliarCommand({ type: 'spell', id: 'pounce' })).toEqual({ type: 'spell', id: 'pounce' });
+    expect(parseFamiliarCommand({ type: 'choose', kind: 'capybara' })).toEqual({ type: 'choose', kind: 'capybara' });
+    expect(parseFamiliarCommand({ type: 'spell', id: 'fireball' })).toBeNull();
+    expect(parseFamiliarCommand({ type: 'choose', kind: 'dragon' })).toBeNull();
+    expect(parseFamiliarCommand({ type: 'burst' })).toBeNull();
     expect(parseFamiliarCommand({ type: 'move', x: 'a', z: 0 })).toBeNull();
     expect(parseFamiliarCommand({ type: 'move', x: Infinity, z: 0 })).toBeNull();
     expect(parseFamiliarCommand(null)).toBeNull();

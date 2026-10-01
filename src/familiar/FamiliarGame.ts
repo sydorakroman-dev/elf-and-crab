@@ -2,15 +2,16 @@ import * as THREE from 'three';
 import { mulberry32 } from '../util/rng';
 import { ARENA_HALF, Dungeon } from '../world/dungeon';
 import type { Elf } from '../player/elf';
-import type { Crab } from '../player/crab';
+import type { FamiliarBody } from '../player/beasts';
 import { SlimeVisual, type SlimePose } from '../game/enemies';
 import { Arrows } from '../game/arrows';
 import { GLOB_COLOR, Globs } from '../game/globs';
 import { Pickups } from '../game/pickups';
 import { Effects } from '../game/effects';
 import { Sfx } from '../game/audio';
-import { BURST_RADIUS } from '../game/companion';
+import { SpringPools } from '../game/zones';
 import { POWER_UPS } from '../game/powerups';
+import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, pounceLanding, type FamiliarKind } from '../game/familiars';
 import { POWER_CODES, SLIME_KIND_CODES, SnapshotBuffer, type GameEvent, type Snapshot } from '../net/snapshot';
 import type { FamiliarSession, FamiliarStatus } from '../net/client';
 import { FamiliarHud } from './hud';
@@ -18,13 +19,15 @@ import { floorPoint, overviewDistance } from './input';
 
 const FOV = 40;
 const PITCH = 1.22; // radians down from horizontal: a high, slightly tilted overview
-const CRAB_COLOR = 0x6fe8d6;
 const MOVE_SEND_INTERVAL = 0.1; // throttle drag commands to 10 Hz
 const EVENT_DELAY_MS = 100; // play events in step with the interpolation delay
+const STUN_STAR = new THREE.Color(0xfff27a);
+const CALM_PINK = new THREE.Color(0xffb8dc);
+const SPRING_BLUE = new THREE.Color(0x8fe8f5);
 
 /**
  * The familiar's tablet: a top-down view of the whole arena, drawn from the hero's snapshots.
- * Tap or drag on the floor to send the crab there; the ✨ button fires a Magic Burst.
+ * Pick a creature, tap or drag on the floor to move it, and tap the spell buttons to cast.
  * Runs no game logic itself — the hero's browser is the source of truth.
  */
 export class FamiliarGame {
@@ -34,7 +37,7 @@ export class FamiliarGame {
   private readonly timer = new THREE.Timer();
   private readonly dungeon: Dungeon;
   private readonly elf: Elf;
-  private readonly crab: Crab;
+  private readonly bodies: Record<FamiliarKind, FamiliarBody>;
   private readonly session: FamiliarSession;
   private readonly hud: FamiliarHud;
   private readonly buffer = new SnapshotBuffer(0.1);
@@ -42,60 +45,68 @@ export class FamiliarGame {
   private readonly arrows = new Arrows();
   private readonly globs = new Globs();
   private readonly pickups = new Pickups();
+  private readonly pools = new SpringPools();
   private readonly effects = new Effects();
   private readonly sfx = new Sfx();
   private readonly shieldBubble: THREE.Mesh;
-  private readonly crabRing: THREE.Mesh;
-  private readonly burstRange: THREE.Mesh;
+  private readonly famRing: THREE.Mesh;
+  private readonly rangeRing: THREE.Mesh;
   private readonly marker: THREE.Mesh;
+  private readonly pounceMark: THREE.Mesh;
   private readonly raycaster = new THREE.Raycaster();
   private markerAge = 99;
   private time = 0;
   private lastMoveSent = -1;
   private dragging = false;
+  private lastTap: { x: number; z: number } | null = null;
+  private shownKind: FamiliarKind | null = null;
   private status: FamiliarStatus = 'connecting';
   private onFrame?: () => void;
 
-  constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, crab: Crab, session: FamiliarSession) {
+  constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarSession) {
     this.renderer = renderer;
     this.elf = elf;
-    this.crab = crab;
+    this.bodies = bodies;
     this.session = session;
     this.dungeon = new Dungeon(this.scene, mulberry32(1337), 1024);
-    crab.group.visible = false;
+    for (const b of Object.values(bodies)) b.group.visible = false;
 
     const additive = (color: number, opacity: number) =>
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     this.shieldBubble = new THREE.Mesh(new THREE.IcosahedronGeometry(1.25, 2), additive(POWER_UPS.shield.color, 0.18));
     this.shieldBubble.visible = false;
-    // A glowing ring under your crab so it's easy to find, and the Burst's reach around it.
-    this.crabRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.25, 40).rotateX(-Math.PI / 2), additive(CRAB_COLOR, 0.7));
-    this.burstRange = new THREE.Mesh(new THREE.RingGeometry(BURST_RADIUS - 0.12, BURST_RADIUS, 64).rotateX(-Math.PI / 2), additive(CRAB_COLOR, 0.25));
+    // A glowing ring under your creature so it's easy to find, and the reach of its area spell.
+    this.famRing = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.3, 40).rotateX(-Math.PI / 2), additive(0xffffff, 0.7));
+    this.rangeRing = new THREE.Mesh(new THREE.RingGeometry(0.975, 1, 72).rotateX(-Math.PI / 2), additive(0xffffff, 0.28));
     this.marker = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 32).rotateX(-Math.PI / 2), additive(0xffffff, 0));
-    this.crabRing.position.y = this.burstRange.position.y = this.marker.position.y = 0.06;
-    this.crabRing.visible = this.burstRange.visible = false;
+    // Where a pounce would land (wolf only).
+    this.pounceMark = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 6).rotateX(-Math.PI / 2), additive(0xd9cbb0, 0.6));
+    for (const m of [this.famRing, this.rangeRing, this.marker, this.pounceMark]) m.position.y = 0.06;
+    this.famRing.visible = this.rangeRing.visible = this.pounceMark.visible = false;
 
     this.scene.add(
       elf.group,
-      crab.group,
+      ...Object.values(bodies).map((b) => b.group),
+      this.pools.group,
       this.arrows.group,
       this.globs.group,
       this.pickups.group,
       this.effects.mesh,
       this.effects.rings,
       this.shieldBubble,
-      this.crabRing,
-      this.burstRange,
+      this.famRing,
+      this.rangeRing,
       this.marker,
+      this.pounceMark,
     );
 
     this.hud = new FamiliarHud(root, session.code);
     this.hud.onStart = () => this.sfx.unlock();
-    this.hud.onBurst = () => {
-      if (this.hud.isBlocked) return;
-      this.session.send({ type: 'burst' });
-    };
-    crab.onStep = (s) => this.sfx.scuttle(s);
+    this.hud.onChoose = (kind) => this.session.send({ type: 'choose', kind });
+    this.hud.onSpell = (id) => this.session.send({ type: 'spell', id });
+    bodies.crab.onStep = (s) => this.sfx.scuttle(s);
+    bodies.wolf.onStep = (s) => this.sfx.scuttle(s * 0.6);
+    bodies.capybara.onStep = (s) => this.sfx.footstep(s * 0.4);
 
     session.onSnapshot = (s) => this.receive(s);
     session.onStatus = (s) => this.setStatus(s);
@@ -116,9 +127,9 @@ export class FamiliarGame {
 
   private setStatus(s: FamiliarStatus): void {
     this.status = s;
-    if (s === 'no-room' || s === 'room-full' || s === 'hero-left') {
-      this.hud.setBlocking(s, this.session.code);
-    }
+    if (s === 'no-room' || s === 'room-full' || s === 'hero-left') this.hud.setBlocking(s, this.session.code);
+    // After a (re)join, tell the hero which creature we are again.
+    if (s === 'joined' && this.hud.chosen) this.session.send({ type: 'choose', kind: this.hud.chosen });
     this.refreshStatusPill(this.buffer.latest);
   }
 
@@ -149,6 +160,7 @@ export class FamiliarGame {
   }
 
   private playEvents(events: GameEvent[]): void {
+    const famColor = new THREE.Color(this.shownKind ? FAMILIARS[this.shownKind].color : 0xffffff);
     for (const ev of events) {
       switch (ev.e) {
         case 'splat':
@@ -164,15 +176,26 @@ export class FamiliarGame {
         case 'spit':
           this.sfx.spit();
           break;
-        case 'burst':
-          this.effects.ring(ev.x, ev.z, CRAB_COLOR, BURST_RADIUS);
-          this.effects.burst(ev.x, 0.8, ev.z, new THREE.Color(CRAB_COLOR), 30, 7, 0.14);
-          this.crab.pinch();
-          this.sfx.burst();
+        case 'spell':
+          this.playSpell(SPELL_IDS[ev.id], ev.x, ev.z, famColor);
           break;
-        case 'pinch':
-          this.crab.pinch();
+        case 'bite':
+          this.currentBody()?.pinch();
           this.sfx.hit();
+          break;
+        case 'land':
+          this.effects.ring(ev.x, ev.z, 0xd9cbb0, 2.2);
+          this.effects.burst(ev.x, 0.3, ev.z, new THREE.Color(0xb8a98f), 16, 4, 0.12);
+          this.sfx.land();
+          break;
+        case 'heal':
+          this.effects.burst(ev.x, 1.2, ev.z, new THREE.Color(0xff4d5e), 14, 4, 0.12);
+          this.hud.popups.toast('♨️ +1 heart', 0x8fe8f5);
+          this.sfx.powerUp();
+          break;
+        case 'poof':
+          this.effects.burst(ev.x, 0.6, ev.z, famColor, 30, 5, 0.14);
+          this.effects.ring(ev.x, ev.z, famColor, 2.5);
           break;
         case 'pickup': {
           const def = POWER_UPS[POWER_CODES[ev.p] ?? 'multishot'];
@@ -196,6 +219,45 @@ export class FamiliarGame {
           break; // the bow is the elf's sound; keep the tablet calmer
       }
     }
+  }
+
+  private playSpell(id: (typeof SPELL_IDS)[number] | undefined, x: number, z: number, color: THREE.Color): void {
+    if (!id) return;
+    const spell = SPELLS[id];
+    this.currentBody()?.pinch();
+    switch (id) {
+      case 'burst':
+        this.effects.ring(x, z, color, spell.radius);
+        this.effects.burst(x, 0.8, z, color, 30, 7, 0.14);
+        this.effects.burst(x, 1.5, z, STUN_STAR, 12, 5, 0.1);
+        this.sfx.burst();
+        break;
+      case 'shell': {
+        const h = this.buffer.latest?.hero;
+        if (h) this.effects.burst(h.x, 1.2, h.z, new THREE.Color(POWER_UPS.shield.color), 24, 5, 0.12);
+        this.hud.popups.toast('🐚 Shell Shield!', POWER_UPS.shield.color);
+        this.sfx.powerUp();
+        break;
+      }
+      case 'spring':
+        this.effects.ring(x, z, SPRING_BLUE, spell.radius);
+        this.effects.burst(x, 0.4, z, SPRING_BLUE, 20, 4, 0.1);
+        this.sfx.spring();
+        break;
+      case 'calm':
+        this.effects.ring(x, z, CALM_PINK, spell.radius);
+        this.effects.burst(x, 1, z, CALM_PINK, 30, 5, 0.12);
+        this.sfx.calm();
+        break;
+      case 'pounce':
+        this.effects.burst(x, 0.3, z, new THREE.Color(0xb8a98f), 10, 3, 0.1);
+        this.sfx.whoosh();
+        break;
+    }
+  }
+
+  private currentBody(): FamiliarBody | null {
+    return this.shownKind ? this.bodies[this.shownKind] : null;
   }
 
   private frame(timestamp: number): void {
@@ -222,18 +284,7 @@ export class FamiliarGame {
     this.shieldBubble.visible = shielded;
     if (shielded) this.shieldBubble.position.set(h.x, 1.05, h.z);
 
-    // Our crab.
-    const c = s.crab;
-    this.crab.group.visible = this.crabRing.visible = c !== null;
-    this.burstRange.visible = c !== null && s.burstCd <= 0.05;
-    if (c) {
-      this.crab.group.position.set(c.x, 0, c.z);
-      this.crab.group.rotation.y = c.h;
-      this.crab.update(dt, c.s, false);
-      this.crabRing.position.set(c.x, 0.06, c.z);
-      this.crabRing.scale.setScalar(1 + Math.sin(this.time * 4) * 0.08);
-      this.burstRange.position.set(c.x, 0.06, c.z);
-    }
+    this.applyFamiliar(s, dt);
 
     // Slimes, keyed by id.
     const seen = new Set<number>();
@@ -246,7 +297,7 @@ export class FamiliarGame {
         this.slimes.set(id, v);
         this.scene.add(v.group);
       }
-      const pose: SlimePose = { x: t[2], z: t[3], yaw: t[4], y: t[5], sx: t[6], sy: t[7], sz: t[8], flash: t[9], stun: t[10], death: t[11] };
+      const pose: SlimePose = { x: t[2], z: t[3], yaw: t[4], y: t[5], sx: t[6], sy: t[7], sz: t[8], flash: t[9], stun: t[10], death: t[11], calm: t[12] ?? 0 };
       v.apply(pose, this.time);
     }
     for (const [id, v] of this.slimes) {
@@ -258,6 +309,50 @@ export class FamiliarGame {
     this.arrows.sync(s.arrows);
     this.globs.sync(s.globs, this.time);
     this.pickups.sync(s.pickups, dt, this.time);
+    this.pools.sync(s.zones, dt, this.time);
+  }
+
+  /** Our creature, its glow ring, the reach of its area spell, and (wolf) where a pounce would land. */
+  private applyFamiliar(s: Snapshot, dt: number): void {
+    const f = s.fam;
+    const kind = f ? FAMILIAR_KINDS[f.k] : null;
+    if (kind !== this.shownKind) {
+      if (this.shownKind) this.bodies[this.shownKind].group.visible = false;
+      this.shownKind = kind ?? null;
+      if (kind) {
+        this.bodies[kind].group.visible = true;
+        const color = FAMILIARS[kind].color;
+        (this.famRing.material as THREE.MeshBasicMaterial).color.setHex(color);
+        (this.rangeRing.material as THREE.MeshBasicMaterial).color.setHex(color);
+      }
+    }
+    this.famRing.visible = !!f;
+    if (!f || !kind) {
+      this.rangeRing.visible = this.pounceMark.visible = false;
+      return;
+    }
+    const body = this.bodies[kind];
+    body.group.position.set(f.x, f.y, f.z);
+    body.group.rotation.y = f.h;
+    body.update(dt, f.s, f.y > 0.05);
+    this.famRing.position.set(f.x, 0.06, f.z);
+    this.famRing.scale.setScalar(1 + Math.sin(this.time * 4) * 0.08);
+
+    // Show the biggest area spell that's ready.
+    const ready = new Set(s.cds.filter(([, secs]) => secs <= 0.05).map(([code]) => SPELL_IDS[code]));
+    const area = FAMILIARS[kind].spells.filter((id) => ready.has(id) && SPELLS[id].radius > 0).sort((a, b) => SPELLS[b].radius - SPELLS[a].radius)[0];
+    this.rangeRing.visible = !!area;
+    if (area) {
+      this.rangeRing.position.set(f.x, 0.06, f.z);
+      this.rangeRing.scale.setScalar(SPELLS[area].radius);
+    }
+
+    this.pounceMark.visible = ready.has('pounce') && f.y < 0.05;
+    if (this.pounceMark.visible) {
+      const land = pounceLanding({ x: f.x, z: f.z }, this.lastTap, f.h);
+      this.pounceMark.position.set(land.x, 0.06, land.z);
+      this.pounceMark.rotation.y = this.time;
+    }
   }
 
   private bindTouch(canvas: HTMLCanvasElement): void {
@@ -270,6 +365,7 @@ export class FamiliarGame {
       const { origin, direction } = this.raycaster.ray;
       const p = floorPoint(origin, direction, ARENA_HALF, 1);
       if (!p) return;
+      this.lastTap = p;
       this.marker.position.set(p.x, 0.06, p.z);
       this.markerAge = 0;
       if (!force && this.time - this.lastMoveSent < MOVE_SEND_INTERVAL) return;

@@ -6,18 +6,19 @@ function snap(t: number, over: Partial<Snapshot> = {}): Snapshot {
     t,
     state: 'playing',
     hero: { x: 0, z: 0, f: 0, s: 0, m: 0, a: 0, d: 0, v: 1 },
-    crab: null,
+    fam: null,
     slimes: [],
     arrows: [],
     globs: [],
     pickups: [],
+    zones: [],
     wave: 1,
     remaining: 3,
     health: 5,
     maxHealth: 5,
     score: 0,
     powers: [],
-    burstCd: 0,
+    cds: [],
     ev: [],
     ...over,
   };
@@ -42,12 +43,22 @@ describe('interpolate', () => {
   });
 
   it('matches slimes by id; new ones appear, removed ones vanish', () => {
-    const a = snap(0, { slimes: [[1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0], [2, 1, 5, 5, 0, 0, 1, 1, 1, 0, 0, 0]] });
-    const b = snap(1, { slimes: [[1, 0, 4, 0, 0, 0, 1, 1, 1, 0, 0, 0], [3, 2, 9, 9, 0, 0, 1, 1, 1, 0, 0, 0]] });
+    const a = snap(0, { slimes: [[1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0], [2, 1, 5, 5, 0, 0, 1, 1, 1, 0, 0, 0, 0]] });
+    const b = snap(1, { slimes: [[1, 0, 4, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1], [3, 2, 9, 9, 0, 0, 1, 1, 1, 0, 0, 0, 0]] });
     const m = interpolate(a, b, 0.25);
     expect(m.slimes.map((s) => s[0])).toEqual([1, 3]);
     expect(m.slimes[0][2]).toBeCloseTo(1);
     expect(m.slimes[1][2]).toBe(9);
+    expect(m.slimes[0][12]).toBe(1); // calm comes from the newer snapshot
+  });
+
+  it('blends the familiar, including its pounce height, but snaps on a creature change', () => {
+    const fam = (k: number, x: number, y: number) => ({ k, x, z: 0, h: 0, s: 0, y });
+    const m = interpolate(snap(0, { fam: fam(2, 0, 0) }), snap(1, { fam: fam(2, 8, 1.2) }), 0.5);
+    expect(m.fam!.x).toBeCloseTo(4);
+    expect(m.fam!.y).toBeCloseTo(0.6);
+    const swapped = interpolate(snap(0, { fam: fam(0, 0, 0) }), snap(1, { fam: fam(1, 2, 0) }), 0.5);
+    expect(swapped.fam!.x).toBe(2);
   });
 
   it('snaps instead of sliding when something teleports', () => {

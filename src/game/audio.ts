@@ -118,6 +118,23 @@ export class Sfx {
     [0, 5, 9].forEach((semi, i) => this.tone('triangle', 1320 * Math.pow(2, semi / 12), 1320, 0.25, 0.04, i * 0.04));
   }
 
+  /** Soothing Spring: a bubbling splash. */
+  spring(): void {
+    this.hiss(0.5, 0.12, 900, 'bandpass');
+    [0, 3, 7].forEach((semi, i) => this.tone('sine', 520 * Math.pow(2, semi / 12), 620 * Math.pow(2, semi / 12), 0.2, 0.05, i * 0.07));
+  }
+
+  /** Calm Aura: a soft, slow wind-chime. */
+  calm(): void {
+    [0, 4, 7, 11, 14].forEach((semi, i) => this.tone('sine', 523 * Math.pow(2, semi / 12), 523 * Math.pow(2, semi / 12), 0.8, 0.05, i * 0.11));
+  }
+
+  /** Landing a pounce: a soft thump. */
+  land(): void {
+    this.tone('sine', 140, 50, 0.18, 0.16);
+    this.hiss(0.12, 0.08, 600, 'lowpass');
+  }
+
   /** Glassy crack when the shield absorbs a hit. */
   shieldBreak(): void {
     this.hiss(0.25, 0.18, 4000, 'highpass');

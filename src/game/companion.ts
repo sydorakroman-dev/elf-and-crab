@@ -1,55 +1,60 @@
 import * as THREE from 'three';
-import { angleDelta, sidewaysHeading, type Crab } from '../player/crab';
+import { angleDelta, sidewaysHeading } from '../player/crab';
+import type { FamiliarBody } from '../player/beasts';
 import { clampToArena, pushOutOfCircles, type Circle } from './combat';
 import type { Slime } from './enemies';
 import type { FamiliarCommand } from '../net/protocol';
+import { FAMILIARS, POUNCE_WIDTH, SPELLS, SpellCooldowns, distanceToSegment, pounceLanding, type FamiliarKind, type SpellId } from './familiars';
 
-const RADIUS = 0.6;
-const SPEED = 8;
-const PINCH_REACH = 1.0; // gap between crab and slime edges
-const PINCH_COOLDOWN = 1.0;
+const BITE_REACH = 1.0; // gap between body edges
 const TURN_RATE = 10;
-export const BURST_RADIUS = 5.5;
-export const BURST_STUN = 2.5;
-export const BURST_COOLDOWN = 12;
+const LEAP_HEIGHT = 1.3;
 
 export interface CompanionResult {
-  /** Slime pinched this step, if any. */
-  pinched: Slime | null;
-  /** True on the step a Magic Burst goes off. */
-  burst: boolean;
+  /** Slime bitten / pinched this step, and how hard. */
+  bitten: Slime | null;
+  biteDamage: number;
+  /** Spells that went off this step (cooldowns already started). */
+  cast: SpellId[];
+  /** Slimes struck by an in-progress pounce this step (each once per pounce). */
+  pounceHits: Slime[];
+  /** True on the step a pounce lands. */
+  landed: boolean;
 }
 
 /**
- * The familiar's crab. A second player steers it from a tablet: it walks to wherever they tap,
- * pinches any slime within reach on its own, and fires a Magic Burst on request (cooldown is
- * enforced here, on the hero's machine, which runs the game). Only present while a familiar
- * is connected.
+ * The familiar: a creature (crab, capybara or wolf) a second player steers from a tablet.
+ * It walks to wherever they tap, bites slimes in reach on its own, and casts its spells on
+ * request (cooldowns enforced here, on the hero's machine, which runs the game). Only present
+ * while a familiar is connected and has picked a creature.
  */
 export class Companion {
   readonly position = new THREE.Vector3();
-  private readonly crab: Crab;
+  readonly cooldowns = new SpellCooldowns();
+  private readonly bodies: Record<FamiliarKind, FamiliarBody>;
   private readonly velocity = new THREE.Vector3();
   private readonly target = new THREE.Vector3();
   private hasTarget = false;
+  /** Last tapped spot (kept after arriving, used to aim a pounce). */
+  private lastTap: { x: number; z: number } | null = null;
   private heading = 0;
-  private pinchCooldown = 0;
-  private burstQueued = false;
-  private _burstCooldown = 0;
-  private _present = false;
+  private biteCooldown = 0;
+  private queued: SpellId[] = [];
+  private _kind: FamiliarKind | null = null;
+  private leap: { from: THREE.Vector3; to: THREE.Vector3; t: number; hit: Set<Slime> } | null = null;
+  private _height = 0;
 
-  constructor(crab: Crab) {
-    this.crab = crab;
-    crab.group.visible = false;
+  constructor(bodies: Record<FamiliarKind, FamiliarBody>) {
+    this.bodies = bodies;
+    for (const b of Object.values(bodies)) b.group.visible = false;
   }
 
   get present(): boolean {
-    return this._present;
+    return this._kind !== null;
   }
 
-  /** Seconds until the Magic Burst is ready again. */
-  get burstCooldown(): number {
-    return this._burstCooldown;
+  get kind(): FamiliarKind | null {
+    return this._kind;
   }
 
   get speed(): number {
@@ -60,56 +65,123 @@ export class Companion {
     return this.heading;
   }
 
-  appear(x: number, z: number): void {
-    this._present = true;
+  /** Height above the floor (during a pounce). */
+  get height(): number {
+    return this._height;
+  }
+
+  get body(): FamiliarBody | null {
+    return this._kind ? this.bodies[this._kind] : null;
+  }
+
+  /** Brings in (or swaps to) a creature at (x, z). */
+  appear(kind: FamiliarKind, x: number, z: number): void {
+    if (this.body) this.body.group.visible = false;
+    this._kind = kind;
     this.position.set(x, 0, z);
     this.velocity.set(0, 0, 0);
     this.hasTarget = false;
-    this.burstQueued = false;
-    this.crab.group.visible = true;
-    this.crab.group.position.copy(this.position);
+    this.lastTap = null;
+    this.queued = [];
+    this.leap = null;
+    this._height = 0;
+    const g = this.bodies[kind].group;
+    g.visible = true;
+    g.position.copy(this.position);
   }
 
   disappear(): void {
-    this._present = false;
-    this.crab.group.visible = false;
+    if (this.body) this.body.group.visible = false;
+    this._kind = null;
+    this.leap = null;
   }
 
-  /** Reset between runs: keeps presence, clears cooldowns and orders. */
+  /** Reset between runs: clears cooldowns and orders, keeps the creature. */
   reset(x: number, z: number): void {
-    this._burstCooldown = 0;
-    this.pinchCooldown = 0;
-    if (this._present) this.appear(x, z);
+    this.cooldowns.clear();
+    this.biteCooldown = 0;
+    if (this._kind) this.appear(this._kind, x, z);
   }
 
-  /** Applies a command from the familiar's tablet (already validated as well-formed). */
+  /** Applies a move or spell command from the familiar's tablet (already validated as well-formed). */
   command(c: FamiliarCommand, half: number): void {
-    if (!this._present) return;
-    if (c.type === 'burst') {
-      this.burstQueued = true;
+    if (!this._kind) return;
+    if (c.type === 'spell') {
+      if (FAMILIARS[this._kind].spells.includes(c.id)) this.queued.push(c.id);
       return;
     }
+    if (c.type !== 'move') return;
     this.target.set(c.x, 0, c.z);
-    clampToArena(this.target, half, RADIUS);
+    clampToArena(this.target, half, FAMILIARS[this._kind].radius);
     this.hasTarget = true;
+    this.lastTap = { x: this.target.x, z: this.target.z };
   }
 
   update(dt: number, slimes: readonly Slime[], obstacles: readonly Circle[], half: number): CompanionResult {
-    const result: CompanionResult = { pinched: null, burst: false };
-    if (!this._present) return result;
-    this.pinchCooldown = Math.max(0, this.pinchCooldown - dt);
-    this._burstCooldown = Math.max(0, this._burstCooldown - dt);
+    const result: CompanionResult = { bitten: null, biteDamage: 0, cast: [], pounceHits: [], landed: false };
+    const kind = this._kind;
+    if (!kind) return result;
+    const def = FAMILIARS[kind];
+    const body = this.bodies[kind];
+    this.cooldowns.tick(dt);
+    this.biteCooldown = Math.max(0, this.biteCooldown - dt);
 
-    if (this.burstQueued) {
-      this.burstQueued = false;
-      if (this._burstCooldown === 0) {
-        this._burstCooldown = BURST_COOLDOWN;
-        result.burst = true;
-        this.crab.pinch();
+    // Spells requested since last step.
+    for (const id of this.queued) {
+      if (this.leap) continue; // can't cast mid-air
+      if (!this.cooldowns.tryCast(id)) continue;
+      result.cast.push(id);
+      body.pinch();
+      if (id === 'pounce') this.startPounce();
+    }
+    this.queued = [];
+
+    if (this.leap) {
+      this.updateLeap(dt, slimes, def.radius, half, obstacles, result);
+    } else {
+      this.walk(dt, def.speed, def.radius, obstacles, half);
+    }
+
+    // Bite whatever's within reach, even on the move (not mid-leap).
+    let prey: Slime | null = null;
+    if (!this.leap) {
+      let best = BITE_REACH;
+      for (const s of slimes) {
+        if (!s.alive) continue;
+        const gap = Math.hypot(s.x - this.position.x, s.z - this.position.z) - s.radius - def.radius;
+        if (gap < best) {
+          best = gap;
+          prey = s;
+        }
+      }
+      if (prey && this.biteCooldown === 0) {
+        this.biteCooldown = def.biteCooldown;
+        body.pinch();
+        result.bitten = prey;
+        result.biteDamage = def.biteDamage;
       }
     }
 
-    // Walk to the tapped spot, easing in on arrival.
+    // Facing: crabs scuttle sideways; others face where they're going; all face prey when fighting.
+    const speed = this.speed;
+    const step = TURN_RATE * dt;
+    if (this.leap) {
+      this.heading = Math.atan2(this.leap.to.x - this.leap.from.x, this.leap.to.z - this.leap.from.z);
+    } else if (speed > 0.4) {
+      if (def.gait === 'sideways') this.heading = sidewaysHeading(this.heading, this.velocity.x, this.velocity.z, step);
+      else this.heading += clamp(angleDelta(this.heading, Math.atan2(this.velocity.x, this.velocity.z)), -step, step);
+    } else if (prey) {
+      this.heading += clamp(angleDelta(this.heading, Math.atan2(prey.x - this.position.x, prey.z - this.position.z)), -step, step);
+    }
+
+    const g = body.group;
+    g.position.set(this.position.x, this._height, this.position.z);
+    g.rotation.y = this.heading;
+    body.update(dt, this.leap ? 0 : speed, this.leap !== null);
+    return result;
+  }
+
+  private walk(dt: number, maxSpeed: number, radius: number, obstacles: readonly Circle[], half: number): void {
     let wantX = 0;
     let wantZ = 0;
     if (this.hasTarget) {
@@ -118,7 +190,7 @@ export class Companion {
       const dist = Math.hypot(dx, dz);
       if (dist < 0.15) this.hasTarget = false;
       else {
-        const speed = Math.min(SPEED, dist * 4);
+        const speed = Math.min(maxSpeed, dist * 4);
         wantX = (dx / dist) * speed;
         wantZ = (dz / dist) * speed;
       }
@@ -127,38 +199,41 @@ export class Companion {
     this.velocity.x += (wantX - this.velocity.x) * blend;
     this.velocity.z += (wantZ - this.velocity.z) * blend;
     this.position.addScaledVector(this.velocity, dt);
-    pushOutOfCircles(this.position, RADIUS, obstacles);
-    clampToArena(this.position, half, RADIUS);
+    pushOutOfCircles(this.position, radius, obstacles);
+    clampToArena(this.position, half, radius);
+  }
 
-    // Pinch whatever's within reach, even on the move.
-    let prey: Slime | null = null;
-    let preyGap = PINCH_REACH;
+  private startPounce(): void {
+    const land = pounceLanding(this.position, this.lastTap, this.heading);
+    this.leap = { from: this.position.clone(), to: new THREE.Vector3(land.x, 0, land.z), t: 0, hit: new Set() };
+    this.hasTarget = false;
+    this.velocity.set(0, 0, 0);
+  }
+
+  private updateLeap(dt: number, slimes: readonly Slime[], radius: number, half: number, obstacles: readonly Circle[], result: CompanionResult): void {
+    const leap = this.leap!;
+    const prev = { x: this.position.x, z: this.position.z };
+    leap.t = Math.min(1, leap.t + dt / SPELLS.pounce.duration);
+    this.position.lerpVectors(leap.from, leap.to, leap.t);
+    clampToArena(this.position, half, radius);
+    this._height = Math.sin(leap.t * Math.PI) * LEAP_HEIGHT;
+    // Everything along this step's stretch of the path gets hit once.
     for (const s of slimes) {
-      if (!s.alive) continue;
-      const gap = Math.hypot(s.x - this.position.x, s.z - this.position.z) - s.radius - RADIUS;
-      if (gap < preyGap) {
-        preyGap = gap;
-        prey = s;
+      if (!s.alive || leap.hit.has(s)) continue;
+      if (distanceToSegment(s, prev, this.position) <= s.radius + radius + POUNCE_WIDTH) {
+        leap.hit.add(s);
+        result.pounceHits.push(s);
       }
     }
-    if (prey && this.pinchCooldown === 0) {
-      this.pinchCooldown = PINCH_COOLDOWN;
-      this.crab.pinch();
-      result.pinched = prey;
+    if (leap.t >= 1) {
+      this.leap = null;
+      this._height = 0;
+      pushOutOfCircles(this.position, radius, obstacles);
+      result.landed = true;
     }
-
-    // Scuttle sideways while moving; face the prey claws-first when standing and fighting.
-    const speed = this.speed;
-    if (speed > 0.4) this.heading = sidewaysHeading(this.heading, this.velocity.x, this.velocity.z, TURN_RATE * dt);
-    else if (prey) {
-      const delta = angleDelta(this.heading, Math.atan2(prey.x - this.position.x, prey.z - this.position.z));
-      this.heading += Math.max(-TURN_RATE * dt, Math.min(TURN_RATE * dt, delta));
-    }
-
-    const g = this.crab.group;
-    g.position.copy(this.position);
-    g.rotation.y = this.heading;
-    this.crab.update(dt, speed, false);
-    return result;
   }
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
 }

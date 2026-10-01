@@ -1,3 +1,5 @@
+import { FAMILIAR_KINDS, SPELL_IDS, type FamiliarKind, type SpellId } from '../game/familiars';
+
 /**
  * Wire protocol shared by the browser and the Node server. The server only manages rooms and
  * relays `relay` payloads between the two players; it never looks inside them.
@@ -94,13 +96,18 @@ export function parseServerMsg(raw: string): ServerMsg | null {
 
 // ---- Game payloads carried inside `relay` ------------------------------------------------------
 
-/** What the familiar (crab) player can ask for. The hero validates and applies it. */
-export type FamiliarCommand = { type: 'move'; x: number; z: number } | { type: 'burst' };
+/** What the familiar player can ask for. The hero validates and applies it. */
+export type FamiliarCommand =
+  | { type: 'move'; x: number; z: number }
+  | { type: 'spell'; id: SpellId }
+  /** Pick (or switch) creature. */
+  | { type: 'choose'; kind: FamiliarKind };
 
 /** Validates a familiar command; null if malformed. */
 export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
   if (!isObject(v)) return null;
-  if (v.type === 'burst') return { type: 'burst' };
+  if (v.type === 'spell' && (SPELL_IDS as unknown[]).includes(v.id)) return { type: 'spell', id: v.id as SpellId };
+  if (v.type === 'choose' && (FAMILIAR_KINDS as unknown[]).includes(v.kind)) return { type: 'choose', kind: v.kind as FamiliarKind };
   if (v.type === 'move' && Number.isFinite(v.x) && Number.isFinite(v.z)) return { type: 'move', x: v.x as number, z: v.z as number };
   return null;
 }

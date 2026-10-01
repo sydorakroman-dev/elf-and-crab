@@ -5,6 +5,7 @@ import { Popups, heartsHtml, powerChipsHtml, powerChipsKey, waveText } from './s
 import { normalizeCode } from '../net/protocol';
 import type { ConnStatus } from '../net/client';
 import QRCode from 'qrcode';
+import { FAMILIARS, type FamiliarKind } from '../game/familiars';
 
 const KEYS_MOUSE =
   '<kbd>W A S D</kbd> move · <kbd>Mouse</kbd> aim · <kbd>Click</kbd> shoot (hold) · <kbd>Space</kbd> dash · <kbd>Scroll</kbd> zoom · <kbd>M</kbd> mute · <kbd>Esc</kbd> pause';
@@ -51,15 +52,15 @@ export class Hud {
        <div class="overlay">
          <div class="card">
            <h1 data-title>Elf &amp; Crab</h1>
-           <p data-message>Slimes are pouring out of the dungeon gates.<br/>Hold them off with your bow — alone, or with a friend as your crab familiar.</p>
+           <p data-message>Slimes are pouring out of the dungeon gates.<br/>Hold them off with your bow — alone, or with a friend as your familiar.</p>
            <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
            <button type="button" data-play>Enter the dungeon</button>
            <p class="best" data-best hidden></p>
            <div class="invite" data-invite>
              <canvas class="qr" data-qr width="112" height="112" hidden></canvas>
              <div class="invite-text">
-               <div class="invite-title">🦀 Play together</div>
-               <div class="invite-sub">A friend joins as your crab familiar on a tablet or phone:</div>
+               <div class="invite-title">🐾 Play together</div>
+               <div class="invite-sub">A friend joins as your familiar — crab, capybara or wolf — on a tablet or phone:</div>
                <div class="code" data-code>····</div>
                <div class="invite-link" data-link></div>
                <div class="invite-status" data-istatus>Connecting to the server…</div>
@@ -146,11 +147,18 @@ export class Hud {
     void QRCode.toCanvas(this.qr, link, { width: 112, margin: 1, color: { dark: '#1a1005', light: '#ffd36e' } });
   }
 
-  setInviteStatus(status: ConnStatus, familiarConnected: boolean): void {
-    this.familiarBadge.hidden = !familiarConnected;
+  setInviteStatus(status: ConnStatus, familiarConnected: boolean, kind: FamiliarKind | null): void {
+    const def = kind ? FAMILIARS[kind] : null;
+    this.familiarBadge.hidden = !def;
+    if (def) {
+      this.familiarBadge.textContent = def.emoji;
+      this.familiarBadge.title = `${def.name} familiar`;
+    }
     this.inviteStatus.classList.toggle('ok', familiarConnected);
     this.inviteStatus.textContent = familiarConnected
-      ? '🦀 Familiar connected!'
+      ? def
+        ? `${def.emoji} Your ${def.name.toLowerCase()} familiar is here!`
+        : 'Familiar connected — choosing a creature…'
       : status === 'open'
         ? 'Waiting for a familiar to join…'
         : status === 'unavailable'
