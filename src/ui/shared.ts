@@ -129,19 +129,23 @@ export class Fade {
     this.shown = card;
     const room = ROOMS[card];
     const boss = room.waves[WAVES_PER_ROOM - 1].boss;
-    this.card.querySelector<HTMLImageElement>('.rc-art')!.src = `${import.meta.env.BASE_URL}art/${room.art}.jpg`;
+    const img = this.card.querySelector<HTMLImageElement>('.rc-art')!;
+    img.src = `${import.meta.env.BASE_URL}art/${room.scene ?? room.art}.jpg`;
+    img.classList.toggle('scene', !!room.scene);
     this.card.querySelector('.rc-step')!.textContent = card === ROOMS.length - 1 ? `Room ${card + 1} of ${ROOMS.length} · the last one` : `Room ${card + 1} of ${ROOMS.length}`;
     this.card.querySelector('.rc-name')!.textContent = room.name;
     this.card.querySelector('.rc-who')!.textContent = `${room.group} · Boss: ${boss ? enemyName(boss) : '—'}`;
   }
 }
 
-/** Loading screen: a random foes' illustration while the models load. */
+/** Loading screen: a random illustration (painted room scenes first) while the models load. */
 export function showLoading(root: HTMLElement): () => void {
-  const room = ROOMS[Math.floor(Math.random() * ROOMS.length)];
+  const scenes = ROOMS.filter((r) => r.scene);
+  const pool = scenes.length ? scenes : ROOMS;
+  const room = pool[Math.floor(Math.random() * pool.length)];
   root.insertAdjacentHTML(
     'beforeend',
-    `<div class="loading"><img src="${import.meta.env.BASE_URL}art/${room.art}.jpg" alt="" /><p>Gathering the monsters…</p></div>`,
+    `<div class="loading"><img class="${room.scene ? 'scene' : ''}" src="${import.meta.env.BASE_URL}art/${room.scene ?? room.art}.jpg" alt="" /><p>Gathering the monsters…</p></div>`,
   );
   const el = root.querySelector<HTMLElement>('.loading')!;
   return () => {

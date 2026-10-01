@@ -31,6 +31,8 @@ export interface RoomDef {
   /** Who lives here, for the room's intro card (with their illustration, public/art/<art>.jpg). */
   group: string;
   art: string;
+  /** A painted scene of the room (public/art/<scene>.jpg), shown instead of the group sheet when there is one. */
+  scene?: string;
   torchLight: number;
   torchFlame: number;
   floor: Hsl;
@@ -53,6 +55,7 @@ export const ROOMS: RoomDef[] = [
     shape: 'circle',
     group: 'Forest beasts',
     art: 'beasts',
+    scene: 'scene-woodland',
     half: 24,
     pillars: [],
     feature: 'woodland',
@@ -80,6 +83,7 @@ export const ROOMS: RoomDef[] = [
     shape: 'octagon',
     group: 'Underworld dwellers',
     art: 'underworld',
+    scene: 'scene-crystal-cave',
     waves: [
       { mix: { spider: 6, ooze: 2, sporecrawler: 2 } },
       { mix: { spider: 6, ooze: 3, sporecrawler: 2, mushroom: 2, mold: 1 } },
@@ -106,6 +110,7 @@ export const ROOMS: RoomDef[] = [
     shape: 'square',
     group: 'The undead',
     art: 'undead',
+    scene: 'scene-crypt',
     waves: [
       { mix: { skeleton: 8, skelarcher: 2, ghost: 2 } },
       { mix: { skeleton: 8, skelarcher: 3, ghost: 3, zombie: 2, knight: 1 } },
@@ -131,6 +136,7 @@ export const ROOMS: RoomDef[] = [
     shape: 'square',
     group: 'Orcs',
     art: 'orcs',
+    scene: 'scene-throne-room',
     waves: [
       { mix: { orcwarrior: 4, orcscout: 4, orcarcher: 2 } },
       { mix: { orcwarrior: 5, orcscout: 4, orcarcher: 3, shaman: 2, shieldguard: 1 } },
