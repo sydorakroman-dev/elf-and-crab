@@ -10,6 +10,7 @@ import type { InputMode } from './player/controls';
 import { FamiliarGame } from './familiar/FamiliarGame';
 import { FamiliarSession, HeroSession } from './net/client';
 import { normalizeCode } from './net/protocol';
+import { showLoading } from './ui/shared';
 
 const CRAB_SCALE = 0.32; // companion-sized: ~1.4 m across with claws
 
@@ -35,6 +36,7 @@ async function boot(): Promise<void> {
   root.appendChild(renderer.domElement);
 
   const base = import.meta.env.BASE_URL;
+  const loaded = showLoading(root);
   const [elf, familiars] = await Promise.all([
     Elf.load(`${base}models/elf.glb`),
     loadFamiliarBodies(base, CRAB_SCALE),
@@ -46,6 +48,7 @@ async function boot(): Promise<void> {
     ? new FamiliarGame(renderer, root, elf, familiars, new FamiliarSession(joinCode))
     : new Game(renderer, root, elf, familiars, mode, multiplayerAvailable() ? new HeroSession() : null);
   game.start();
+  loaded();
 
   if (import.meta.env.DEV) {
     void import('three/addons/libs/stats.module.js').then(({ default: Stats }) => {

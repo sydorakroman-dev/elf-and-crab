@@ -89,6 +89,8 @@ export interface Snapshot {
   room: number;
   rw: number;
   phase: RunPhase;
+  /** Room whose intro card is up (-1: none). */
+  card: number;
   /** The current boss or mini-boss, while it lives. */
   boss: { hp: number; max: number; name: string } | null;
   /** Warning rings for attacks about to land. */

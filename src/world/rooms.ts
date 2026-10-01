@@ -25,6 +25,9 @@ export interface RoomDef {
   outdoor?: boolean;
   /** The room's three waves; the last one brings its boss. */
   waves: RoomWave[];
+  /** Who lives here, for the room's intro card (with their illustration, public/art/<art>.jpg). */
+  group: string;
+  art: string;
   torchLight: number;
   torchFlame: number;
   floor: Hsl;
@@ -44,6 +47,8 @@ export interface RoomDef {
 export const ROOMS: RoomDef[] = [
   {
     name: 'The Woodland',
+    group: 'Forest beasts',
+    art: 'beasts',
     half: 24,
     pillars: [],
     feature: 'woodland',
@@ -68,6 +73,8 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Crystal Cave',
+    group: 'Goblins',
+    art: 'goblins',
     waves: [
       { mix: { brawler: 8, riveter: 3, rotor: 2 } },
       { mix: { brawler: 10, rotor: 3, riveter: 3, lobber: 2, tinkerer: 2 } },
@@ -91,6 +98,8 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Crypt',
+    group: 'The undead',
+    art: 'undead',
     waves: [
       { mix: { skeleton: 8, skelarcher: 2, ghost: 2 } },
       { mix: { skeleton: 8, skelarcher: 3, ghost: 3, zombie: 2, knight: 1 } },
@@ -113,6 +122,8 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Throne Room',
+    group: 'Orcs',
+    art: 'orcs',
     waves: [
       { mix: { orcwarrior: 4, orcscout: 4, orcarcher: 2 } },
       { mix: { orcwarrior: 5, orcscout: 4, orcarcher: 3, shaman: 2, shieldguard: 1 } },
@@ -137,6 +148,8 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Flooded Hall',
+    group: 'Underworld dwellers',
+    art: 'underworld',
     waves: [
       { mix: { spider: 6, ooze: 3, sporecrawler: 2 } },
       { mix: { spider: 6, ooze: 3, sporecrawler: 2, mushroom: 2, mold: 1 } },
@@ -159,6 +172,8 @@ export const ROOMS: RoomDef[] = [
   },
   {
     name: 'The Lava Chamber',
+    group: 'Nature elementals',
+    art: 'elementals',
     waves: [
       { mix: { vine: 5, wind: 3, water: 2, fire: 2 } },
       { mix: { vine: 5, wind: 3, water: 3, fire: 3, golem: 1, treant: 1 } },

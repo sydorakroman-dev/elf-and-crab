@@ -1,4 +1,6 @@
 import { POWER_UPS, type PowerUpType } from '../game/powerups';
+import { ROOMS, WAVES_PER_ROOM } from '../world/rooms';
+import { enemyName } from '../game/enemies';
 
 /** HUD pieces shared by the hero's screen and the familiar's tablet. */
 
@@ -99,16 +101,51 @@ export class BossBar {
   }
 }
 
-/** Full-screen fade to black, for walking through a door into the next room. */
+/** Full-screen fade to black between rooms, with the next room's intro card (its foes' illustration). */
 export class Fade {
   private readonly el: HTMLElement;
+  private readonly card: HTMLElement;
+  private shown = -1;
 
   constructor(root: HTMLElement) {
-    root.insertAdjacentHTML('beforeend', '<div class="fade"></div>');
+    root.insertAdjacentHTML(
+      'beforeend',
+      `<div class="fade"><div class="room-card">
+         <img class="rc-art" alt="" />
+         <div class="rc-text"><span class="rc-step"></span><h2 class="rc-name"></h2><p class="rc-who"></p></div>
+         <p class="rc-skip">tap or click to continue</p>
+       </div></div>`,
+    );
     this.el = root.querySelector('.fade')!;
+    this.card = this.el.querySelector('.room-card')!;
   }
 
-  set(dark: boolean): void {
+  /** `card`: index of the room whose card to show on the black (-1: just black). */
+  set(dark: boolean, card = -1): void {
     this.el.classList.toggle('on', dark);
+    const show = dark && card >= 0;
+    this.card.classList.toggle('on', show);
+    if (!show || card === this.shown) return;
+    this.shown = card;
+    const room = ROOMS[card];
+    const boss = room.waves[WAVES_PER_ROOM - 1].boss;
+    this.card.querySelector<HTMLImageElement>('.rc-art')!.src = `${import.meta.env.BASE_URL}art/${room.art}.jpg`;
+    this.card.querySelector('.rc-step')!.textContent = card === ROOMS.length - 1 ? `Room ${card + 1} of ${ROOMS.length} · the last one` : `Room ${card + 1} of ${ROOMS.length}`;
+    this.card.querySelector('.rc-name')!.textContent = room.name;
+    this.card.querySelector('.rc-who')!.textContent = `${room.group} · Boss: ${boss ? enemyName(boss) : '—'}`;
   }
+}
+
+/** Loading screen: a random foes' illustration while the models load. */
+export function showLoading(root: HTMLElement): () => void {
+  const room = ROOMS[Math.floor(Math.random() * ROOMS.length)];
+  root.insertAdjacentHTML(
+    'beforeend',
+    `<div class="loading"><img src="${import.meta.env.BASE_URL}art/${room.art}.jpg" alt="" /><p>Gathering the monsters…</p></div>`,
+  );
+  const el = root.querySelector<HTMLElement>('.loading')!;
+  return () => {
+    el.classList.add('done');
+    setTimeout(() => el.remove(), 500);
+  };
 }

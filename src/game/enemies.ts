@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { clampToArena, pushOutOfCircles, type Circle } from './combat';
-import { Beast } from './beasts';
-import { Elemental } from './elementals';
-import { Monster } from './monsters';
+import { BEASTS, Beast } from './beasts';
+import { ELEMENTALS, Elemental } from './elementals';
+import { MONSTERS, Monster } from './monsters';
 import type { ProjectileKind } from './globs';
 
 export type BeastKind = 'beetle' | 'snake' | 'direwolf' | 'boar' | 'bear';
@@ -109,6 +109,11 @@ export interface RoomWave {
   mix: Partial<Record<EnemyKind, number>>;
   /** Appears at the north end when the wave starts; the rest are its escorts. */
   boss?: EnemyKind;
+}
+
+/** An enemy kind's display name ("Cave Spider", "The Necromancer"). */
+export function enemyName(kind: EnemyKind): string {
+  return (BEASTS as Record<string, { name: string }>)[kind]?.name ?? (ELEMENTALS as Record<string, { name: string }>)[kind]?.name ?? MONSTERS[kind as MonsterKind].name;
 }
 
 /** Makes an enemy of any kind. */

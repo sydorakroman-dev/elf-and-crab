@@ -212,7 +212,7 @@ export class FamiliarHud {
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
     this.bossBar.set(s.boss);
-    this.fade.set(s.phase === 'transition');
+    this.fade.set(s.phase === 'transition', s.card ?? -1);
 
     // Creature can be changed between runs or while paused (or before it's placed at all).
     this.canChange = s.state !== 'playing' || !s.fam;

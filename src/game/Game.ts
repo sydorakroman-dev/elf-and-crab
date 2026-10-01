@@ -48,8 +48,9 @@ const SPRING_BLUE = new THREE.Color(0x8fe8f5);
 const HEAL_GREEN = 0x7dff8a;
 
 type State = 'ready' | 'playing' | 'over' | 'won';
-const DOOR_FADE = 0.5; // seconds of black before the next room appears
-const DOOR_TOTAL = 0.95;
+const DOOR_FADE = 0.5; // seconds of black before the next room appears (with its intro card)
+const DOOR_TOTAL = 4; // the card stays up this long, unless skipped
+const CARD_SKIP_AFTER = 1.1; // a click / tap / key skips the card after this long
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
@@ -65,6 +66,8 @@ export class Game {
   private phase: RunPhase = 'fight';
   private doorT = 0;
   private doorSwitched = false;
+  /** A click / tap / key since the room card came up. */
+  private cardSkip = false;
   private playTime = 0;
   private readonly player: Player;
   private readonly elf: Elf;
@@ -159,7 +162,9 @@ export class Game {
     familiars.wolf.onStep = (strength) => this.sfx.scuttle(strength * 0.6);
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
+      else this.cardSkip = true;
     });
+    addEventListener('pointerdown', () => (this.cardSkip = true));
 
     if (net) {
       // Multiplayer: show the invite, bring the familiar's creature in when they pick it, obey their taps.
@@ -215,8 +220,13 @@ export class Game {
     this.score = 0;
     this.wave = 0;
     this.waveInRoom = 0;
-    this.phase = 'fight';
     this.waveBreak = 1.5;
+    // Open on the Woodland's intro card.
+    this.phase = 'transition';
+    this.doorT = DOOR_FADE;
+    this.doorSwitched = true;
+    this.cardSkip = false;
+    this.hud.fade.set(true, 0);
     this.invulnerable = 0;
     this.playTime = 0;
     this.dungeon.setExitOpen(false);
@@ -497,6 +507,7 @@ export class Game {
       room: this.room,
       rw: this.waveInRoom,
       phase: this.phase,
+      card: this.phase === 'transition' && this.doorSwitched ? this.room : -1,
       boss: this.bossState(),
       tels: this.telegraphTuples(),
       wave: this.wave,
@@ -750,6 +761,7 @@ export class Game {
     this.phase = 'transition';
     this.doorT = 0;
     this.doorSwitched = false;
+    this.cardSkip = false;
     this.hud.fade.set(true);
     this.sfx.whoosh();
   }
@@ -773,8 +785,10 @@ export class Game {
       this.waveInRoom = 0;
       this.waveBreak = 2.2;
       this.nextPickup = 8;
+      this.cardSkip = false;
+      this.hud.fade.set(true, this.room);
     }
-    if (this.doorT >= DOOR_TOTAL) {
+    if (this.doorT >= DOOR_TOTAL || (this.cardSkip && this.doorT >= CARD_SKIP_AFTER)) {
       this.phase = 'fight';
       this.hud.fade.set(false);
       this.banner(`Room ${this.room + 1} · ${ROOMS[this.room].name}`);
