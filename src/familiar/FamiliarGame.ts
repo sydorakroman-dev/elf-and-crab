@@ -351,7 +351,7 @@ export class FamiliarGame {
     this.pickups.sync(s.pickups, dt, this.time);
     this.pools.sync(s.zones, dt, this.time);
     this.telegraph.sync(s.tels ?? [], this.time);
-    this.dungeon.setExitOpen(s.phase !== 'fight');
+    this.dungeon.setExitOpen(s.phase === 'cleared' || s.phase === 'transition');
   }
 
   /** Our creature, its glow ring, the reach of its area spell, and (wolf) where a pounce would land. */

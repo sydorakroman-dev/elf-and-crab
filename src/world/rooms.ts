@@ -198,13 +198,15 @@ export const ROOMS: RoomDef[] = [
 
 export const WAVES_PER_ROOM = 3;
 
-export type RunPhase = 'fight' | 'cleared' | 'transition';
+/** ready: in the first room, waiting for the hero to start · fight · cleared (door open) · transition (walking through). */
+export type RunPhase = 'ready' | 'fight' | 'cleared' | 'transition';
 
 /** Top-of-screen label for where the run is. */
 export function runLabel(room: number, wave: number, remaining: number, phase: RunPhase, bossName: string | null): string {
   const name = ROOMS[room]?.name ?? '';
   if (phase === 'cleared') return `${name} cleared — through the north door ↑`;
   if (phase === 'transition') return 'Onward…';
+  if (phase === 'ready') return `${name} · ready when you are`;
   if (wave === 0) return `${name} · get ready…`;
   if (bossName) return `${name} · ${bossName}`;
   return `${name} · Wave ${wave}/${WAVES_PER_ROOM} · ${remaining} ${remaining === 1 ? 'foe' : 'foes'} left`;

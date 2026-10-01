@@ -58,6 +58,7 @@ const results = await page.evaluate(({ TRIALS }) => {
           if (Math.max(Math.abs(pos.x), Math.abs(pos.z)) > 22) p.keys.add('KeyW');
         }
       }
+      if (g.phase === 'ready') g.beginFight(); // press Start
       g.update(1 / 60);
       if (g.health < lastHealth && firstHitWave.v === null) firstHitWave.v = g.wave;
       lastHealth = g.health;

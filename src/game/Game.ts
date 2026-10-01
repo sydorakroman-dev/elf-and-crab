@@ -145,7 +145,7 @@ export class Game {
       if (this.state !== 'playing') this.newGame();
       this.banner(`${ROOMS[this.room].name}`);
       this.player.activate();
-    });
+    }, () => this.beginFight());
     if (mode === 'touch') this.touch = new TouchControls(root, this.player);
     this.player.onActiveChange = (active) => {
       this.hud.setPaused(!active, this.state === 'playing');
@@ -162,6 +162,7 @@ export class Game {
     familiars.wolf.onStep = (strength) => this.sfx.scuttle(strength * 0.6);
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
+      else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && this.phase === 'ready') this.beginFight();
       else this.cardSkip = true;
     });
     addEventListener('pointerdown', () => (this.cardSkip = true));
@@ -693,9 +694,21 @@ export class Game {
     if (this.health <= 0) this.gameOver();
   }
 
+  /** The hero pressed Start (Enter / the button): the first wave comes. */
+  private beginFight(): void {
+    if (this.state !== 'playing' || this.phase !== 'ready') return;
+    this.phase = 'fight';
+    this.waveBreak = 0.8;
+    this.hud.setStartPrompt(false);
+    this.banner('⚔️ Here they come!');
+    this.sfx.wave();
+  }
+
   /** Waves within a room; when all three are done, the north door opens (or, in the last room, you win). */
   private updateWaves(dt: number): void {
     this.hud.setWave(runLabel(this.room, this.waveInRoom, this.enemies.remaining, this.phase, this.enemies.boss?.bossName ?? null));
+    this.hud.setStartPrompt(this.phase === 'ready');
+    if (this.phase === 'ready') return; // nothing comes until the hero starts
     if (this.phase === 'transition') {
       this.updateDoor(dt);
       return;
@@ -789,7 +802,8 @@ export class Game {
       this.hud.fade.set(true, this.room);
     }
     if (this.doorT >= DOOR_TOTAL || (this.cardSkip && this.doorT >= CARD_SKIP_AFTER)) {
-      this.phase = 'fight';
+      // A new run waits in the first room until the hero presses Start; later rooms go straight in.
+      this.phase = this.wave === 0 ? 'ready' : 'fight';
       this.hud.fade.set(false);
       this.banner(`Room ${this.room + 1} · ${ROOMS[this.room].name}`);
     }

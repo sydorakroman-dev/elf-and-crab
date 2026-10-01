@@ -34,8 +34,9 @@ export class Hud {
   private readonly linkEl: HTMLElement;
   private readonly inviteStatus: HTMLElement;
   private readonly maxHealth: number;
+  private readonly startPrompt: HTMLElement;
 
-  constructor(root: HTMLElement, maxHealth: number, mode: InputMode, onPlay: () => void) {
+  constructor(root: HTMLElement, maxHealth: number, mode: InputMode, onPlay: () => void, onStart: () => void) {
     this.maxHealth = maxHealth;
     root.insertAdjacentHTML(
       'beforeend',
@@ -95,6 +96,18 @@ export class Hud {
     this.codeEl = root.querySelector('[data-code]')!;
     this.linkEl = root.querySelector('[data-link]')!;
     this.inviteStatus = root.querySelector('[data-istatus]')!;
+    // Its own layer (not inside the HUD bar), so it sits above the touch controls.
+    root.insertAdjacentHTML(
+      'beforeend',
+      `<button type="button" class="start-prompt" data-start hidden>${mode === 'touch' ? '▶ Start' : 'Press <kbd>Enter</kbd> to start'}</button>`,
+    );
+    this.startPrompt = root.querySelector('[data-start]')!;
+    // pointerdown, not click: the touch controls cancel the click a tap would make.
+    this.startPrompt.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      onStart();
+    });
     // Clicking anywhere on the overlay plays — except inside the invite / join controls.
     this.overlay.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('[data-invite], [data-join]')) return;
@@ -118,6 +131,7 @@ export class Hud {
   /** `inGame`: a run is in progress (so un-pausing resumes it). */
   setPaused(paused: boolean, inGame: boolean): void {
     this.overlay.hidden = !paused;
+    if (paused) this.setStartPrompt(false);
     if (!paused) this.hud.hidden = false;
     if (paused && inGame) {
       this.title.textContent = 'Paused';
@@ -183,6 +197,11 @@ export class Hud {
 
   setScore(score: number): void {
     this.score.textContent = String(score);
+  }
+
+  /** The "Start" prompt before the first wave: a button on touch screens, a hint for Enter with a mouse (the pointer is locked). */
+  setStartPrompt(visible: boolean): void {
+    if (this.startPrompt.hidden === visible) this.startPrompt.hidden = !visible;
   }
 
   /** The run label (room, wave, foes left…). */

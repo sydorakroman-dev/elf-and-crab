@@ -24,7 +24,8 @@ Aim assist is wider on touch.
 
 ## The run
 
-Six rooms, three waves each; every room's third wave brings its boss. Clear a room and its north door opens — walk
+The run waits in the Woodland until you're ready — press **Enter** (or tap **Start**) and the first wave comes; handy
+while a friend joins as your familiar. Six rooms, three waves each; every room's third wave brings its boss. Clear a room and its north door opens — walk
 through to the next one (your familiar comes along, and you're healed to full). Every room opens with an intro
 card — its foes' illustration (`public/art/`), name and boss — and a random one shows while the game loads. The last room ends with **the
 Inferno**; beat it to win.
