@@ -4,7 +4,7 @@ A small third-person WebGL arena game built with [Three.js](https://threejs.org)
 An elf archer holds off waves of slimes pouring out of a dungeon's gates — solo, or with a friend
 playing her crab familiar on a tablet.
 
-**Play:** https://sydorakroman-dev.github.io/elf-and-crab/ (multiplayer needs the Render server, see below)
+**Play:** https://elf-and-crab.onrender.com (also mirrored at https://sydorakroman-dev.github.io/elf-and-crab/)
 
 ## Controls
 
@@ -66,7 +66,7 @@ npm run balance  # difficulty simulator: bots play headlessly (needs `npm run de
 
 `render.yaml` is a [Render](https://render.com) Blueprint for a free web service (game + WebSocket server on one
 URL; free instances sleep when idle and take ~30-60 s to wake). The GitHub Pages copy is built with
-`VITE_SERVER_URL` pointing at it (put the URL in `.server-url` before `npm run deploy`).
+`VITE_SERVER_URL` pointing at it (read from `.server-url` by `npm run deploy`).
 
 ## How it's put together
 
