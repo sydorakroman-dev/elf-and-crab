@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { attachAtPivot, bounds, loadParts } from '../player/rig';
+import { MONSTER_NO_OUTLINE, toonifyMeshes } from '../player/toon';
 import { glowTexture } from '../util/glow';
 import type { BeastKind } from './enemies';
 
@@ -38,7 +39,9 @@ export async function loadBeastTemplates(base: string): Promise<void> {
   const kinds = Object.keys(BEAST_MODELS) as BeastKind[];
   const loaded = await Promise.all(kinds.map((k) => loadParts(`${base}models/beasts/${BEAST_MODELS[k].file}`).catch(() => null)));
   kinds.forEach((k, i) => {
-    if (loaded[i]) templates.set(k, loaded[i]!);
+    if (!loaded[i]) return;
+    toonifyMeshes(loaded[i]!.values(), MONSTER_NO_OUTLINE); // the hero's cartoon look: toon bands + outlines
+    templates.set(k, loaded[i]!);
   });
 }
 
@@ -68,7 +71,7 @@ export class BeastVisual {
   private head: THREE.Group | null = null;
   private tail: THREE.Group | null = null;
   private readonly legs: Leg[] = [];
-  private readonly mats: { m: THREE.MeshStandardMaterial; color: THREE.Color; emissive: THREE.Color; intensity: number }[] = [];
+  private readonly mats: { m: THREE.MeshToonMaterial | THREE.MeshStandardMaterial; color: THREE.Color; emissive: THREE.Color; intensity: number }[] = [];
   private readonly stars = new THREE.Group();
   private readonly kind: BeastKind;
   private readonly scale: number;
@@ -103,7 +106,7 @@ export class BeastVisual {
   }
 
   private trackMaterial(mesh: THREE.Mesh): void {
-    const m = (mesh.material as THREE.MeshStandardMaterial).clone();
+    const m = (mesh.material as THREE.MeshToonMaterial | THREE.MeshStandardMaterial).clone();
     mesh.material = m;
     this.mats.push({ m, color: m.color.clone(), emissive: m.emissive.clone(), intensity: m.emissiveIntensity });
   }

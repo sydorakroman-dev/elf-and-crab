@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { attachAtPivot, bounds, loadParts } from '../player/rig';
+import { MONSTER_NO_OUTLINE, toonifyMeshes } from '../player/toon';
 import { glowTexture } from '../util/glow';
 import type { BeastPose } from './beastVisual';
 import type { MonsterKind } from './enemies';
@@ -48,6 +49,7 @@ export async function loadMonsterTemplates(base: string): Promise<void> {
   kinds.forEach((k, i) => {
     const parts = loaded[i];
     if (!parts) return;
+    toonifyMeshes(parts.values(), MONSTER_NO_OUTLINE); // the hero's cartoon look: toon bands + outlines
     let top = 0;
     for (const m of parts.values()) top = Math.max(top, bounds(m).max.y);
     templates.set(k, { parts, height: top || 1 });
@@ -87,7 +89,7 @@ export class MonsterVisual {
   private head: THREE.Group | null = null;
   private readonly spinners: THREE.Object3D[] = [];
   private readonly bobbers: { o: THREE.Object3D; y: number }[] = [];
-  private readonly mats: { m: THREE.MeshStandardMaterial; color: THREE.Color; emissive: THREE.Color; intensity: number }[] = [];
+  private readonly mats: { m: THREE.MeshToonMaterial | THREE.MeshStandardMaterial; color: THREE.Color; emissive: THREE.Color; intensity: number }[] = [];
   private readonly stars = new THREE.Group();
   private readonly rig: Rig;
   private readonly hover: boolean;
@@ -122,7 +124,7 @@ export class MonsterVisual {
   }
 
   private track(mesh: THREE.Mesh): void {
-    const m = (mesh.material as THREE.MeshStandardMaterial).clone();
+    const m = (mesh.material as THREE.MeshToonMaterial | THREE.MeshStandardMaterial).clone();
     mesh.material = m;
     this.mats.push({ m, color: m.color.clone(), emissive: m.emissive.clone(), intensity: m.emissiveIntensity });
   }

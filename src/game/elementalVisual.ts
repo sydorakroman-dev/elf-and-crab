@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { attachAtPivot, bounds, loadParts } from '../player/rig';
+import { MONSTER_NO_OUTLINE, toonifyMeshes } from '../player/toon';
 import { glowTexture } from '../util/glow';
 import type { BeastPose } from './beastVisual';
 import type { ElementalKind } from './enemies';
@@ -22,7 +23,9 @@ export async function loadElementalTemplates(base: string): Promise<void> {
   const kinds = Object.keys(ELEMENTAL_MODELS) as ElementalKind[];
   const loaded = await Promise.all(kinds.map((k) => loadParts(`${base}models/elementals/${ELEMENTAL_MODELS[k].file}`).catch(() => null)));
   kinds.forEach((k, i) => {
-    if (loaded[i]) templates.set(k, loaded[i]!);
+    if (!loaded[i]) return;
+    toonifyMeshes(loaded[i]!.values(), MONSTER_NO_OUTLINE); // the hero's cartoon look: toon bands + outlines
+    templates.set(k, loaded[i]!);
   });
 }
 
@@ -47,7 +50,7 @@ export class ElementalVisual {
   private head: THREE.Group | null = null;
   private spin: THREE.Object3D | null = null;
   private readonly flames: THREE.Object3D[] = [];
-  private readonly mats: { m: THREE.MeshStandardMaterial; color: THREE.Color; emissive: THREE.Color; intensity: number }[] = [];
+  private readonly mats: { m: THREE.MeshToonMaterial | THREE.MeshStandardMaterial; color: THREE.Color; emissive: THREE.Color; intensity: number }[] = [];
   private readonly stars = new THREE.Group();
   private readonly kind: ElementalKind;
   private readonly scale: number;
@@ -80,7 +83,7 @@ export class ElementalVisual {
   }
 
   private track(mesh: THREE.Mesh): void {
-    const m = (mesh.material as THREE.MeshStandardMaterial).clone();
+    const m = (mesh.material as THREE.MeshToonMaterial | THREE.MeshStandardMaterial).clone();
     mesh.material = m;
     this.mats.push({ m, color: m.color.clone(), emissive: m.emissive.clone(), intensity: m.emissiveIntensity });
   }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /**
  * The cartoon look: banded "toon" shading plus a dark outline, to match the creature
@@ -49,13 +50,22 @@ function outlineMaterial(): THREE.ShaderMaterial {
  * meshes whose names match `noOutline` (small face details would turn into blobs).
  */
 export function toonify(root: THREE.Object3D, noOutline: RegExp): void {
-  sharedGradient ??= gradientMap();
-  const toon = new Map<THREE.Material, THREE.MeshToonMaterial>();
-  const outline = outlineMaterial();
   const meshes: THREE.Mesh[] = [];
   root.traverse((o) => {
     if (o instanceof THREE.Mesh && !o.userData.outline) meshes.push(o);
   });
+  toonifyMeshes(meshes, noOutline);
+}
+
+/** Small parts and face details on the monsters that shouldn't get an outline. */
+export const MONSTER_NO_OUTLINE =
+  /eye|pupil|shine|brow|nostril|nose_hole|mouth|tooth|fang|tusk|rib_mark|stitch|cap_spot|blue_mark|bowstring|arrow_feather|shell_seam|goggle|clock_hand|face_glow|drop|spore|finger|thumb|bristle|^thorn_?\d|claw|spot/;
+
+/** `toonify` for a loose set of meshes (e.g. a model's parts, before they're rigged). */
+export function toonifyMeshes(meshes: Iterable<THREE.Mesh>, noOutline: RegExp): void {
+  sharedGradient ??= gradientMap();
+  const toon = new Map<THREE.Material, THREE.MeshToonMaterial>();
+  const outline = outlineMaterial();
   for (const mesh of meshes) {
     const src = mesh.material as THREE.MeshStandardMaterial;
     let mat = toon.get(src);
@@ -65,11 +75,25 @@ export function toonify(root: THREE.Object3D, noOutline: RegExp): void {
     }
     mesh.material = mat;
     if (noOutline.test(mesh.name)) continue;
-    const hull = new THREE.Mesh(mesh.geometry, outline);
+    const hull = new THREE.Mesh(hullGeometry(mesh.geometry), outline);
     hull.userData.outline = true;
     hull.castShadow = false;
     hull.receiveShadow = false;
     hull.raycast = () => {};
     mesh.add(hull);
   }
+}
+
+/**
+ * The hull is pushed out along its normals. Faceted (flat-shaded, unindexed) models have a normal per
+ * face, which would split the hull into loose triangles with gaps at every edge — so for those the
+ * hull gets welded vertices and smooth normals.
+ */
+function hullGeometry(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  if (geo.index) return geo;
+  const pos = new THREE.BufferGeometry();
+  pos.setAttribute('position', geo.getAttribute('position'));
+  const welded = mergeVertices(pos, 1e-4);
+  welded.computeVertexNormals();
+  return welded;
 }
