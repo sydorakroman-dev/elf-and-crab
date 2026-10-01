@@ -5,10 +5,12 @@
  */
 
 import type { ZoneTuple } from '../game/zones';
+import type { TelegraphTuple } from '../game/telegraph';
+import type { RunPhase } from '../world/rooms';
 
-export type GameState = 'ready' | 'playing' | 'paused' | 'over';
+export type GameState = 'ready' | 'playing' | 'paused' | 'over' | 'won';
 
-export const SLIME_KIND_CODES = ['small', 'big', 'spitter'] as const;
+export const SLIME_KIND_CODES = ['small', 'big', 'spitter', 'boss'] as const;
 export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart'] as const;
 
 /** [id, kind, x, z, yaw, y, sx, sy, sz, flash, stun, death, calm] */
@@ -66,7 +68,9 @@ export type GameEvent =
   | { e: 'pickup'; p: number; x: number; z: number }
   | { e: 'hurt' }
   | { e: 'shield'; x: number; z: number }
-  | { e: 'banner'; text: string };
+  | { e: 'banner'; text: string }
+  | { e: 'slam'; x: number; z: number; r: number }
+  | { e: 'door' };
 
 export interface Snapshot {
   /** Hero simulation time, seconds. */
@@ -79,6 +83,12 @@ export interface Snapshot {
   globs: GlobTuple[];
   pickups: PickupTuple[];
   zones: ZoneTuple[];
+  /** Room index (0-based), wave within the room, and where the run is (fighting / door open / walking through). */
+  room: number;
+  rw: number;
+  phase: RunPhase;
+  /** The King Slime, while it lives: health and its slam warning. */
+  boss: { hp: number; max: number; tel: TelegraphTuple | null } | null;
   wave: number;
   remaining: number;
   health: number;

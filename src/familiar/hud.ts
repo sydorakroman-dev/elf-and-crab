@@ -1,7 +1,8 @@
 import { POWER_CODES } from '../net/snapshot';
 import type { Snapshot } from '../net/snapshot';
 import { normalizeCode } from '../net/protocol';
-import { Popups, cssColor, heartsHtml, powerChipsHtml, powerChipsKey, waveText } from '../ui/shared';
+import { BossBar, Fade, Popups, cssColor, heartsHtml, powerChipsHtml, powerChipsKey } from '../ui/shared';
+import { runLabel } from '../world/rooms';
 import type { PowerUpType } from '../game/powerups';
 import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, type FamiliarKind, type SpellId } from '../game/familiars';
 
@@ -22,6 +23,8 @@ function speedPips(speed: number): string {
  */
 export class FamiliarHud {
   readonly popups: Popups;
+  readonly bossBar: BossBar;
+  readonly fade: Fade;
   onStart?: () => void;
   onChoose?: (kind: FamiliarKind) => void;
   onSpell?: (id: SpellId) => void;
@@ -93,6 +96,8 @@ export class FamiliarHud {
        </div>`,
     );
     this.popups = new Popups(root);
+    this.bossBar = new BossBar(root);
+    this.fade = new Fade(root);
     this.hearts = root.querySelector('[data-f-hearts]')!;
     this.powers = root.querySelector('[data-f-powers]')!;
     this.wave = root.querySelector('[data-f-wave]')!;
@@ -203,9 +208,11 @@ export class FamiliarHud {
       this.powersKey = key;
       this.powers.innerHTML = powerChipsHtml(list);
     }
-    const w = waveText(s.wave, s.remaining);
+    const w = runLabel(s.room, s.rw, s.remaining, s.phase, s.boss !== null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
+    this.bossBar.set(s.boss);
+    this.fade.set(s.phase === 'transition');
 
     // Creature can be changed between runs or while paused (or before it's placed at all).
     this.canChange = s.state !== 'playing' || !s.fam;

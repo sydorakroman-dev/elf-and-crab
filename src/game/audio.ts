@@ -129,6 +129,13 @@ export class Sfx {
     [0, 4, 7, 11, 14].forEach((semi, i) => this.tone('sine', 523 * Math.pow(2, semi / 12), 523 * Math.pow(2, semi / 12), 0.8, 0.05, i * 0.11));
   }
 
+  /** The exit portcullis grinding open. */
+  door(): void {
+    this.hiss(0.9, 0.12, 300, 'lowpass');
+    this.tone('sawtooth', 70, 55, 0.9, 0.05);
+    [0, 4, 7].forEach((semi, i) => this.tone('triangle', 392 * Math.pow(2, semi / 12), 392 * Math.pow(2, semi / 12), 0.35, 0.06, 0.5 + i * 0.1));
+  }
+
   /** Landing a pounce: a soft thump. */
   land(): void {
     this.tone('sine', 140, 50, 0.18, 0.16);

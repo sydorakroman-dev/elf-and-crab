@@ -86,6 +86,13 @@ describe('waveSpec', () => {
     }
   });
 
+  it('gives whole slime counts for fractional difficulty levels', () => {
+    for (const w of [1.8, 2.6, 3.4, 7.4, 8.2]) {
+      const s = waveSpec(w);
+      for (const n of [s.small, s.big, s.spitters, s.packSize, s.smallHp, s.bigHp, s.spitterHp]) expect(Number.isInteger(n)).toBe(true);
+    }
+  });
+
   it('is capped', () => {
     expect(waveSpec(1000)).toMatchObject({ small: 30, big: 12, spitters: 8, speedBonus: 3, packSize: 5, spawnInterval: 0.7 });
   });

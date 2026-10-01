@@ -1,7 +1,7 @@
 import type { Best } from '../game/highscore';
 import type { InputMode } from '../player/controls';
 import type { PowerUpType } from '../game/powerups';
-import { Popups, heartsHtml, powerChipsHtml, powerChipsKey, waveText } from './shared';
+import { BossBar, Fade, Popups, heartsHtml, powerChipsHtml, powerChipsKey } from './shared';
 import { normalizeCode } from '../net/protocol';
 import type { ConnStatus } from '../net/client';
 import QRCode from 'qrcode';
@@ -20,6 +20,8 @@ export class Hud {
   private readonly powers: HTMLElement;
   private powersKey = '';
   private readonly popups: Popups;
+  readonly bossBar: BossBar;
+  readonly fade: Fade;
   private readonly hud: HTMLElement;
   private readonly overlay: HTMLElement;
   private readonly title: HTMLElement;
@@ -80,6 +82,8 @@ export class Hud {
     this.muted = root.querySelector('[data-muted]')!;
     this.powers = root.querySelector('[data-powers]')!;
     this.popups = new Popups(root);
+    this.bossBar = new BossBar(root);
+    this.fade = new Fade(root);
     this.hud = root.querySelector('.hud')!;
     this.overlay = root.querySelector('.overlay')!;
     this.title = root.querySelector('[data-title]')!;
@@ -181,8 +185,8 @@ export class Hud {
     this.score.textContent = String(score);
   }
 
-  setWave(wave: number, remaining: number): void {
-    const text = waveText(wave, remaining);
+  /** The run label (room, wave, slimes left…). */
+  setWave(text: string): void {
     if (this.wave.textContent !== text) this.wave.textContent = text;
   }
 
@@ -192,6 +196,15 @@ export class Hud {
 
   flashHurt(): void {
     this.popups.flashHurt();
+  }
+
+  showVictory(score: number, seconds: number, isBest: boolean): void {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    this.title.textContent = '👑 Victory!';
+    this.message.innerHTML = `The King Slime is no more. You cleared all five rooms in <strong>${m}:${s}</strong> with <strong>${score}</strong> points${isBest ? ' — a new best!' : '.'}`;
+    this.button.textContent = 'Play again';
+    this.overlay.hidden = false;
   }
 
   showGameOver(wave: number, score: number, isBest: boolean): void {

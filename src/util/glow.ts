@@ -5,6 +5,8 @@ let cached: THREE.Texture | null = null;
 /** Soft white radial gradient, for additive glow sprites (flames, sparks). */
 export function glowTexture(): THREE.Texture {
   if (cached) return cached;
+  // Outside a browser (unit tests) there's no canvas: a blank texture is fine there.
+  if (typeof document === 'undefined') return (cached = new THREE.Texture());
   const size = 128;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;

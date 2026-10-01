@@ -385,3 +385,22 @@ kbd {
 .fam-overlay { cursor: default; }
 .fam-solo { margin-top: 16px; font-size: 13px; }
 .fam-solo a { color: rgba(255, 255, 255, 0.7); }
+
+/* Rooms & boss */
+.fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.45s ease; }
+.fade.on { opacity: 1; }
+.boss-bar {
+  position: fixed;
+  left: 50%;
+  top: calc(58px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 32px));
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #ffd36e;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+.boss-track { margin-top: 4px; height: 12px; border-radius: 999px; background: rgba(10, 8, 16, 0.7); border: 1px solid rgba(255, 211, 110, 0.6); overflow: hidden; }
+.boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #a01824, #ff4d5e); transition: width 0.2s; }

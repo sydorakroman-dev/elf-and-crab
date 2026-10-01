@@ -144,6 +144,7 @@ export class Arrows {
       }
       let solid = false;
       for (const o of obstacles) {
+        if (o.low) continue; // arrows fly over pits
         const t = segmentCircleHit(p.x, p.z, bx, bz, o);
         if (t !== null && t < bestT) {
           bestT = t;

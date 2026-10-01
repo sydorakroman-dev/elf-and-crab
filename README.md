@@ -22,6 +22,30 @@ On phones and tablets (touch-first devices) the game shows on-screen controls in
 left thumb moves (floating joystick), right thumb drags the camera, hold 🏹 to shoot, tap 💨 to dash.
 Aim assist is wider on touch.
 
+## The run
+
+Five rooms, three waves each. Clear a room and its north door opens — walk through to the next one (your familiar
+comes along, and you're healed to full). The last room ends with the **King Slime**; beat it to win.
+
+| Room | |
+| --- | --- |
+| 1 · The Crypt | warm torches, a central brazier, four pillars |
+| 2 · The Flooded Hall | two rows of pillars, cold blue light, puddles |
+| 3 · The Lava Chamber | a glowing lava pit in the middle (arrows fly over it), a ring of pillars |
+| 4 · The Crystal Cave | big, with glowing crystal clusters to fight around |
+| 5 · The Throne Room | a colonnade and a throne; waves 1–2, then the King Slime |
+
+## Enemies
+
+| | Small slime | Big slime | Spitter | 👑 King Slime |
+| --- | --- | --- | --- | --- |
+| HP | 1 (+1 every 5 levels) | 4 (+1 every 3) | 2 (+1 every 4) | 90 |
+| Touch damage | 1 ♥ | 2 ♥ | 1 ♥ | 1 ♥ (slam) |
+| Special | — | — | keeps 9–14 m away, spits globs (1 ♥) | leaping slam with a warning ring, 5-glob volleys, splits off 4 small slimes at ⅔ and ⅓ health, resists stun, can't be calmed |
+
+Waves get bigger, faster and tougher across the run (`roomWaveDifficulty` in `src/world/rooms.ts` feeds `waveSpec`
+in `src/game/combat.ts`).
+
 ## Playing together (asymmetric co-op)
 
 Two roles:
@@ -80,7 +104,8 @@ URL; free instances sleep when idle and take ~30-60 s to wake). The GitHub Pages
 
 ## How it's put together
 
-- `src/world/dungeon.ts` — the arena: instanced floor tiles and wall bricks, gates, pillars, torches.
+- `src/world/rooms.ts` — the five rooms and the run's progression; `src/world/dungeon.ts` builds a room: instanced floor
+  tiles and wall bricks, gates and doors, pillars, its centrepiece, torches.
 - `src/player/elf.ts`, `src/player/crab.ts` — the two glTF models (`public/models/`). They're static, unrigged
   meshes, so `src/player/rig.ts` groups their named parts under pivots and the classes animate them in code.
 - `server/` — room manager (`rooms.ts`, unit tested) and the HTTP + WebSocket server (`index.ts`).

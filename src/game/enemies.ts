@@ -2,13 +2,29 @@ import * as THREE from 'three';
 import { clampToArena, pushOutOfCircles, rangeIntent, waveSpec, type Circle, type WaveSpec } from './combat';
 import { glowTexture } from '../util/glow';
 
-export type SlimeKind = 'small' | 'big' | 'spitter';
+export type SlimeKind = 'small' | 'big' | 'spitter' | 'boss';
 
 export const SLIME_KINDS: Record<SlimeKind, { radius: number; speed: number; color: number; score: number; hopRate: number; push: number }> = {
   small: { radius: 0.7, speed: 3.6, color: 0x62d46a, score: 10, hopRate: 1.8, push: 9 },
   big: { radius: 1.25, speed: 2.6, color: 0xa35ee0, score: 40, hopRate: 1.3, push: 5 },
   spitter: { radius: 0.85, speed: 3.2, color: 0x4fb3ff, score: 25, hopRate: 1.6, push: 7 },
+  boss: { radius: 2.8, speed: 2.2, color: 0xc0303a, score: 500, hopRate: 0.9, push: 0.6 },
 };
+
+// King Slime (boss) tuning.
+export const BOSS_HP = 90;
+const BOSS_FIRST_ACTION = 3;
+const BOSS_ACTION_GAP = 3.2; // seconds of chasing between attacks
+const SLAM_WINDUP = 0.9;
+const SLAM_LEAP = 0.7;
+const SLAM_RECOVER = 0.6;
+export const SLAM_RADIUS = 4.5;
+const VOLLEY_WINDUP = 0.6;
+const VOLLEY_SPITS = 5;
+const VOLLEY_SPREAD = 0.22; // radians between globs
+/** Health fractions where the King Slime splits off small slimes. */
+const SPLIT_AT = [2 / 3, 1 / 3];
+export const SPLIT_COUNT = 4;
 
 // Spitter tuning.
 const SPIT_RANGE_MIN = 9;
@@ -71,6 +87,26 @@ export class SlimeVisual {
       pupil.position.set(side * 0.35, 1.25, 0.98);
       this.body.add(eye, pupil);
     }
+    if (kind === 'boss') {
+      // A golden crown, and a grumpy brow.
+      const gold = new THREE.MeshStandardMaterial({ color: 0xe8b84a, metalness: 0.7, roughness: 0.3, flatShading: true });
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.18, 10, 1, true), gold);
+      band.material.side = THREE.DoubleSide;
+      band.position.y = 1.95;
+      this.body.add(band);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 4), gold);
+        spike.position.set(Math.cos(a) * 0.42, 2.18, Math.sin(a) * 0.42);
+        this.body.add(spike);
+      }
+      for (const side of [-1, 1]) {
+        const brow = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.06), pupilMat);
+        brow.position.set(side * 0.35, 1.5, 0.92);
+        brow.rotation.z = side * 0.35;
+        this.body.add(brow);
+      }
+    }
     if (kind === 'spitter') {
       // A little round "o" mouth, for spitting.
       const mouth = new THREE.Mesh(mouthGeo, pupilMat);
@@ -119,6 +155,23 @@ export interface Spit {
   dirZ: number;
 }
 
+/** The King Slime landing a slam: everything within `r` of (x, z) is hit. */
+export interface Slam {
+  x: number;
+  z: number;
+  r: number;
+}
+
+/** Where a boss attack will land, for the warning ring: progress 0 → 1 until impact. */
+export interface Telegraph {
+  x: number;
+  z: number;
+  r: number;
+  p: number;
+}
+
+type BossPhase = 'chase' | 'slam-windup' | 'slam-leap' | 'slam-recover' | 'volley-windup';
+
 let nextSlimeId = 1;
 
 export class Slime {
@@ -129,7 +182,13 @@ export class Slime {
   readonly score: number;
   readonly color: THREE.Color;
   readonly pose: SlimePose;
+  readonly maxHp: number;
   hp: number;
+  /** Boss only: where its current attack will land (for the warning ring). */
+  telegraph: Telegraph | null = null;
+  /** Boss only: a slam that landed this step, and how many small slimes to split off. */
+  slam: Slam | null = null;
+  splitRequest = 0;
   /** Set once hp hits 0; the slime shrinks away, then `removed` is set. */
   dying = false;
   removed = false;
@@ -149,12 +208,18 @@ export class Slime {
   private spitTimer = SPIT_INTERVAL * (0.5 + Math.random() * 0.5);
   private windup = 0; // > 0 while swelling up to spit
   private strafeSign = Math.random() < 0.5 ? -1 : 1;
+  private bossPhase: BossPhase = 'chase';
+  private bossTimer = BOSS_FIRST_ACTION;
+  private nextAttack: 'slam' | 'volley' = 'slam';
+  private leapFrom = { x: 0, z: 0 };
+  private splitsDone = 0;
 
   constructor(kind: SlimeKind, x: number, z: number, speedBonus: number, hp: number) {
     const k = SLIME_KINDS[kind];
     this.kind = kind;
     this.radius = k.radius;
     this.hp = hp;
+    this.maxHp = hp;
     this.score = k.score;
     this.speed = k.speed + speedBonus;
     this.hopRate = k.hopRate;
@@ -207,35 +272,147 @@ export class Slime {
     this.hp -= amount;
     this.flash = 1;
     this.knock.set(dirX * this.push, dirZ * this.push);
-    if (this.hp <= 0) this.dying = true;
+    if (this.hp <= 0) {
+      this.dying = true;
+      this.telegraph = null;
+    } else if (this.kind === 'boss') {
+      // Split off small slimes as health drops past each threshold.
+      while (this.splitsDone < SPLIT_AT.length && this.hp <= this.maxHp * SPLIT_AT[this.splitsDone]) {
+        this.splitsDone++;
+        this.splitRequest += SPLIT_COUNT;
+      }
+    }
     return this.dying;
   }
 
   /** Freezes the slime in place (no moving, spitting or contact damage) for `seconds`. */
   stun(seconds: number): void {
     if (this.dying) return;
+    // The King shrugs most of it off, and can't be stunned out of a leap.
+    if (this.kind === 'boss') {
+      if (this.bossPhase === 'slam-leap') return;
+      seconds *= 0.35;
+    }
     this.stunTimer = Math.max(this.stunTimer, seconds);
     this.windup = 0; // an interrupted spit is lost
+    if (this.kind === 'boss') this.resetBossAttack();
   }
 
   /** Makes the slime lose interest for `seconds`: it wanders away, won't spit or hurt anyone. */
   calm(seconds: number): void {
-    if (this.dying) return;
+    if (this.dying || this.kind === 'boss') return; // the King cannot be calmed
     this.calmTimer = Math.max(this.calmTimer, seconds);
     this.windup = 0;
     this.wanderAngle = Math.random() * Math.PI * 2;
   }
 
-  /** Moves the slime; returns a spit when a spitter lets one fly this step. */
-  update(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit | null {
+  /** Moves the slime; returns any globs it spits this step. */
+  update(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit[] {
     this.time += dt;
-    const spit = this.step(dt, target, others, obstacles, half);
+    this.slam = null;
+    const spit = this.kind === 'boss' && !this.dying && this.stunTimer <= 0 ? this.bossStep(dt, target, others, obstacles, half) : this.step(dt, target, others, obstacles, half);
     this.pose.flash = this.flash;
     this.pose.stun = this.stunTimer > 0 ? 1 : 0;
     this.pose.calm = this.calmTimer > 0 ? 1 : 0;
     this.visual.apply(this.pose, this.time);
     this.slow = 1;
-    return spit;
+    return spit === null ? [] : Array.isArray(spit) ? spit : [spit];
+  }
+
+  private resetBossAttack(): void {
+    this.bossPhase = 'chase';
+    this.bossTimer = BOSS_ACTION_GAP;
+    this.telegraph = null;
+  }
+
+  /** The King Slime: lumbers after the elf, then alternates a leaping slam and a spit volley. */
+  private bossStep(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit[] | null {
+    if (this.bossPhase !== 'chase') this.flash = Math.max(0, this.flash - dt * 5); // step() fades it while chasing
+    const p = this.pose;
+    this.bossTimer -= dt;
+    const tx = target.x - p.x;
+    const tz = target.z - p.z;
+    const dist = Math.hypot(tx, tz) || 1;
+
+    switch (this.bossPhase) {
+      case 'chase': {
+        this.step(dt, target, others, obstacles, half);
+        if (this.bossTimer <= 0) {
+          if (this.nextAttack === 'slam') {
+            this.bossPhase = 'slam-windup';
+            this.bossTimer = SLAM_WINDUP;
+            // Aim at where the elf is now (they have the windup + leap to get out).
+            const land = { x: target.x, z: target.z };
+            clampToArena(land, half, this.radius);
+            this.telegraph = { x: land.x, z: land.z, r: SLAM_RADIUS, p: 0 };
+          } else {
+            this.bossPhase = 'volley-windup';
+            this.bossTimer = VOLLEY_WINDUP;
+          }
+        }
+        return null;
+      }
+      case 'slam-windup': {
+        const k = 1 - this.bossTimer / SLAM_WINDUP;
+        p.y = 0;
+        p.sx = p.sz = 1 + k * 0.25;
+        p.sy = 1 - k * 0.3;
+        p.yaw = Math.atan2(this.telegraph!.x - p.x, this.telegraph!.z - p.z);
+        this.telegraph!.p = k * 0.55;
+        if (this.bossTimer <= 0) {
+          this.bossPhase = 'slam-leap';
+          this.bossTimer = SLAM_LEAP;
+          this.leapFrom = { x: p.x, z: p.z };
+        }
+        return null;
+      }
+      case 'slam-leap': {
+        const t = this.telegraph!;
+        const k = 1 - this.bossTimer / SLAM_LEAP;
+        p.x = this.leapFrom.x + (t.x - this.leapFrom.x) * k;
+        p.z = this.leapFrom.z + (t.z - this.leapFrom.z) * k;
+        p.y = Math.sin(k * Math.PI) * 4;
+        p.sx = p.sz = 0.92;
+        p.sy = 1.12;
+        t.p = 0.55 + k * 0.45;
+        if (this.bossTimer <= 0) {
+          p.x = t.x;
+          p.z = t.z;
+          p.y = 0;
+          pushOutOfCircles(p, this.radius, obstacles);
+          this.slam = { x: p.x, z: p.z, r: SLAM_RADIUS };
+          this.telegraph = null;
+          this.bossPhase = 'slam-recover';
+          this.bossTimer = SLAM_RECOVER;
+          this.nextAttack = 'volley';
+        }
+        return null;
+      }
+      case 'slam-recover': {
+        const k = this.bossTimer / SLAM_RECOVER;
+        p.sx = p.sz = 1 + k * 0.35;
+        p.sy = 1 - k * 0.35;
+        if (this.bossTimer <= 0) this.resetBossAttack();
+        return null;
+      }
+      case 'volley-windup': {
+        const k = 1 - this.bossTimer / VOLLEY_WINDUP;
+        p.y = 0;
+        p.sx = p.sz = 1 + k * 0.15;
+        p.sy = 1 + k * 0.3;
+        p.yaw = Math.atan2(tx, tz);
+        if (this.bossTimer > 0) return null;
+        this.nextAttack = 'slam';
+        this.resetBossAttack();
+        const base = Math.atan2(tx / dist, tz / dist);
+        return Array.from({ length: VOLLEY_SPITS }, (_, i) => {
+          const a = base + (i - (VOLLEY_SPITS - 1) / 2) * VOLLEY_SPREAD;
+          const dx = Math.sin(a);
+          const dz = Math.cos(a);
+          return { x: p.x + dx * this.radius, z: p.z + dz * this.radius, dirX: dx, dirZ: dz };
+        });
+      }
+    }
   }
 
   private step(dt: number, target: THREE.Vector3, others: Slime[], obstacles: readonly Circle[], half: number): Spit | null {
@@ -318,6 +495,24 @@ export class Slime {
         dz = tz * intent;
       }
     }
+    // Steer around pillars (and the brazier, lava…) that stand between the slime and its goal,
+    // instead of pushing straight into them forever.
+    for (const ob of obstacles) {
+      const ox = ob.x - p.x;
+      const oz = ob.z - p.z;
+      const d = Math.hypot(ox, oz);
+      const reach = ob.radius + this.radius + 2;
+      if (d === 0 || d > reach) continue;
+      const len0 = Math.hypot(dx, dz) || 1;
+      const ahead = (ox * dx + oz * dz) / (d * len0);
+      if (ahead < 0.35) continue;
+      // Turn toward whichever side the goal already leans to (or this slime's habit if dead ahead).
+      const cross = dx * oz - dz * ox;
+      const side = Math.abs(cross) < 1e-3 ? this.strafeSign : Math.sign(cross);
+      const strength = (ahead * (reach - d)) / reach * 2.2;
+      dx += (oz / d) * side * strength;
+      dz += (-ox / d) * side * strength;
+    }
     // Keep slimes from stacking up on each other.
     for (const o of others) {
       if (o === this || o.dying) continue;
@@ -353,9 +548,14 @@ export class Enemies {
   private queue: SlimeKind[] = [];
   private spawnTimer = 0;
   private spec: WaveSpec = waveSpec(1);
-  private readonly gates: THREE.Vector3[];
+  private gates: THREE.Vector3[];
 
   constructor(gates: THREE.Vector3[]) {
+    this.gates = gates;
+  }
+
+  /** New room, new gates. */
+  setGates(gates: THREE.Vector3[]): void {
     this.gates = gates;
   }
 
@@ -395,8 +595,36 @@ export class Enemies {
     return hit;
   }
 
-  /** Updates all slimes; returns the spits launched this step. */
-  update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], half: number): Spit[] {
+  /** The King Slime, while it's alive. */
+  get boss(): Slime | null {
+    return this.slimes.find((s) => s.kind === 'boss' && s.alive) ?? null;
+  }
+
+  /** Brings in the King Slime at (x, z), with a few small slimes trickling in as escorts. */
+  startBossWave(wave: number, x: number, z: number): Slime {
+    this.spec = waveSpec(wave);
+    this.queue = Array<SlimeKind>(6).fill('small');
+    this.spawnTimer = 4;
+    const boss = new Slime('boss', x, z, 0, BOSS_HP);
+    this.slimes.push(boss);
+    this.group.add(boss.group);
+    return boss;
+  }
+
+  /** Spawns small slimes in a ring around (x, z) (the King splitting). */
+  private split(x: number, z: number, count: number, obstacles: readonly Circle[], half: number): void {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + Math.random();
+      const s = new Slime('small', x + Math.cos(a) * 3.5, z + Math.sin(a) * 3.5, this.spec.speedBonus, this.spec.smallHp);
+      pushOutOfCircles(s.pose, s.radius, obstacles);
+      clampToArena(s.pose, half, s.radius);
+      this.slimes.push(s);
+      this.group.add(s.group);
+    }
+  }
+
+  /** Updates all slimes; returns globs spat and boss slams landed this step. */
+  update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], half: number): { spits: Spit[]; slams: Slam[] } {
     this.spawnTimer -= dt;
     if (this.queue.length && this.spawnTimer <= 0) {
       // A pack pours out of one gate at a time.
@@ -416,15 +644,20 @@ export class Enemies {
       }
     }
     const spits: Spit[] = [];
-    for (const s of this.slimes) {
-      const spit = s.update(dt, target, this.slimes, obstacles, half);
-      if (spit) spits.push(spit);
+    const slams: Slam[] = [];
+    for (const s of [...this.slimes]) {
+      spits.push(...s.update(dt, target, this.slimes, obstacles, half));
+      if (s.slam) slams.push(s.slam);
+      if (s.splitRequest > 0) {
+        this.split(s.x, s.z, s.splitRequest, obstacles, half);
+        s.splitRequest = 0;
+      }
     }
     for (let i = this.slimes.length - 1; i >= 0; i--) {
       if (!this.slimes[i].removed) continue;
       this.group.remove(this.slimes[i].group);
       this.slimes.splice(i, 1);
     }
-    return spits;
+    return { spits, slams };
   }
 }

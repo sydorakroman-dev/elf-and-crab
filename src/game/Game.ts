@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { mulberry32 } from '../util/rng';
-import { ARENA_HALF, Dungeon, WALL_HEIGHT } from '../world/dungeon';
-import { Player, type InputMode } from '../player/controls';
+import { Dungeon, WALL_HEIGHT } from '../world/dungeon';
+import { ROOMS, WAVES_PER_ROOM, isBossWave, roomWaveDifficulty, runLabel, type RunPhase } from '../world/rooms';
+import { TelegraphRing } from './telegraph';
+import { Player, type Arena, type InputMode } from '../player/controls';
 import { TouchControls } from '../ui/touch';
 import type { Elf } from '../player/elf';
 import type { FamiliarBody } from '../player/beasts';
@@ -39,21 +40,32 @@ const PICKUP_INTERVAL_MIN = 10; // seconds between random floor spawns
 const PICKUP_INTERVAL_MAX = 18;
 const MAX_PICKUPS = 2;
 /** Chance a killed slime drops a power-up. */
-const DROP_CHANCE: Record<Slime['kind'], number> = { small: 0.04, spitter: 0.1, big: 0.25 };
+const DROP_CHANCE: Record<Slime['kind'], number> = { small: 0.04, spitter: 0.1, big: 0.25, boss: 0 };
 const SNAPSHOT_EVERY = 3; // steps → 20 Hz while playing
 const IDLE_SNAPSHOT_EVERY = 12; // 5 Hz on menus / pause
 const STUN_STAR = new THREE.Color(0xfff27a);
 const CALM_PINK = new THREE.Color(0xffb8dc);
 const SPRING_BLUE = new THREE.Color(0x8fe8f5);
 
-type State = 'ready' | 'playing' | 'over';
+type State = 'ready' | 'playing' | 'over' | 'won';
+const DOOR_FADE = 0.5; // seconds of black before the next room appears
+const DOOR_TOTAL = 0.95;
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
   private readonly timer = new THREE.Timer();
-  private readonly dungeon: Dungeon;
+  private dungeon: Dungeon;
+  private readonly arena: Arena;
+  private readonly shadowSize: number;
+  private readonly telegraph = new TelegraphRing();
+  private room = 0;
+  private waveInRoom = 0;
+  private phase: RunPhase = 'fight';
+  private doorT = 0;
+  private doorSwitched = false;
+  private playTime = 0;
   private readonly player: Player;
   private readonly elf: Elf;
   private readonly companion: Companion;
@@ -101,7 +113,9 @@ export class Game {
     this.net = net;
     this.elf = elf;
     this.mode = mode;
-    this.dungeon = new Dungeon(this.scene, mulberry32(1337), mode === 'touch' ? 1024 : 2048);
+    this.shadowSize = mode === 'touch' ? 1024 : 2048;
+    this.dungeon = new Dungeon(this.scene, ROOMS[0], this.shadowSize);
+    this.arena = { half: this.dungeon.half, wallHeight: WALL_HEIGHT, obstacles: this.dungeon.obstacles };
     this.enemies = new Enemies(this.dungeon.gates);
     this.companion = new Companion(familiars);
     this.shieldBubble = new THREE.Mesh(
@@ -110,19 +124,20 @@ export class Game {
     );
     this.shieldBubble.visible = false;
     this.scene.add(...Object.values(familiars).map((b) => b.group));
-    this.scene.add(elf.group, this.springPools.group, this.enemies.group, this.arrows.group, this.globs.group, this.pickups.group, this.shieldBubble, this.effects.mesh, this.effects.rings);
+    this.scene.add(elf.group, this.springPools.group, this.enemies.group, this.arrows.group, this.globs.group, this.pickups.group, this.shieldBubble, this.effects.mesh, this.effects.rings, this.telegraph.group);
 
     this.player = new Player(
       this.camera,
       renderer.domElement,
       elf,
-      { half: ARENA_HALF, wallHeight: WALL_HEIGHT, obstacles: this.dungeon.obstacles },
+      this.arena,
       mode,
     );
 
     this.hud = new Hud(root, MAX_HEALTH, mode, () => {
       this.sfx.unlock();
       if (this.state !== 'playing') this.newGame();
+      this.banner(`${ROOMS[this.room].name}`);
       this.player.activate();
     });
     if (mode === 'touch') this.touch = new TouchControls(root, this.player);
@@ -177,25 +192,42 @@ export class Game {
     this.nextPickup = 8;
     this.shieldBubble.visible = false;
     this.effects.clear();
-    // Start just south of the brazier, looking north across the arena.
-    this.player.spawn(0, 8, 0);
-    this.companion.reset(2.5, 10);
+    // Arrive at the south gate, looking north across the room.
+    const e = this.dungeon.entry;
+    this.player.spawn(e.x, e.z, 0);
+    this.companion.reset(e.x + 2.5, e.z + 0.5);
+    this.telegraph.sync(null, 0);
+    this.hud.bossBar.set(null);
     this.zones = [];
     this.springPools.sync([], 0, 0);
     this.events = [];
   }
 
   private newGame(): void {
+    if (this.room !== 0 || this.dungeon.room !== ROOMS[0]) this.loadRoom(0);
     this.resetWorld();
     this.state = 'playing';
     this.health = MAX_HEALTH;
     this.score = 0;
     this.wave = 0;
-    this.waveBreak = 1;
+    this.waveInRoom = 0;
+    this.phase = 'fight';
+    this.waveBreak = 1.5;
     this.invulnerable = 0;
+    this.playTime = 0;
+    this.dungeon.setExitOpen(false);
     this.hud.setHealth(this.health);
     this.hud.setScore(this.score);
-    this.hud.setWave(0, 0);
+  }
+
+  /** Swaps in room `index`: builds it, and points everything at its size, obstacles and gates. */
+  private loadRoom(index: number): void {
+    this.dungeon.dispose(this.scene);
+    this.room = index;
+    this.dungeon = new Dungeon(this.scene, ROOMS[index], this.shadowSize);
+    this.arena.half = this.dungeon.half;
+    this.arena.obstacles = this.dungeon.obstacles;
+    this.enemies.setGates(this.dungeon.gates);
   }
 
   private frame(timestamp: number): void {
@@ -211,7 +243,7 @@ export class Game {
 
   private update(dt: number): void {
     this.time += dt;
-    this.dungeon.update(this.time);
+    this.dungeon.update(this.time, dt);
     this.updateAmbience(dt);
     const running = this.state === 'playing' && this.player.isActive;
     this.steps++;
@@ -225,19 +257,24 @@ export class Game {
     }
 
     this.player.update(dt, true);
+    this.playTime += dt;
     this.invulnerable = Math.max(0, this.invulnerable - dt);
     this.elf.group.visible = this.invulnerable === 0 || Math.floor(this.time * 16) % 2 === 0;
 
     this.shoot(dt);
     this.updateZones(dt);
-    for (const spit of this.enemies.update(dt, this.player.position, this.dungeon.obstacles, ARENA_HALF)) {
+    const half = this.dungeon.half;
+    const { spits, slams } = this.enemies.update(dt, this.player.position, this.dungeon.obstacles, half);
+    for (const spit of spits) {
       this.globs.fire(spit);
       this.sfx.spit();
       this.events.push({ e: 'spit' });
     }
+    for (const slam of slams) this.bossSlam(slam.x, slam.z, slam.r);
+    this.syncBoss();
     this.updateGlobs(dt);
 
-    for (const hit of this.arrows.update(dt, this.enemies.slimes, this.dungeon.obstacles, ARENA_HALF)) {
+    for (const hit of this.arrows.update(dt, this.enemies.slimes, this.dungeon.obstacles, half)) {
       this.damage(hit.slime, hit.dirX, hit.dirZ);
     }
 
@@ -281,7 +318,7 @@ export class Game {
 
   /** The familiar's creature: walking, biting, and whatever spells went off this step. */
   private updateFamiliar(dt: number): void {
-    const r = this.companion.update(dt, this.enemies.slimes, this.dungeon.obstacles, ARENA_HALF);
+    const r = this.companion.update(dt, this.enemies.slimes, this.dungeon.obstacles, this.dungeon.half);
     const c = this.companion.position;
     const push = (s: Slime, amount: number) => {
       const dx = s.x - c.x;
@@ -386,7 +423,7 @@ export class Game {
 
   private familiarCommand(cmd: FamiliarCommand): void {
     if (cmd.type !== 'choose') {
-      this.companion.command(cmd, ARENA_HALF);
+      this.companion.command(cmd, this.dungeon.half);
       return;
     }
     // Creatures can be picked any time at first, but only swapped between runs / while paused.
@@ -431,6 +468,10 @@ export class Game {
       globs: this.globs.snapshot(),
       pickups: this.pickups.snapshot(),
       zones: this.zoneTuples(),
+      room: this.room,
+      rw: this.waveInRoom,
+      phase: this.phase,
+      boss: this.bossState(),
       wave: this.wave,
       remaining: this.enemies.remaining,
       health: Math.max(0, this.health),
@@ -494,7 +535,7 @@ export class Game {
     if (this.nextPickup <= 0 && this.wave > 0) {
       this.nextPickup = PICKUP_INTERVAL_MIN + Math.random() * (PICKUP_INTERVAL_MAX - PICKUP_INTERVAL_MIN);
       if (this.pickups.count < MAX_PICKUPS) {
-        const at = randomSpawnPoint(Math.random, ARENA_HALF, this.dungeon.obstacles, [p], 7);
+        const at = randomSpawnPoint(Math.random, this.dungeon.half, this.dungeon.obstacles, [p], 7);
         this.pickups.spawn(pickPowerUp(Math.random, this.health, MAX_HEALTH), at.x, at.z);
       }
     }
@@ -535,7 +576,7 @@ export class Game {
     const p = this.player.position;
     const canBeHit = this.invulnerable === 0 && !this.player.dashing;
     const target = canBeHit ? { x: p.x, z: p.z, radius: PLAYER_RADIUS } : null;
-    for (const hit of this.globs.update(dt, this.time, target, this.dungeon.obstacles, ARENA_HALF)) {
+    for (const hit of this.globs.update(dt, this.time, target, this.dungeon.obstacles, this.dungeon.half)) {
       this.effects.burst(hit.x, 1, hit.z, GLOB_COLOR, 10, 4, 0.12);
       this.events.push({ e: 'glob', x: q(hit.x), z: q(hit.z) });
       if (!hit.hitPlayer) continue;
@@ -568,27 +609,144 @@ export class Game {
     if (this.health <= 0) this.gameOver();
   }
 
+  /** Waves within a room; when all three are done, the north door opens (or, in the last room, you win). */
   private updateWaves(dt: number): void {
-    this.hud.setWave(this.wave, this.enemies.remaining);
+    this.hud.setWave(runLabel(this.room, this.waveInRoom, this.enemies.remaining, this.phase, this.enemies.boss !== null));
+    if (this.phase === 'transition') {
+      this.updateDoor(dt);
+      return;
+    }
+    if (this.phase === 'cleared') {
+      const p = this.player.position;
+      if (this.dungeon.inExit(p.x, p.z)) this.enterDoor();
+      return;
+    }
     if (this.enemies.remaining > 0) return;
     if (this.waveBreak <= 0) {
       // Wave cleared: breather, and a heart back.
       this.waveBreak = WAVE_BREAK;
-      if (this.wave > 0) {
-        this.health = Math.min(MAX_HEALTH, this.health + 1);
-        this.hud.setHealth(this.health);
-        this.banner(`Wave ${this.wave} cleared`);
+      if (this.waveInRoom > 0) {
+        this.heal(1);
+        if (this.waveInRoom >= WAVES_PER_ROOM) {
+          if (!ROOMS[this.room].hasExit) {
+            this.victory();
+            return;
+          }
+          this.phase = 'cleared';
+          this.dungeon.setExitOpen(true);
+          this.banner('Room cleared!');
+          this.hud.toast('↑ Head through the north door', 0xffe0a0);
+          this.sfx.door();
+          this.events.push({ e: 'door' });
+          return;
+        }
+        this.banner(`Wave ${this.waveInRoom} cleared`);
       }
       return;
     }
     this.waveBreak -= dt;
-    if (this.waveBreak <= 0) {
-      this.wave++;
-      this.enemies.startWave(this.wave);
-      const newSpitters = waveSpec(this.wave).spitters > 0 && waveSpec(this.wave - 1).spitters === 0;
-      this.banner(newSpitters ? `Wave ${this.wave} · Spitters!` : `Wave ${this.wave}`);
-      this.sfx.wave();
+    if (this.waveBreak <= 0) this.startNextWave();
+  }
+
+  private startNextWave(): void {
+    this.waveInRoom++;
+    this.wave++;
+    const d = roomWaveDifficulty(this.room, this.waveInRoom);
+    if (isBossWave(this.room, this.waveInRoom)) {
+      const at = { x: 0, z: -this.dungeon.half + 8 };
+      this.enemies.startBossWave(d, at.x, at.z);
+      this.effects.ring(at.x, at.z, 0xc0303a, 5);
+      this.effects.burst(at.x, 2, at.z, new THREE.Color(0xc0303a), 50, 9, 0.2);
+      this.banner('👑 The King Slime!');
+      this.sfx.burst();
+    } else {
+      this.enemies.startWave(d);
+      const newSpitters = waveSpec(d).spitters > 0 && waveSpec(d - 1).spitters === 0;
+      this.banner(newSpitters ? `Wave ${this.waveInRoom} · Spitters!` : `Wave ${this.waveInRoom}/${WAVES_PER_ROOM}`);
     }
+    this.sfx.wave();
+  }
+
+  private heal(amount: number): void {
+    this.health = Math.min(MAX_HEALTH, this.health + amount);
+    this.hud.setHealth(this.health);
+  }
+
+  /** The elf stepped through the open north door: fade out, build the next room, fade in. */
+  private enterDoor(): void {
+    this.phase = 'transition';
+    this.doorT = 0;
+    this.doorSwitched = false;
+    this.hud.fade.set(true);
+    this.sfx.whoosh();
+  }
+
+  private updateDoor(dt: number): void {
+    this.doorT += dt;
+    if (!this.doorSwitched && this.doorT >= DOOR_FADE) {
+      this.doorSwitched = true;
+      this.loadRoom(this.room + 1);
+      this.enemies.clear();
+      this.arrows.clear();
+      this.globs.clear();
+      this.pickups.clear();
+      this.zones = [];
+      this.springPools.sync([], 0, 0);
+      this.effects.clear();
+      const e = this.dungeon.entry;
+      this.player.spawn(e.x, e.z, 0);
+      if (this.companion.kind) this.companion.appear(this.companion.kind, e.x + 2.5, e.z + 0.5);
+      this.heal(MAX_HEALTH); // a fresh start in every room
+      this.waveInRoom = 0;
+      this.waveBreak = 2.2;
+      this.nextPickup = 8;
+    }
+    if (this.doorT >= DOOR_TOTAL) {
+      this.phase = 'fight';
+      this.hud.fade.set(false);
+      this.banner(`Room ${this.room + 1} · ${ROOMS[this.room].name}`);
+    }
+  }
+
+  /** The King Slime lands: everything near the impact is hit (the elf can dash through it). */
+  private bossSlam(x: number, z: number, r: number): void {
+    const red = new THREE.Color(0xc0303a);
+    this.effects.ring(x, z, red, r);
+    this.effects.burst(x, 0.4, z, red, 40, 8, 0.18);
+    this.sfx.land();
+    this.sfx.hurt();
+    this.events.push({ e: 'slam', x: q(x), z: q(z), r });
+    const p = this.player.position;
+    const d = Math.hypot(p.x - x, p.z - z);
+    if (d <= r + PLAYER_RADIUS && this.invulnerable === 0 && !this.player.dashing) this.hurtPlayer(1, (p.x - x) / (d || 1), (p.z - z) / (d || 1));
+  }
+
+  private bossState(): Snapshot['boss'] {
+    const b = this.enemies.boss;
+    if (!b) return null;
+    const t = b.telegraph;
+    return { hp: Math.max(0, b.hp), max: b.maxHp, tel: t ? [q(t.x), q(t.z), t.r, q(t.p)] : null };
+  }
+
+  private syncBoss(): void {
+    const b = this.bossState();
+    this.hud.bossBar.set(b);
+    this.telegraph.sync(b?.tel ?? null, this.time);
+  }
+
+  private victory(): void {
+    this.state = 'won';
+    this.elf.group.visible = true;
+    this.score += this.health * 100; // a bonus for every heart left
+    this.hud.setScore(this.score);
+    const run = { score: this.score, wave: this.wave };
+    const isBest = recordRun(run);
+    this.hud.bossBar.set(null);
+    this.hud.showVictory(this.score, this.playTime, isBest);
+    this.hud.setBest(loadBest() ?? run);
+    this.sfx.wave();
+    this.events.push({ e: 'banner', text: '👑 Victory!' });
+    this.player.deactivate();
   }
 
   private gameOver(): void {

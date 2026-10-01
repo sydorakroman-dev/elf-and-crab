@@ -71,3 +71,35 @@ export class Popups {
     restartAnimation(this.hurtEl, 'flash');
   }
 }
+
+/** The King Slime's health bar across the top of the screen. */
+export class BossBar {
+  private readonly el: HTMLElement;
+  private readonly fill: HTMLElement;
+
+  constructor(root: HTMLElement) {
+    root.insertAdjacentHTML('beforeend', '<div class="boss-bar" hidden><span>👑 The King Slime</span><div class="boss-track"><div class="boss-fill"></div></div></div>');
+    this.el = root.querySelector('.boss-bar')!;
+    this.fill = this.el.querySelector('.boss-fill')!;
+  }
+
+  /** Shows the bar at hp/max, or hides it (null). */
+  set(boss: { hp: number; max: number } | null): void {
+    this.el.hidden = !boss;
+    if (boss) this.fill.style.width = `${Math.max(0, (boss.hp / boss.max) * 100)}%`;
+  }
+}
+
+/** Full-screen fade to black, for walking through a door into the next room. */
+export class Fade {
+  private readonly el: HTMLElement;
+
+  constructor(root: HTMLElement) {
+    root.insertAdjacentHTML('beforeend', '<div class="fade"></div>');
+    this.el = root.querySelector('.fade')!;
+  }
+
+  set(dark: boolean): void {
+    this.el.classList.toggle('on', dark);
+  }
+}

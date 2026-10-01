@@ -117,6 +117,7 @@ export class Globs {
         }
       }
       for (const o of obstacles) {
+        if (o.low) continue;
         const t = segmentCircleHit(p.x, p.z, bx, bz, { x: o.x, z: o.z, radius: o.radius + RADIUS });
         if (t !== null && t < bestT) {
           bestT = t;

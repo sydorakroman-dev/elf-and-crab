@@ -20,6 +20,7 @@ const results = await page.evaluate(({ TRIALS }) => {
     g.newGame();
     const p = g.player;
     p.active = true;
+    g.nextPickup = 1e9; // bots ignore power-ups; keep the comparison clean
     p.mouseDown = true;
     const maxSteps = 60 * 600; // 10 minutes of game time
     const firstHitWave = { v: null };
@@ -29,6 +30,13 @@ const results = await page.evaluate(({ TRIALS }) => {
       const pos = p.position;
       const alive = g.enemies.slimes.filter((s) => s.alive);
       p.keys.clear();
+      if (g.phase === 'cleared') {
+        // Room cleared: walk to the north door — around anything in the middle of the room.
+        const ex = g.dungeon.exit;
+        const wp = Math.abs(pos.x) < 4.5 && pos.z > -4 ? { x: 6, z: pos.z - 4 } : ex;
+        p.yaw = Math.atan2(-(wp.x - pos.x), -(wp.z - pos.z));
+        p.keys.add('KeyW');
+      }
       if (alive.length) {
         alive.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
         const t = alive[0];
@@ -54,7 +62,7 @@ const results = await page.evaluate(({ TRIALS }) => {
       if (g.health < lastHealth && firstHitWave.v === null) firstHitWave.v = g.wave;
       lastHealth = g.health;
     }
-    return { style, diedOnWave: g.state === 'over' ? g.wave : null, reachedWave: g.wave, firstHitWave: firstHitWave.v, minutes: +(step / 3600).toFixed(1), score: g.score };
+    return { style, diedOnWave: g.state === 'over' ? g.wave : null, reachedWave: g.wave, room: g.room + 1, won: g.state === 'won', firstHitWave: firstHitWave.v, minutes: +(step / 3600).toFixed(1), score: g.score };
   };
   const out = [];
   for (const style of ['stand', 'kite']) for (let i = 0; i < TRIALS; i++) out.push(run(style));
@@ -63,7 +71,7 @@ const results = await page.evaluate(({ TRIALS }) => {
 for (const style of ['stand', 'kite']) {
   const r = results.filter((x) => x.style === style);
   const avg = (k) => (r.reduce((s, x) => s + (x[k] ?? 0), 0) / r.length).toFixed(1);
-  console.log(`${style.padEnd(5)} died on wave: ${r.map((x) => x.diedOnWave ?? `>${x.reachedWave}`).join(', ')} | first hit on wave: ${r.map((x) => x.firstHitWave ?? '-').join(', ')} | avg minutes ${avg('minutes')}`);
+  console.log(`${style.padEnd(5)} ended in room-wave: ${r.map((x) => (x.won ? 'WON' : `${x.room}-${x.reachedWave - (x.room - 1) * 3}`)).join(', ')} | first hit on wave: ${r.map((x) => x.firstHitWave ?? '-').join(', ')} | avg minutes ${avg('minutes')}`);
 }
 if (errors.length) console.log(errors.join('\n'));
 await browser.close();

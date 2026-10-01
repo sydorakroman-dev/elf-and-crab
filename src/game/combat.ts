@@ -4,6 +4,8 @@ export interface Circle {
   x: number;
   z: number;
   radius: number;
+  /** Low obstacles (e.g. a lava pit) block walking but not arrows or globs. */
+  low?: boolean;
 }
 
 export interface Point {
@@ -105,7 +107,7 @@ export interface WaveSpec {
 export function waveSpec(wave: number): WaveSpec {
   const w = Math.max(1, wave);
   return {
-    small: Math.min(30, 3 + w * 3),
+    small: Math.min(30, Math.floor(3 + w * 3)), // levels can be fractional (room ramp); counts can't
     big: Math.min(12, Math.floor(w * 0.8)),
     spitters: Math.min(8, Math.floor(w / 3)),
     speedBonus: Math.min(3, (w - 1) * 0.35),

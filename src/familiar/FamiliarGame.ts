@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { mulberry32 } from '../util/rng';
-import { ARENA_HALF, Dungeon } from '../world/dungeon';
+import { Dungeon } from '../world/dungeon';
+import { ROOMS } from '../world/rooms';
+import { TelegraphRing } from '../game/telegraph';
 import type { Elf } from '../player/elf';
 import type { FamiliarBody } from '../player/beasts';
 import { SlimeVisual, type SlimePose } from '../game/enemies';
@@ -35,7 +36,8 @@ export class FamiliarGame {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(FOV, innerWidth / innerHeight, 0.5, 400);
   private readonly timer = new THREE.Timer();
-  private readonly dungeon: Dungeon;
+  private dungeon: Dungeon;
+  private readonly telegraph = new TelegraphRing();
   private readonly elf: Elf;
   private readonly bodies: Record<FamiliarKind, FamiliarBody>;
   private readonly session: FamiliarSession;
@@ -68,7 +70,7 @@ export class FamiliarGame {
     this.elf = elf;
     this.bodies = bodies;
     this.session = session;
-    this.dungeon = new Dungeon(this.scene, mulberry32(1337), 1024);
+    this.dungeon = new Dungeon(this.scene, ROOMS[0], 1024);
     for (const b of Object.values(bodies)) b.group.visible = false;
 
     const additive = (color: number, opacity: number) =>
@@ -98,6 +100,7 @@ export class FamiliarGame {
       this.rangeRing,
       this.marker,
       this.pounceMark,
+      this.telegraph.group,
     );
 
     this.hud = new FamiliarHud(root, session.code);
@@ -145,11 +148,14 @@ export class FamiliarGame {
       else if (latest.state === 'ready') text = 'Waiting for the elf to enter the dungeon…';
       else if (latest.state === 'paused') text = 'The elf paused the game';
       else if (latest.state === 'over') text = `Game over — wave ${latest.wave}, ${latest.score} points. Waiting for the elf…`;
+      else if (latest.state === 'won') text = `👑 Victory! ${latest.score} points. Waiting for the elf…`;
     }
     this.hud.setStatus(text);
   }
 
   private receive(s: Snapshot): void {
+    // The hero walked into another room (or started over): build it.
+    if (s.room !== ROOMS.indexOf(this.dungeon.room)) this.loadRoom(s.room);
     this.buffer.push(s, performance.now() / 1000);
     if (s.ev.length) {
       const events = s.ev;
@@ -215,6 +221,17 @@ export class FamiliarGame {
         case 'banner':
           this.hud.popups.banner(ev.text);
           break;
+        case 'slam': {
+          const red = new THREE.Color(0xc0303a);
+          this.effects.ring(ev.x, ev.z, red, ev.r);
+          this.effects.burst(ev.x, 0.4, ev.z, red, 40, 8, 0.18);
+          this.sfx.land();
+          break;
+        }
+        case 'door':
+          this.sfx.door();
+          this.hud.popups.toast('↑ The elf can head through the north door', 0xffe0a0);
+          break;
         case 'twang':
           break; // the bow is the elf's sound; keep the tablet calmer
       }
@@ -256,6 +273,18 @@ export class FamiliarGame {
     }
   }
 
+  private loadRoom(index: number): void {
+    const room = ROOMS[index];
+    if (!room) return;
+    this.dungeon.dispose(this.scene);
+    this.dungeon = new Dungeon(this.scene, room, 1024);
+    // Drop everything from the old room.
+    for (const v of this.slimes.values()) this.scene.remove(v.group);
+    this.slimes.clear();
+    this.effects.clear();
+    this.resize();
+  }
+
   private currentBody(): FamiliarBody | null {
     return this.shownKind ? this.bodies[this.shownKind] : null;
   }
@@ -264,7 +293,7 @@ export class FamiliarGame {
     this.timer.update(timestamp);
     const dt = Math.min(this.timer.getDelta(), 0.1);
     this.time += dt;
-    this.dungeon.update(this.time);
+    this.dungeon.update(this.time, dt);
     this.sfx.setAmbience(0.25, 0, dt);
     const s = this.buffer.sample(performance.now() / 1000);
     if (s) this.apply(s, dt);
@@ -310,6 +339,8 @@ export class FamiliarGame {
     this.globs.sync(s.globs, this.time);
     this.pickups.sync(s.pickups, dt, this.time);
     this.pools.sync(s.zones, dt, this.time);
+    this.telegraph.sync(s.boss?.tel ?? null, this.time);
+    this.dungeon.setExitOpen(s.phase !== 'fight');
   }
 
   /** Our creature, its glow ring, the reach of its area spell, and (wolf) where a pounce would land. */
@@ -363,7 +394,7 @@ export class FamiliarGame {
       pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
       this.raycaster.setFromCamera(pointer, this.camera);
       const { origin, direction } = this.raycaster.ray;
-      const p = floorPoint(origin, direction, ARENA_HALF, 1);
+      const p = floorPoint(origin, direction, this.dungeon.half, 1);
       if (!p) return;
       this.lastTap = p;
       this.marker.position.set(p.x, 0.06, p.z);
@@ -400,7 +431,7 @@ export class FamiliarGame {
   private resize(): void {
     const aspect = innerWidth / innerHeight;
     this.camera.aspect = aspect;
-    const d = overviewDistance(ARENA_HALF, FOV, PITCH, aspect);
+    const d = overviewDistance(this.dungeon.half, FOV, PITCH, aspect);
     // Look at the arena centre from the south, high up.
     this.camera.position.set(0, Math.sin(PITCH) * d, Math.cos(PITCH) * d + 1);
     this.camera.lookAt(0, 0, 1);
