@@ -95,14 +95,14 @@ export interface SpellDef {
 }
 
 export const SPELLS: Record<SpellId, SpellDef> = {
-  burst: { name: 'Magic Burst', icon: '✨', cooldown: 7, radius: 5.5, duration: 2.5, description: 'Stuns every enemy around you.' },
-  shell: { name: 'Shell Shield', icon: '🐚', cooldown: 11, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next hit.' },
-  spring: { name: 'Soothing Spring', icon: '♨️', cooldown: 10, radius: 3, duration: 6, description: 'A warm pool: enemies in it slow down, the elf heals a heart in it.' },
-  calm: { name: 'Calm Aura', icon: '🌸', cooldown: 8, radius: 7, duration: 5, description: 'Enemies near you stop chasing and wander off.' },
-  pounce: { name: 'Pounce', icon: '🐾', cooldown: 5, radius: 0, duration: 0.35, description: 'Leap the way you are heading, hitting every enemy on the way.' },
-  bubble: { name: 'Bubble Shield', icon: '🫧', cooldown: 14, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next 2 hits.' },
-  jet: { name: 'Water Jet', icon: '💦', cooldown: 8, radius: 0, duration: 3, description: 'A blast of water ahead knocks enemies back and slows them.' },
-  howl: { name: 'War Howl', icon: '🌕', cooldown: 14, radius: 8, duration: 3, description: 'Enemies around you panic and flee; the elf gets Rapid fire for a while.' },
+  burst: { name: 'Magic Burst', icon: '✨', cooldown: 2.8, radius: 5.5, duration: 2.5, description: 'Stuns every enemy around you.' },
+  shell: { name: 'Shell Shield', icon: '🐚', cooldown: 4.4, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next hit.' },
+  spring: { name: 'Soothing Spring', icon: '♨️', cooldown: 4, radius: 3, duration: 6, description: 'A warm pool: enemies in it slow down, the elf heals a heart in it.' },
+  calm: { name: 'Calm Aura', icon: '🌸', cooldown: 3.2, radius: 7, duration: 5, description: 'Enemies near you stop chasing and wander off.' },
+  pounce: { name: 'Pounce', icon: '🐾', cooldown: 2, radius: 0, duration: 0.35, description: 'Leap the way you are heading, hitting every enemy on the way.' },
+  bubble: { name: 'Bubble Shield', icon: '🫧', cooldown: 5.6, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next 2 hits.' },
+  jet: { name: 'Water Jet', icon: '💦', cooldown: 3.2, radius: 0, duration: 3, description: 'A blast of water ahead knocks enemies back and slows them.' },
+  howl: { name: 'War Howl', icon: '🌕', cooldown: 5.6, radius: 8, duration: 3, description: 'Enemies around you panic and flee; the elf gets Rapid fire for a while.' },
 };
 
 /** Soothing Spring: enemies inside move at this fraction of their speed (60% slower). */

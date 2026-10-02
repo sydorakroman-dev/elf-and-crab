@@ -69,6 +69,11 @@ class Quadruped implements FamiliarBody {
 
     for (const mesh of parts.values()) this.body.add(mesh);
     toonify(this.group, NO_OUTLINE);
+    // See-through layers draw after what's inside them: the fish, then the water, then the glass.
+    this.group.traverse((o) => {
+      if (/bowl_(water|surface|waterline)/.test(o.name)) o.renderOrder = 1;
+      else if (/bowl_(glass|rim|glint)/.test(o.name)) o.renderOrder = 2;
+    });
   }
 
   pinch(): void {

@@ -278,7 +278,7 @@ function fishbowl() {
   const BRASS_DARK = 0xd09a35;
   const EMERALD = 0x2fe07a;
   const GLASS = 0xbfe8ff;
-  const WATER = 0x4fb4ff;
+  const WATER = 0x2f9bf0;
   const FISH = 0xff9a1a;
   const FIN = 0xffb84a;
   const metal = { smooth: true, metal: 0.55, roughness: 0.35 };
@@ -301,8 +301,9 @@ function fishbowl() {
   m.add('bowl_glass', new THREE.SphereGeometry(R, 36, 26, 0, Math.PI * 2, 0.42, Math.PI - 0.42), GLASS, { smooth: true, opacity: 0.18, roughness: 0.05, double: true, pos: [0, CY, 0] });
   m.add('bowl_rim', new THREE.TorusGeometry(R * Math.sin(0.42), 0.035, 10, 40), GLASS, { smooth: true, opacity: 0.6, roughness: 0.05, pos: [0, CY + R * Math.cos(0.42), 0], rot: [Math.PI / 2, 0, 0] });
   const waterTop = 0.62;
-  m.add('bowl_water', new THREE.SphereGeometry(R * 0.96, 32, 22, 0, Math.PI * 2, waterTop, Math.PI - waterTop), WATER, { smooth: true, opacity: 0.3, pos: [0, CY, 0] });
-  m.add('bowl_surface', new THREE.CircleGeometry(R * 0.96 * Math.sin(waterTop), 40).rotateX(-Math.PI / 2), 0xc4ecff, { opacity: 0.45, pos: [0, CY + R * 0.96 * Math.cos(waterTop), 0], double: true });
+  m.add('bowl_water', new THREE.SphereGeometry(R * 0.96, 32, 22, 0, Math.PI * 2, waterTop, Math.PI - waterTop), WATER, { smooth: true, opacity: 0.55, pos: [0, CY, 0], double: true });
+  m.add('bowl_surface', new THREE.CircleGeometry(R * 0.96 * Math.sin(waterTop), 40).rotateX(-Math.PI / 2), 0x9fdcff, { opacity: 0.75, pos: [0, CY + R * 0.96 * Math.cos(waterTop), 0], double: true });
+  m.add('bowl_waterline', new THREE.TorusGeometry(R * 0.96 * Math.sin(waterTop), 0.012, 6, 48), 0xe8f8ff, { opacity: 0.9, pos: [0, CY + R * 0.96 * Math.cos(waterTop), 0], rot: [Math.PI / 2, 0, 0], glow: 0.3 });
   m.add('bowl_glint', new THREE.SphereGeometry(1, 12, 8), 0xffffff, { pos: [-0.24, 1.18, 0.31], rot: [0, 0, 0.6], scale: [0.03, 0.09, 0.015], glow: 0.8, opacity: 0.85 });
   [[-0.18, 0.1], [0.05, -0.15], [0.2, 0.12], [-0.05, 0.2], [0.15, -0.05], [-0.22, -0.12]].forEach(([x, z], i) => {
     m.add(`bowl_pebble_${i}`, new THREE.DodecahedronGeometry(0.07 + (i % 3) * 0.015, 0), i % 2 ? 0x2c4a7a : 0x3d5f94, { pos: [x, 0.6 + 0.04, z], rot: [i, i * 2, 0], scale: [1, 0.6, 1] });
