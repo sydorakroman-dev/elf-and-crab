@@ -560,3 +560,16 @@ kbd {
 /* The game's emblem above the title. */
 .emblem { display: block; width: 92px; height: 92px; margin: 0 auto 4px; border-radius: 22px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
 @media (max-height: 520px) { .emblem { width: 56px; height: 56px; border-radius: 14px; } }
+
+/* iPad / iPhone: how to play full screen (from the Home Screen). */
+.fs-tip {
+  position: fixed; right: 16px; top: calc(64px + env(safe-area-inset-top, 0px)); z-index: 30; width: min(360px, calc(100vw - 32px));
+  padding: 14px 16px; border-radius: 14px; background: rgba(16, 14, 22, 0.96); color: #fff; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  font-size: 14px; line-height: 1.4; text-align: left;
+}
+.fs-tip h3 { margin: 0 0 6px; font-size: 16px; }
+.fs-tip p { margin: 0 0 8px; color: rgba(255, 255, 255, 0.8); }
+.fs-tip ol { margin: 0 0 10px; padding-left: 20px; }
+.fs-tip li { margin: 3px 0; }
+.fs-share { display: inline-block; padding: 0 5px; border-radius: 5px; background: rgba(255, 255, 255, 0.15); }
+.fs-tip button { padding: 6px 14px; border-radius: 999px; border: 0; background: #6fe8d6; color: #08201c; font-weight: 700; cursor: pointer; }

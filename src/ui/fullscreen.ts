@@ -8,9 +8,21 @@ type WebkitElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<voi
 
 const doc = document as WebkitDocument;
 
+/** Launched from the home screen (runs as an app, already full screen). */
+export function isStandalone(): boolean {
+  return matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
+
+/**
+ * iPhone / iPad — every browser there (Chrome included) runs on Apple's WebKit, whose full screen
+ * is a card dismissed by dragging down: joystick drags fold it away. Better: the Home Screen app.
+ */
+export function isAppleTouch(): boolean {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 export function fullscreenSupported(): boolean {
-  const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
-  return !standalone && !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
+  return !isStandalone() && !isAppleTouch() && !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
 }
 
 export function isFullscreen(): boolean {

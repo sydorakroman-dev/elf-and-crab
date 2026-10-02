@@ -149,6 +149,9 @@ Two roles:
   can't be hurt: monsters only ever go for the elf.
   Spell buttons have their own cooldowns. The corners button in the top bar puts the browser in **full screen** (tap again
   to leave); it's hidden where the browser can't do it — iPhone Safari, or when opened from the home screen, which is already full screen.
+- **Full screen:** the ⛶ button in the tablet's top bar. On iPad / iPhone (every browser there runs on Safari's
+  engine, whose full screen folds away when you drag down) it explains how to add the game to the Home Screen
+  instead — opened from there it runs full screen as an app.
 - **Practice room:** type **TEST** as the code (or open `…/?join=TEST`) to practise as the familiar on your own:
   no server, no other player, no monsters. The elf stands in the Woodland (a little hurt, so heals show),
   power-ups drop every few seconds, and the creature can be swapped any time. The **👾 Monsters**

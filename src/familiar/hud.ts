@@ -1,7 +1,7 @@
 import { POWER_CODES } from '../net/snapshot';
 import type { Snapshot } from '../net/snapshot';
 import { normalizeCode } from '../net/protocol';
-import { fullscreenSupported, isFullscreen, onFullscreenChange, toggleFullscreen } from '../ui/fullscreen';
+import { fullscreenSupported, isAppleTouch, isFullscreen, isStandalone, onFullscreenChange, toggleFullscreen } from '../ui/fullscreen';
 import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey } from '../ui/shared';
 import { ROOMS, runLabel } from '../world/rooms';
 import { enemyName, type EnemyKind } from '../game/enemies';
@@ -174,6 +174,22 @@ export class FamiliarHud {
       fsBtn.addEventListener('click', () => void toggleFullscreen());
       onFullscreenChange(show);
       show(isFullscreen());
+    } else if (isAppleTouch() && !isStandalone()) {
+      // iPad / iPhone: the browser's full screen folds away when you drag down (an iOS gesture);
+      // the button explains how to get real full screen — the game from the Home Screen.
+      fsBtn.hidden = false;
+      root.insertAdjacentHTML(
+        'beforeend',
+        `<div class="fs-tip" data-fs-tip hidden>
+           <h3>Play full screen on iPad</h3>
+           <p>Add the game to your Home Screen and open it from there — it runs full screen, with no browser bars and nothing to fold away.</p>
+           <ol><li>Tap the <b>Share</b> button <span class="fs-share">⬆︎</span> (Chrome: top right; Safari: top bar)</li><li>Choose <b>Add to Home Screen</b></li><li>Open <b>Elf &amp; Crab</b> from your Home Screen and join with the same code</li></ol>
+           <button type="button" data-fs-tip-close>Got it</button>
+         </div>`,
+      );
+      const tip = root.querySelector<HTMLElement>('[data-fs-tip]')!;
+      fsBtn.addEventListener('click', () => (tip.hidden = !tip.hidden));
+      tip.querySelector('[data-fs-tip-close]')!.addEventListener('click', () => (tip.hidden = true));
     }
 
     this.changeBtn.addEventListener('click', () => {
