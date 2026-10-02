@@ -138,7 +138,8 @@ Two roles:
   Spell buttons have their own cooldowns.
 - **Practice room:** type **TEST** as the code (or open `…/?join=TEST`) to practise as the familiar on your own:
   no server, no other player, no monsters. The elf stands in the Woodland (a little hurt, so heals show),
-  power-ups drop every few seconds, and the creature can be swapped any time. The hero's game runs hidden in
+  power-ups drop every few seconds, and the creature can be swapped any time. The **👾 Monsters**
+  button shows any monster or boss from the game, strolling about (no attacks, no damage) to look at up close. The hero's game runs hidden in
   the same browser (`src/net/local.ts`).
  The creature can be changed between runs or while the elf is paused.
 

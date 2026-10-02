@@ -136,6 +136,7 @@ export class FamiliarGame {
     this.hud.onStart = () => this.sfx.unlock();
     this.hud.onChoose = (kind) => this.session.send({ type: 'choose', kind });
     this.hud.onSpell = (id) => this.session.send({ type: 'spell', id });
+    this.hud.onParade = (kind) => this.session.send({ type: 'parade', kind });
     bodies.crab.onStep = (s) => this.sfx.scuttle(s);
     bodies.wolf.onStep = (s) => this.sfx.scuttle(s * 0.6);
     bodies.capybara.onStep = (s) => this.sfx.footstep(s * 0.4);

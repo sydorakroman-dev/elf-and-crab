@@ -2,7 +2,8 @@ import { POWER_CODES } from '../net/snapshot';
 import type { Snapshot } from '../net/snapshot';
 import { normalizeCode } from '../net/protocol';
 import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey } from '../ui/shared';
-import { runLabel } from '../world/rooms';
+import { ROOMS, runLabel } from '../world/rooms';
+import { enemyName, type EnemyKind } from '../game/enemies';
 import type { PowerUpType } from '../game/powerups';
 import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, type FamiliarKind, type SpellId } from '../game/familiars';
 
@@ -28,6 +29,10 @@ export class FamiliarHud {
   onStart?: () => void;
   onChoose?: (kind: FamiliarKind) => void;
   onSpell?: (id: SpellId) => void;
+  /** Practice room: show this monster. */
+  onParade?: (kind: EnemyKind) => void;
+  private readonly paradeBtn: HTMLButtonElement;
+  private readonly paradePanel: HTMLElement;
   private readonly hearts: HTMLElement;
   private readonly powers: HTMLElement;
   private readonly wave: HTMLElement;
@@ -71,6 +76,7 @@ export class FamiliarHud {
          <div class="left"><div class="hearts" data-f-hearts></div><div class="powers" data-f-powers></div></div>
          <div class="wave" data-f-wave></div>
          <div class="right">
+           <button type="button" class="role-badge parade-btn" data-f-parade hidden>👾 Monsters</button>
            <button type="button" class="role-badge" data-f-change title="Change creature">🐾 ${code}</button>
            <div class="score" data-f-score>0</div>
          </div>
@@ -131,6 +137,25 @@ export class FamiliarHud {
       }),
     );
     this.pickerClose.addEventListener('click', () => this.setBlocking(null));
+    // Practice room: a picker of every monster, by room; the chosen one appears and strolls about.
+    this.paradeBtn = root.querySelector('[data-f-parade]')!;
+    const groups = ROOMS.map((room) => {
+      const kinds = [...new Set(room.waves.flatMap((w) => [...(Object.keys(w.mix) as EnemyKind[]), ...(w.boss ? [w.boss] : [])]))];
+      const buttons = kinds.map((k) => `<button type="button" data-kind="${k}">${enemyName(k)}</button>`).join('');
+      return `<section><h3>${room.name}</h3><div class="parade-list">${buttons}</div></section>`;
+    }).join('');
+    root.insertAdjacentHTML('beforeend', `<div class="parade-panel" hidden><div class="parade-head"><h2>👾 Show a monster</h2><button type="button" data-parade-close>✕</button></div>${groups}</div>`);
+    this.paradePanel = root.querySelector('.parade-panel')!;
+    this.paradeBtn.addEventListener('click', () => (this.paradePanel.hidden = !this.paradePanel.hidden));
+    this.paradePanel.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('[data-parade-close]')) this.paradePanel.hidden = true;
+      const kind = t.closest<HTMLElement>('[data-kind]')?.dataset.kind as EnemyKind | undefined;
+      if (!kind) return;
+      this.onParade?.(kind);
+      this.paradePanel.hidden = true;
+    });
+
     this.changeBtn.addEventListener('click', () => {
       if (this.canChange && this.blocking === null) this.setBlocking('pick');
     });
@@ -208,7 +233,7 @@ export class FamiliarHud {
       this.powersKey = key;
       this.powers.innerHTML = powerChipsHtml(list);
     }
-    const w = s.practice ? '🧪 Practice room · no monsters' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.rw, s.remaining, s.phase, s.boss?.name ?? null);
+    const w = s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.rw, s.remaining, s.phase, s.boss?.name ?? null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
     this.bossBar.set(s.boss);
@@ -216,6 +241,7 @@ export class FamiliarHud {
 
     // Creature can be changed between runs or while paused (or before it's placed at all).
     this.canChange = s.state !== 'playing' || !s.fam || !!s.practice; // any time in the practice room
+    if (this.paradeBtn.hidden === !!s.practice) this.paradeBtn.hidden = !s.practice;
     this.changeBtn.classList.toggle('locked', !this.canChange);
 
     for (const [code, secs] of s.cds) {

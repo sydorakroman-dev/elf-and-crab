@@ -15,6 +15,7 @@ import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_
 import { BUBBLE_HITS, FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, JET, POUNCE_DAMAGE, inJet, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
 import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
+import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { FamiliarCommand } from '../net/protocol';
 import { pickAimTarget } from './combat';
 import { fireAmbience } from './ambience';
@@ -534,6 +535,19 @@ export class Game {
   }
 
   private familiarCommand(cmd: FamiliarCommand): void {
+    if (cmd.type === 'parade') {
+      // Practice room only: one monster appears a little way off and strolls about.
+      const kind = ENEMY_KIND_LIST.find((k) => k === cmd.kind);
+      if (!this.practice || !kind) return;
+      const f = this.companion.present ? this.companion.position : this.player.position;
+      const d = Math.hypot(f.x, f.z) || 1;
+      const at = { x: f.x - (f.x / d) * 9, z: f.z - (f.z / d) * 9 }; // toward the middle of the room
+      const e = this.enemies.parade(kind, at.x, at.z);
+      this.effects.ring(e.x, e.z, e.color, Math.max(1.5, e.radius * 1.5));
+      this.effects.burst(e.x, 1, e.z, e.color, 24, 5, 0.12);
+      this.events.push({ e: 'poof', x: q(e.x), z: q(e.z) });
+      return;
+    }
     if (cmd.type !== 'choose') {
       this.companion.command(cmd, this.dungeon.half);
       return;
@@ -928,7 +942,7 @@ export class Game {
   }
 
   private bossState(): Snapshot['boss'] {
-    const b = this.enemies.boss;
+    const b = this.practice ? null : this.enemies.boss; // no boss bar for a practice showcase
     return b ? { hp: Math.max(0, b.hp), max: b.maxHp, name: b.bossName! } : null;
   }
 

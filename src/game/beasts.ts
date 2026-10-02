@@ -69,6 +69,8 @@ export class Beast implements Enemy {
   dying = false;
   removed = false;
   slow = 1;
+  /** Showcase (the practice room): just strolls about — no attacks, no damage. */
+  parade = false;
   /** Drenched (the goldfish's Water Jet): slowed to `soakFactor` for a while. */
   private soakTimer = 0;
   private soakFactor = 1;
@@ -126,7 +128,7 @@ export class Beast implements Enemy {
     return this.calmTimer > 0;
   }
   get harmless(): boolean {
-    return this.stunned || this.calmed || this.mode === 'dazed' || this.mode === 'retreat';
+    return this.parade || this.stunned || this.calmed || this.mode === 'dazed' || this.mode === 'retreat';
   }
   private get charging(): boolean {
     return this.mode === 'attack' && (this.kind === 'boar' || (this.kind === 'bear' && this.bearMove === 'charge'));
@@ -150,6 +152,7 @@ export class Beast implements Enemy {
   }
 
   hurt(amount: number, dirX: number, dirZ: number): boolean {
+    if (this.parade) return false;
     if (this.dying) return false;
     this.hp -= amount;
     this.flash = 1;
@@ -233,13 +236,13 @@ export class Beast implements Enemy {
     let speed = 0;
     if (this.stunTimer > 0) {
       this.stunTimer = Math.max(0, this.stunTimer - dt);
-    } else if (this.calmTimer > 0) {
+    } else if (this.calmTimer > 0 || this.parade) {
       this.calmTimer = Math.max(0, this.calmTimer - dt);
       // Wander off, unbothered.
       this.wander += (Math.random() - 0.5) * dt * 3;
       const away = Math.atan2(p.x - target.x, p.z - target.z);
       const dir = away * 0.4 + this.wander * 0.6;
-      speed = this.def.speed * 0.45 * this.slow;
+      speed = this.def.speed * (this.parade ? 0.6 : 0.45) * this.slow;
       this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, obstacles, half);
     } else {
       speed = this.think(dt, target, others, obstacles, half);

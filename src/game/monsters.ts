@@ -272,6 +272,8 @@ export class Monster implements Enemy {
   dying = false;
   removed = false;
   slow = 1;
+  /** Showcase (the practice room): just strolls about — no attacks, no damage. */
+  parade = false;
   /** Drenched (the goldfish's Water Jet): slowed to `soakFactor` for a while. */
   private soakTimer = 0;
   private soakFactor = 1;
@@ -340,7 +342,7 @@ export class Monster implements Enemy {
     return this.calmTimer > 0;
   }
   get harmless(): boolean {
-    return this.stunned || this.calmed || this.mode === 'retreat' || this.mode === 'sink' || this.mode === 'under' || this.mode === 'rise';
+    return this.parade || this.stunned || this.calmed || this.mode === 'retreat' || this.mode === 'sink' || this.mode === 'under' || this.mode === 'rise';
   }
   private get lunging(): Extract<Attack, { type: 'lunge' }> | null {
     return this.mode === 'attack' && this.current?.type === 'lunge' ? this.current : null;
@@ -359,6 +361,7 @@ export class Monster implements Enemy {
   }
 
   hurt(amount: number, dirX: number, dirZ: number): boolean {
+    if (this.parade) return false;
     if (this.dying || this.hidden) return false;
     if (this.def.guard !== undefined) {
       // Hit from the front (travelling against its facing): the shield takes most of it.
@@ -473,12 +476,12 @@ export class Monster implements Enemy {
     const walls = this.def.phasing ? [] : obstacles;
     if (this.stunTimer > 0) {
       this.stunTimer = Math.max(0, this.stunTimer - dt);
-    } else if (this.calmTimer > 0) {
+    } else if (this.calmTimer > 0 || this.parade) {
       this.calmTimer = Math.max(0, this.calmTimer - dt);
       this.wander += (Math.random() - 0.5) * dt * 3;
       const away = Math.atan2(p.x - target.x, p.z - target.z);
       const dir = away * 0.4 + this.wander * 0.6;
-      speed = this.def.speed * 0.45 * this.slow;
+      speed = this.def.speed * (this.parade ? 0.6 : 0.45) * this.slow;
       this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, walls, half);
     } else {
       [speed, spits] = this.think(dt, target, others, walls, half);
