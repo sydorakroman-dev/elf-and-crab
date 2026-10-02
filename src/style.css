@@ -515,8 +515,8 @@ kbd {
   position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   display: flex; gap: 6px; z-index: 12; pointer-events: auto;
 }
-.action-bar.touch { bottom: auto; top: calc(110px + env(safe-area-inset-top, 0px)); left: auto; right: 12px; transform: none; flex-direction: column; }
-.action-bar.touch .slot.empty { display: none; }
+.action-bar.touch-bar { bottom: auto; top: calc(110px + env(safe-area-inset-top, 0px)); left: auto; right: 12px; transform: none; flex-direction: column; }
+.action-bar.touch-bar .slot.empty { display: none; }
 .slot {
   position: relative; width: 52px; height: 52px; border-radius: 10px; padding: 0; cursor: pointer;
   border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(14, 12, 20, 0.72); color: #fff;

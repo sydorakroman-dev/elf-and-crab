@@ -27,7 +27,7 @@ export class TouchControls {
          <button type="button" class="tbtn pause" aria-label="Pause"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="currentColor"/></svg></button>
        </div>`,
     );
-    this.root = parent.querySelector('.touch')!;
+    this.root = parent.lastElementChild as HTMLElement; // the element just added (not any other '.touch')
     this.stick = this.root.querySelector('.stick')!;
     this.knob = this.root.querySelector('.knob')!;
 

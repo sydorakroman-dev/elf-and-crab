@@ -38,7 +38,7 @@ export class ActionBar {
           <span class="slot-key"></span><span class="slot-icon">${a ? a.icon : ''}</span>${cost}
         </button>`;
     }).join('');
-    root.insertAdjacentHTML('beforeend', `<div class="action-bar${touch ? ' touch' : ''}" hidden>${slotHtml}</div>`);
+    root.insertAdjacentHTML('beforeend', `<div class="action-bar${touch ? ' touch-bar' : ''}" hidden>${slotHtml}</div>`);
     this.bar = root.querySelector('.action-bar')!;
     this.slots = [...this.bar.querySelectorAll<HTMLElement>('.slot')];
     this.bar.addEventListener('pointerdown', (e) => {
