@@ -22,6 +22,18 @@ On phones and tablets (touch-first devices) the game shows on-screen controls in
 left thumb moves (floating joystick), right thumb drags the camera, hold 🏹 to shoot, tap 💨 to dash.
 Aim assist is wider on touch.
 
+## Difficulty, progress and options
+
+- **Difficulty:** 🌱 Easy (monsters 65% HP, 55% damage, half score), ⚔️ Normal, 🔥 Hard (135% HP, 130% damage,
+  1.5× score) — picked on the title screen and remembered.
+- **Continue:** the furthest room you've reached is remembered; the title screen then lets you **start in** any room up
+  to it. Beating the Ash King on a difficulty earns a trophy shown on the title screen.
+- **Music:** every room has its own theme (composed in code, like the sound effects), switching to a heavier version
+  during boss fights. **M** mutes everything.
+- **Feedback:** damage numbers over every hit, camera shake on heavy hits and slams, a brief freeze on big blows.
+- **Performance:** models are compressed at build time and room art loads one room ahead (first load ~5 MB). If a
+  device keeps dropping below ~40 fps the game lowers its resolution, then turns shadows off.
+
 ## Skills and spells
 
 The elf has **stamina** (5 charges, one back every 4 s) and **mana** (a 100-point bar, refilling 4 per second).

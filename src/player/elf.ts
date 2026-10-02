@@ -161,14 +161,74 @@ export class Elf {
     this.draw = 0;
   }
 
-  /** Recoil from a hit. */
+  /** Recoil from a hit: a jolt back, the head snapping, a stagger. */
   flinch(): void {
     this.flinchAmount = 1;
+    this.stagger = 1;
   }
+
+  /** End-of-run poses, played on top of everything: falling over, or bow raised in triumph. */
+  setPose(pose: 'none' | 'dead' | 'victory'): void {
+    if (pose === this.pose) return;
+    this.pose = pose;
+    this.poseT = 0;
+    if (pose === 'none') {
+      this.body.rotation.set(0, 0, 0);
+      this.body.position.set(0, 0, 0);
+    }
+  }
+
+  /** Advances the end pose while the game itself is stopped (game over / victory screen). */
+  updatePose(dt: number): void {
+    if (this.pose === 'none') return;
+    this.poseT += dt;
+    this.time += dt;
+    const k = Math.min(1, this.poseT / 0.9);
+    const ease = 1 - Math.pow(1 - k, 3);
+    if (this.pose === 'dead') {
+      // Knees buckle, then a fall onto the side.
+      for (const leg of this.legs) {
+        leg.hip.rotation.x = -0.9 * ease;
+        leg.knee.rotation.x = 1.6 * ease;
+      }
+      // Topple sideways about the feet, settling on the ground (the body is ~2 m tall).
+      const fall = 1.35 * Math.max(0, (k - 0.3) / 0.7) ** 2;
+      this.body.rotation.set(-0.15 * ease, 0, fall);
+      this.body.position.set(Math.sin(fall) * 0.55, -0.2 * ease + Math.sin(fall) * 0.12, 0);
+      this.torso.rotation.set(0.3 * ease, 0, 0);
+      this.head.rotation.set(0.4 * ease, 0, 0.3 * ease);
+      this.drawShoulder.rotation.set(0.6 * ease, 0, -0.9 * ease);
+      this.bowShoulder.rotation.set(0.5 * ease, 0, 0.9 * ease);
+    } else {
+      // Victory: bow raised high, a little bounce.
+      const bounce = Math.abs(Math.sin(this.poseT * 4)) * 0.06;
+      this.body.position.y = bounce;
+      this.bowShoulder.rotation.set(-2.6 * ease, 0, -0.2 * ease);
+      this.bowElbow.rotation.set(0, 0, 0.1);
+      this.drawShoulder.rotation.set(-0.3, 0.3, -0.5 * ease);
+      this.torso.rotation.set(-0.12 * ease, 0, 0);
+      this.head.rotation.set(-0.25 * ease, Math.sin(this.poseT * 1.5) * 0.15, 0);
+      for (const leg of this.legs) {
+        leg.hip.rotation.x = 0;
+        leg.knee.rotation.x = 0;
+      }
+    }
+  }
+
+  private pose: 'none' | 'dead' | 'victory' = 'none';
+  private poseT = 0;
+  /** A hit stagger: a step back and a twist, decaying. */
+  private stagger = 0;
 
   update(dt: number, m: ElfMotion): void {
     if (dt <= 0) return;
+    if (this.pose !== 'none') {
+      this.group.rotation.y = m.facing;
+      this.updatePose(dt);
+      return;
+    }
     this.time += dt;
+    this.stagger = Math.max(0, this.stagger - dt * 3);
 
     // --- Smoothed drivers ------------------------------------------------------------------
     this.move = damp(this.move, Math.min(1, m.speed / 7), 8, dt);
@@ -247,6 +307,17 @@ export class Elf {
     const bowSwing = s * (0.06 + 0.12 * move) * relaxed;
     this.bowShoulder.rotation.set(bowSwing + 0.12 * this.recoil, (-Math.PI / 2) * this.aim, -0.45 * relaxed + 0.1 * this.recoil * this.aim);
     this.bowElbow.rotation.set(-bowSwing * 0.85 - 0.05 * relaxed, 0, 0.35 * relaxed);
+
+    // --- Hit stagger: the whole body rocks back and twists, then recovers ------------------------
+    if (this.stagger > 0) {
+      const st = Math.sin(this.stagger * Math.PI) * this.stagger;
+      this.body.rotation.x = -0.28 * st;
+      this.body.rotation.z = 0.12 * st;
+      this.body.position.z = -0.25 * st;
+    } else {
+      this.body.rotation.x = this.body.rotation.z = 0;
+      this.body.position.z = 0;
+    }
 
     // --- Cloth and hair: springs driven by speed, acceleration, turning and bounce -----------------
     const bounce = Math.cos(this.phase * 2) * 0.05 * move;

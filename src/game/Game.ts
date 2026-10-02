@@ -296,6 +296,7 @@ export class Game {
     this.invisible = 0;
     this.ward = 0;
     this.elf.setGhost(false);
+    this.elf.setPose('none');
     this.score = 0;
     this.wave = 0;
     this.waveInRoom = 0;
@@ -361,6 +362,7 @@ export class Game {
     if (!running) {
       // Paused / title / game over: keep the scene alive but frozen.
       this.player.update(0, false);
+      this.elf.updatePose(dt); // the death fall / victory pose keeps playing
       return;
     }
 
@@ -1121,6 +1123,7 @@ export class Game {
   private victory(): void {
     this.state = 'won';
     this.elf.group.visible = true;
+    this.elf.setPose('victory');
     this.score += Math.max(0, this.health) * VICTORY_SCORE_PER_HP; // a bonus for health left
     this.hud.setScore(this.score);
     const run = { score: this.score, wave: this.wave };
@@ -1146,6 +1149,7 @@ export class Game {
     }
     this.state = 'over';
     this.elf.group.visible = true;
+    this.elf.setPose('dead');
     const run = { score: this.score, wave: this.wave };
     const isBest = recordRun(run);
     this.hud.showGameOver(this.wave, this.score, isBest);
