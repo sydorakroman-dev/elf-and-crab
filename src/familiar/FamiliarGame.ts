@@ -409,6 +409,10 @@ export class FamiliarGame {
     if (s) this.apply(s, dt);
     this.effects.update(dt);
     this.numbers.update(dt);
+    // The tablet plays the same music as the hero.
+    const latest = this.buffer.latest;
+    this.sfx.music.play(latest && latest.state !== 'ready' ? latest.room : -1, !!latest?.boss);
+    this.sfx.music.update();
     this.updateStick();
     this.updateCamera(dt);
     this.updateFades(dt);

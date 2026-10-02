@@ -331,6 +331,9 @@ export class Game {
       this.accumulator -= STEP;
     }
     this.numbers.update(real);
+    // Music: the room's theme while a run is on (the boss version while one is out), silent on the title.
+    this.sfx.music.play(this.state === 'playing' || this.state === 'won' ? this.room : -1, !!this.enemies.boss && this.state === 'playing');
+    this.sfx.music.update();
     if (!this.headless) {
       // Camera shake: a jitter that fades out (applied only for this render).
       this.shake = Math.max(0, this.shake - real * 2.2);

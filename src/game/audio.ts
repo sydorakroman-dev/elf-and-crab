@@ -1,5 +1,9 @@
-/** Tiny WebAudio synth for all game sound — effects and ambience, no audio files needed. */
+import { Music } from './music';
+
+/** Tiny WebAudio synth for all game sound — effects, ambience and music; no audio files needed. */
 export class Sfx {
+  /** Background music (room themes, boss music). */
+  readonly music = new Music();
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
@@ -20,6 +24,7 @@ export class Sfx {
       const d = this.noise.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.startAmbience();
+      this.music.attach(this.ctx, this.master, this.noise);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
