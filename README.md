@@ -48,7 +48,7 @@ Ash King**, a volcanic dragon; beat him to win.
 | 2 · The Crystal Cave — eight-sided, glowing crystal clusters | underworld dwellers | 🪱 The Giant Cave Worm |
 | 3 · The Crypt — square, torches, a brazier, four pillars | the undead | 💀 The Necromancer |
 | 4 · The Throne Room — square, a colonnade and a throne | orcs | 🪓 The Orc Chieftain |
-| 5 · The Flooded Hall — eight-sided, pillars, cold light, puddles | goblins, water elementals | ⚙️ The Scrap Boss |
+| 5 · The Flooded Hall — eight-sided, pillars, ankle-deep water with ripples, waterfalls and floating debris | goblins, water elementals | ⚙️ The Scrap Boss |
 | 6 · The Lava Chamber — round, a lava pit (arrows fly over it) | fire and wind elementals, rock golems | 🔥 The Inferno |
 | 7 · The Ash King's Lair — a vast round hall: obsidian spires, lava pools and lavafalls, a rune circle | — (one wave: the dragon alone) | 🐉 **The Ash King** (final boss) |
 

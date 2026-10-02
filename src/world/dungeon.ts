@@ -79,6 +79,11 @@ export class Dungeon {
   private readonly fireflies: { sprite: THREE.Sprite; base: THREE.Vector3; seed: number }[] = [];
   /** Embers rising through the dragon's lair. */
   private readonly embers: { sprite: THREE.Sprite; x: number; z: number; speed: number; seed: number }[] = [];
+  /** The Flooded Hall: its water sheet, ripples, and things bobbing on the water. */
+  private waterSheet: THREE.Mesh | null = null;
+  private readonly ripples: { mesh: THREE.Mesh; age: number; life: number }[] = [];
+  private readonly glints: { sprite: THREE.Sprite; seed: number }[] = [];
+  private readonly bobbers: { obj: THREE.Object3D; base: number; seed: number; amp: number }[] = [];
 
   constructor(scene: THREE.Scene, room: RoomDef, shadowMapSize = 2048) {
     this.room = room;
@@ -129,6 +134,31 @@ export class Dungeon {
       f.sprite.material.opacity = 0.35 + 0.65 * Math.max(0, Math.sin(t * 3 + f.seed * 5));
     }
 
+    if (this.waterSheet) this.waterSheet.position.y = 0.22 + Math.sin(time * 0.8) * 0.015;
+    for (const g of this.glints) g.sprite.material.opacity = Math.max(0, Math.sin(time * 1.3 + g.seed * 3)) ** 3 * 0.8;
+    for (const b of this.bobbers) {
+      b.obj.position.y = b.base + Math.sin(time * 1.6 + b.seed) * b.amp;
+      b.obj.rotation.x = Math.sin(time * 1.1 + b.seed) * 0.08;
+    }
+    for (const r of this.ripples) {
+      r.age += dt;
+      if (r.age >= r.life) {
+        r.age = 0;
+        const lim = this.half - 3;
+        for (let i = 0; i < 10; i++) {
+          const x = (Math.random() * 2 - 1) * lim;
+          const z = (Math.random() * 2 - 1) * lim;
+          if (insideArena(x, z, this.half, 3, this.room.shape)) {
+            r.mesh.position.x = x;
+            r.mesh.position.z = z;
+            break;
+          }
+        }
+      }
+      const k = r.age / r.life;
+      r.mesh.scale.setScalar(0.3 + k * 2.2);
+      (r.mesh.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - k) * Math.min(1, k * 6);
+    }
     for (const e of this.embers) {
       const y = (time * e.speed + e.seed * 7) % 16;
       e.sprite.position.set(e.x + Math.sin(time * 0.8 + e.seed) * 0.8, y, e.z + Math.cos(time * 0.6 + e.seed) * 0.8);
@@ -445,16 +475,90 @@ export class Dungeon {
         break;
       }
       case 'puddles': {
-        // Shallow water: glossy dark puddles (purely decorative).
-        const water = new THREE.MeshStandardMaterial({ color: 0x0c2433, roughness: 0.05, metalness: 0.4, transparent: true, opacity: 0.85 });
-        for (let i = 0; i < 14; i++) {
-          const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 18).rotateX(-Math.PI / 2), water);
+        // Flooded: a sheet of water over the whole floor (everyone wades ankle-deep), deeper dark
+        // pools, ripples, waterfalls pouring down the walls into foaming basins, and floating debris.
+        const h = this.half;
+        const sides = WALL_SIDES[room.shape];
+        const r = h / Math.cos(Math.PI / sides);
+        const sheetMat = new THREE.MeshStandardMaterial({ color: 0x2a9cc4, emissive: 0x0b4a66, emissiveIntensity: 0.55, roughness: 0.04, metalness: 0.25, transparent: true, opacity: 0.8, depthWrite: false });
+        const sheet = new THREE.Mesh(new THREE.CircleGeometry(r, sides).rotateX(-Math.PI / 2).rotateY(Math.PI / sides), sheetMat);
+        sheet.position.y = 0.22;
+        sheet.receiveShadow = true;
+        sheet.renderOrder = 1;
+        this.group.add(sheet);
+        this.waterSheet = sheet;
+        // Deeper water: darker patches under the sheet.
+        const deep = new THREE.MeshStandardMaterial({ color: 0x0b2836, roughness: 0.1, metalness: 0.3 });
+        for (let i = 0; i < 12; i++) {
+          const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2), deep);
           const [px, pz] = this.spot(rng, 4);
-          puddle.position.set(px, 0.02, pz);
-          puddle.scale.set(1.2 + rng() * 2.5, 1, 0.8 + rng() * 1.6);
-          puddle.rotation.y = rng() * Math.PI;
-          puddle.receiveShadow = true;
-          this.group.add(puddle);
+          pool.position.set(px, 0.03, pz);
+          pool.scale.set(2 + rng() * 3.5, 1, 1.5 + rng() * 2.5);
+          pool.rotation.y = rng() * Math.PI;
+          this.group.add(pool);
+        }
+        // Ripples spreading over the surface (animated in update()).
+        const rippleGeo = new THREE.RingGeometry(0.85, 1, 32).rotateX(-Math.PI / 2);
+        for (let i = 0; i < 26; i++) {
+          const ring = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({ color: 0xcff4ff, transparent: true, opacity: 0, depthWrite: false }));
+          ring.position.y = 0.24;
+          ring.renderOrder = 2;
+          this.group.add(ring);
+          this.ripples.push({ mesh: ring, age: rng() * 2.5, life: 1.8 + rng() * 1.2 });
+        }
+        // Light glinting on the surface.
+        const glintMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xdff8ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+        for (let i = 0; i < 40; i++) {
+          const glint = new THREE.Sprite(glintMat.clone());
+          const [gx, gz] = this.spot(rng, 2);
+          glint.position.set(gx, 0.3, gz);
+          glint.scale.set(0.9, 0.25, 1);
+          this.group.add(glint);
+          this.glints.push({ sprite: glint, seed: rng() * 10 });
+        }
+        // Waterfalls on the diagonal walls, foaming where they land.
+        const fallMat = new THREE.MeshStandardMaterial({ color: 0x9fdcf5, emissive: 0x2a6f8f, emissiveIntensity: 0.5, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false });
+        const foamMat = new THREE.MeshBasicMaterial({ color: 0xf2fbff, transparent: true, opacity: 0.8, depthWrite: false });
+        for (const a of [Math.PI / 4, -Math.PI / 4, (3 * Math.PI) / 4, (-3 * Math.PI) / 4]) {
+          const nx = -Math.sin(a);
+          const nz = -Math.cos(a);
+          const d = wallDistance(room.shape, h, a) - 0.4;
+          for (let k = 0; k < 3; k++) {
+            const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.3 - k * 0.3, WALL_HEIGHT), fallMat);
+            strip.position.set(nx * (d - k * 0.06) + Math.cos(a) * (k - 1) * 1.0, WALL_HEIGHT / 2, nz * (d - k * 0.06) - Math.sin(a) * (k - 1) * 1.0);
+            strip.rotation.y = a;
+            this.group.add(strip);
+          }
+          for (let k = 0; k < 6; k++) {
+            const foam = new THREE.Mesh(new THREE.SphereGeometry(0.35 + rng() * 0.3, 8, 6), foamMat);
+            foam.position.set(nx * (d - 0.9) + (rng() - 0.5) * 2.4, 0.2, nz * (d - 0.9) + (rng() - 0.5) * 2.4);
+            foam.scale.y = 0.45;
+            this.group.add(foam);
+            this.bobbers.push({ obj: foam, base: 0.2, seed: rng() * 10, amp: 0.06 });
+          }
+        }
+        // Floating debris: barrels, planks and crates, bobbing.
+        const wood = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.85, flatShading: true });
+        const band = new THREE.MeshStandardMaterial({ color: 0x3a3532, metalness: 0.5, roughness: 0.5, flatShading: true });
+        for (let i = 0; i < 9; i++) {
+          const [x, z] = this.spot(rng, 5);
+          const bit = new THREE.Group();
+          if (i % 3 === 0) {
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 10), wood);
+            barrel.rotation.z = Math.PI / 2;
+            const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.04, 4, 14), band);
+            hoop.rotation.y = Math.PI / 2;
+            bit.add(barrel, hoop);
+          } else if (i % 3 === 1) {
+            bit.add(new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.4), wood));
+          } else {
+            bit.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.8), wood));
+          }
+          bit.position.set(x, 0.26, z);
+          bit.rotation.y = rng() * Math.PI;
+          bit.traverse((o) => (o.castShadow = true));
+          this.group.add(bit);
+          this.bobbers.push({ obj: bit, base: 0.26, seed: rng() * 10, amp: 0.05 });
         }
         break;
       }
