@@ -103,3 +103,21 @@ describe('SnapshotBuffer', () => {
     expect(new SnapshotBuffer().sample(0)).toBeNull();
   });
 });
+
+describe('SnapshotBuffer clock', () => {
+  const at = (t: number, x: number) => snap(t, { hero: { ...snap(t).hero, x } });
+  it('keeps gliding after the hero\'s clock falls behind (a stall on its side)', () => {
+    const buf = new SnapshotBuffer(0.1);
+    let local = 100;
+    // 2 s of snapshots at 20 Hz, then the hero stalls: its clock loses 0.5 s for good.
+    let heroT = 0;
+    for (let i = 0; i < 40; i++, heroT += 0.05, local += 0.05) buf.push(at(heroT, heroT), local);
+    local += 0.5;
+    for (let i = 0; i < 40; i++, heroT += 0.05, local += 0.05) buf.push(at(heroT, heroT), local);
+    // Between two arrivals the view should be in between snapshots, not stuck on the newest.
+    const s = buf.sample(local - 0.025)!;
+    const newest = heroT - 0.05;
+    expect(s.hero.x).toBeLessThan(newest - 0.01);
+    expect(s.hero.x).toBeGreaterThan(newest - 0.2);
+  });
+});

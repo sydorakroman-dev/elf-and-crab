@@ -190,9 +190,18 @@ export function interpolate(a: Snapshot, b: Snapshot, t: number): Snapshot {
  * Buffers incoming snapshots and answers "what should be on screen now", rendering a little
  * in the past (`delay`) so there's always a pair to blend between despite network jitter.
  */
+/** Snapshots the clock-offset estimate looks back over (~1 s at 20 Hz). */
+const OFFSET_WINDOW = 20;
+
 export class SnapshotBuffer {
   private readonly items: Snapshot[] = [];
-  /** Estimated (local clock − hero clock); the minimum seen, i.e. the least-delayed arrival. */
+  /** (local clock − hero clock) at each item's arrival. */
+  private readonly offsets: number[] = [];
+  /**
+   * Estimated (local clock − hero clock): the least-delayed arrival among the recent ones. Recent
+   * only, so if the hero's clock falls behind (a stall on its side) the estimate catches up
+   * instead of leaving us forever "ahead of the newest" — which shows as stepping, not gliding.
+   */
   private offset: number | null = null;
   private readonly delay: number;
 
@@ -209,12 +218,15 @@ export class SnapshotBuffer {
     const last = this.items.at(-1);
     if (last && s.t < last.t - 1) {
       this.items.length = 0;
-      this.offset = null;
+      this.offsets.length = 0;
     }
-    const off = localTime - s.t;
-    this.offset = this.offset === null ? off : Math.min(this.offset, off);
     this.items.push(s);
-    if (this.items.length > 40) this.items.shift();
+    this.offsets.push(localTime - s.t);
+    if (this.items.length > 40) {
+      this.items.shift();
+      this.offsets.shift();
+    }
+    this.offset = Math.min(...this.offsets.slice(-OFFSET_WINDOW));
   }
 
   /** The interpolated snapshot to show at local time `now`, or null before anything arrived. */
