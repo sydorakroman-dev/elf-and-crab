@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { FAMILIARS, FAMILIAR_KINDS, JET, POUNCE_RANGE, SPELLS, SPELL_IDS, inJet, SpellCooldowns, distanceToSegment, pounceLanding } from './familiars';
 
 describe('familiar roster', () => {
-  it('has four creatures with distinct speeds and valid spells', () => {
-    expect(FAMILIAR_KINDS).toEqual(['crab', 'capybara', 'wolf', 'goldfish']);
+  it('has five creatures with distinct speeds and valid spells', () => {
+    expect(FAMILIAR_KINDS).toEqual(['crab', 'capybara', 'wolf', 'goldfish', 'iguana']);
     const speeds = FAMILIAR_KINDS.map((k) => FAMILIARS[k].speed);
-    expect(new Set(speeds).size).toBe(4);
+    expect(new Set(speeds).size).toBe(5);
     expect(FAMILIARS.wolf.speed).toBeGreaterThan(FAMILIARS.crab.speed);
     expect(FAMILIARS.crab.speed).toBeGreaterThan(FAMILIARS.capybara.speed);
     for (const k of FAMILIAR_KINDS) for (const s of FAMILIARS[k].spells) expect(SPELLS[s]).toBeDefined();
@@ -13,6 +13,7 @@ describe('familiar roster', () => {
     expect(FAMILIARS.capybara.spells).toEqual(['spring', 'calm']);
     expect(FAMILIARS.wolf.spells).toEqual(['pounce', 'howl']);
     expect(FAMILIARS.goldfish.spells).toEqual(['bubble', 'jet']);
+    expect(FAMILIARS.iguana.spells).toEqual(['tongue', 'ward']);
   });
 });
 

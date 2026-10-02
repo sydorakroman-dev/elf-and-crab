@@ -12,7 +12,7 @@ import { Globs, PROJECTILES, PROJECTILE_KINDS, type GlobImpact } from './globs';
 import { Effects } from './effects';
 import { Companion } from './companion';
 import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_PER_HP } from './balance';
-import { BUBBLE_HITS, FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, JET, POUNCE_DAMAGE, inJet, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
+import { BUBBLE_HITS, TONGUE_BOSS_FLINCH, WARD, FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, JET, POUNCE_DAMAGE, inJet, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
 import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
 import { Resources, WIND_WALK_SECONDS } from './abilities';
@@ -49,6 +49,20 @@ const CALM_PINK = new THREE.Color(0xffb8dc);
 const SPRING_BLUE = new THREE.Color(0x8fe8f5);
 const HOWL_BLUE = new THREE.Color(0x9fd0ff);
 const WATER_BLUE = new THREE.Color(0x5cc4ff);
+const TONGUE_PINK = new THREE.Color(0xff7aa8);
+const JADE = 0x4fe39a;
+
+/** Jade Ward's circle: a glowing jade ring and a faint disc, laid on the floor. */
+export function jadeRing(radius: number): THREE.Group {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.18, radius, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: JADE, transparent: true, opacity: 0.85, depthWrite: false }));
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: JADE, transparent: true, opacity: 0.18, depthWrite: false }));
+  ring.position.y = 0.08;
+  disc.position.y = 0.06;
+  g.add(disc, ring);
+  g.visible = false;
+  return g;
+}
 const HEAL_GREEN = 0x7dff8a;
 
 type State = 'ready' | 'playing' | 'over' | 'won';
@@ -113,6 +127,9 @@ export class Game {
   private waveBreak = 0;
   private fireCooldown = 0;
   private invulnerable = 0;
+  /** Jade Ward: seconds left on the healing circle around the elf (and its mesh). */
+  private ward = 0;
+  private readonly wardRing: THREE.Group;
   /** The elf's mana and stamina. */
   private readonly resources = new Resources();
   /** Wind Walk: seconds of invisibility left, and where the elf vanished (enemies head there). */
@@ -147,6 +164,8 @@ export class Game {
       new THREE.MeshBasicMaterial({ color: POWER_UPS.shield.color, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false }),
     );
     this.shieldBubble.visible = false;
+    this.wardRing = jadeRing(SPELLS.ward.radius);
+    this.scene.add(this.wardRing);
     this.scene.add(...Object.values(familiars).map((b) => b.group));
     this.scene.add(elf.group, this.springPools.group, this.enemies.group, this.arrows.group, this.globs.group, this.pickups.group, this.shieldBubble, this.effects.mesh, this.effects.rings, this.telegraph.group);
 
@@ -180,6 +199,7 @@ export class Game {
     familiars.crab.onStep = (strength) => this.sfx.scuttle(strength);
     familiars.capybara.onStep = (strength) => this.sfx.footstep(strength * 0.4);
     familiars.goldfish.onStep = (strength) => this.sfx.scuttle(strength * 0.5);
+    familiars.iguana.onStep = (strength) => this.sfx.footstep(strength * 0.35);
     familiars.wolf.onStep = (strength) => this.sfx.scuttle(strength * 0.6);
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
@@ -262,6 +282,7 @@ export class Game {
     this.health = MAX_HEALTH;
     this.resources.reset();
     this.invisible = 0;
+    this.ward = 0;
     this.elf.setGhost(false);
     this.score = 0;
     this.wave = 0;
@@ -318,6 +339,7 @@ export class Game {
     }
 
     this.resources.tick(dt);
+    this.updateWard(dt);
     this.invisible = Math.max(0, this.invisible - dt);
     this.elf.setGhost(this.invisible > 0);
     this.hud.actionBar.update(this.resources);
@@ -474,6 +496,40 @@ export class Game {
         this.sfx.jet();
         break;
       }
+      case 'tongue': {
+        // Yank the nearest enemy in reach over to the iguana, stunned; bosses only flinch.
+        let prey: Enemy | null = null;
+        let best: number = spell.radius;
+        for (const s of this.enemies.all) {
+          if (!s.alive || s.hidden) continue;
+          const d = Math.hypot(s.x - c.x, s.z - c.z) - s.radius;
+          if (d < best) {
+            best = d;
+            prey = s;
+          }
+        }
+        const h = prey ? Math.atan2(prey.x - c.x, prey.z - c.z) : this.companion.facing;
+        const reach = prey ? Math.hypot(prey.x - c.x, prey.z - c.z) : 3;
+        for (let i = 1; i <= 8; i++) this.effects.burst(c.x + (Math.sin(h) * reach * i) / 8, 0.7, c.z + (Math.cos(h) * reach * i) / 8, TONGUE_PINK, 3, 1.5, 0.08);
+        if (prey) {
+          if (prey.bossName) prey.stun(TONGUE_BOSS_FLINCH);
+          else {
+            prey.shove(-Math.sin(h), -Math.cos(h), Math.max(0, reach - prey.radius - 1.2));
+            prey.stun(spell.duration);
+          }
+          this.effects.burst(prey.x, prey.radius, prey.z, TONGUE_PINK, 10, 3, 0.1);
+        }
+        this.sfx.whoosh();
+        this.events.push({ e: 'spell', id: SPELL_IDS.indexOf(id), x: q(c.x), z: q(c.z), h: q(h), d: q(reach) });
+        return;
+      }
+      case 'ward':
+        this.ward = spell.duration;
+        this.effects.ring(p.x, p.z, JADE, spell.radius);
+        this.effects.burst(p.x, 1, p.z, new THREE.Color(JADE), 24, 4, 0.1);
+        this.hud.toast('💚 Jade Ward!', JADE);
+        this.sfx.spring();
+        break;
       case 'howl': {
         // Enemies around panic and run off (calmed: harmless, wandering away); bosses only flinch.
         const near = this.enemies.all.filter((s) => s.alive && !s.hidden && Math.hypot(s.x - c.x, s.z - c.z) <= spell.radius + s.radius);
@@ -606,7 +662,7 @@ export class Game {
       t: q(this.time),
       state,
       ...(this.practice ? { practice: 1 } : {}),
-      hero: { x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0, ...(this.invisible > 0 ? { i: 1 } : {}) },
+      hero: { x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0, ...(this.invisible > 0 ? { i: 1 } : {}), ...(this.ward > 0 ? { w: 1 } : {}) },
       fam: c.kind
         ? { k: FAMILIAR_KINDS.indexOf(c.kind), x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed), y: q(c.height) }
         : null,
@@ -814,6 +870,21 @@ export class Game {
     this.sfx.hurt();
     this.events.push({ e: 'hurt' });
     if (this.health <= 0) this.gameOver();
+  }
+
+  /** Jade Ward: heal the elf while it lasts, slow enemies inside the circle (which follows the elf). */
+  private updateWard(dt: number): void {
+    this.ward = Math.max(0, this.ward - dt);
+    this.wardRing.visible = this.ward > 0;
+    if (!this.ward) return;
+    const p = this.player.position;
+    this.wardRing.position.set(p.x, 0, p.z);
+    this.wardRing.rotation.y += dt * 0.6;
+    const before = Math.ceil(this.health);
+    this.health = Math.min(MAX_HEALTH, this.health + WARD.heal * dt);
+    if (Math.ceil(this.health) !== before) this.hud.setHealth(this.health);
+    const r = SPELLS.ward.radius;
+    for (const s of this.enemies.all) if (Math.hypot(s.x - p.x, s.z - p.z) <= r + s.radius * 0.5) s.slow = Math.min(s.slow, WARD.slow);
   }
 
   /** Uses whatever's in action slot `slot` (keys 1-9 by default, or a tap on the bar). */

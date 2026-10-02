@@ -2,11 +2,11 @@ import type { Point } from './combat';
 
 /** The familiar creatures a second player can pick, and their spells. Pure data + math; unit tested. */
 
-export type FamiliarKind = 'crab' | 'capybara' | 'wolf' | 'goldfish';
-export type SpellId = 'burst' | 'shell' | 'spring' | 'calm' | 'pounce' | 'howl' | 'bubble' | 'jet';
+export type FamiliarKind = 'crab' | 'capybara' | 'wolf' | 'goldfish' | 'iguana';
+export type SpellId = 'burst' | 'shell' | 'spring' | 'calm' | 'pounce' | 'howl' | 'bubble' | 'jet' | 'tongue' | 'ward';
 
-export const FAMILIAR_KINDS: FamiliarKind[] = ['crab', 'capybara', 'wolf', 'goldfish']; // index = wire code: append only
-export const SPELL_IDS: SpellId[] = ['burst', 'shell', 'spring', 'calm', 'pounce', 'howl', 'bubble', 'jet']; // index = wire code: append only
+export const FAMILIAR_KINDS: FamiliarKind[] = ['crab', 'capybara', 'wolf', 'goldfish', 'iguana']; // index = wire code: append only
+export const SPELL_IDS: SpellId[] = ['burst', 'shell', 'spring', 'calm', 'pounce', 'howl', 'bubble', 'jet', 'tongue', 'ward']; // index = wire code: append only
 
 export interface FamiliarDef {
   name: string;
@@ -81,6 +81,19 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     spells: ['bubble', 'jet'],
     blurb: 'A bowl on brass legs. Shields and splashes.',
   },
+  iguana: {
+    name: 'Iguana',
+    emoji: '🦎',
+    art: 'art/iguana.jpg',
+    color: 0x4fe39a,
+    speed: 6.5,
+    gait: 'forward',
+    biteDamage: 9,
+    biteCooldown: 0.9,
+    radius: 0.7,
+    spells: ['tongue', 'ward'],
+    blurb: 'An enchanted jade iguana. Grabs foes, guards the elf.',
+  },
 };
 
 export interface SpellDef {
@@ -102,6 +115,8 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   pounce: { name: 'Pounce', icon: '🐾', cooldown: 2, radius: 0, duration: 0.35, description: 'Leap the way you are heading, hitting every enemy on the way.' },
   bubble: { name: 'Bubble Shield', icon: '🫧', cooldown: 5.6, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next 2 hits.' },
   jet: { name: 'Water Jet', icon: '💦', cooldown: 3.2, radius: 0, duration: 3, description: 'A blast of water ahead knocks enemies back and slows them.' },
+  tongue: { name: 'Tongue Lash', icon: '👅', cooldown: 3.6, radius: 9, duration: 1.5, description: 'Yanks the nearest enemy to you and stuns it; bosses just flinch.' },
+  ward: { name: 'Jade Ward', icon: '💚', cooldown: 5.6, radius: 4, duration: 5, description: 'A jade circle around the elf: heals, and slows enemies in it.' },
   howl: { name: 'War Howl', icon: '🌕', cooldown: 5.6, radius: 8, duration: 3, description: 'Enemies around you panic and flee; the elf gets Rapid fire for a while.' },
 };
 
@@ -116,6 +131,10 @@ export const HOWL_RAPID_SECONDS = 5;
 export const HOWL_BOSS_FLINCH = 1.2;
 /** Bubble Shield: hits the elf's bubble absorbs. */
 export const BUBBLE_HITS = 2;
+/** Jade Ward: healing per second for the elf, and enemies in it move at this fraction of their speed. */
+export const WARD = { heal: 6, slow: 0.6 };
+/** Tongue Lash: bosses only flinch this long. */
+export const TONGUE_BOSS_FLINCH = 0.6;
 /** Water Jet: how far ahead and how wide it reaches (m), damage, push (m), and the slow. */
 export const JET = { length: 7, width: 2.6, damage: 6, shove: 5, slow: 0.5 };
 

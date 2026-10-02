@@ -4,7 +4,7 @@ import { Crab } from './crab';
 import { attachAtPivot, bounds, loadParts } from './rig';
 import { toonify } from './toon';
 
-/** Anything that can be a familiar's body: the crab, the capybara, the wolf, the goldfish. */
+/** Anything that can be a familiar's body: the crab, the capybara, the wolf, the goldfish, the iguana. */
 export interface FamiliarBody {
   readonly group: THREE.Group;
   onStep?: (strength: number) => void;
@@ -15,7 +15,7 @@ export interface FamiliarBody {
 }
 
 /** Small or thin parts that shouldn't get an outline (and the fishbowl's water, pebbles and bubbles). */
-const NO_OUTLINE = /pupil|shine|nostril|mouth|smile|gem|clasp|circlet|magic_|brow|lid_|rune|rivet|bowl_(glass|water|surface|glint|pebble|weed|bubble)/;
+const NO_OUTLINE = /pupil|catchlight|iris|claw|toe|crest|leaf|emerald|cheek|shine|nostril|mouth|smile|gem|clasp|circlet|magic_|brow|lid_|rune|rivet|bowl_(glass|water|surface|glint|pebble|weed|bubble)/;
 
 /**
  * A capybara, wolf or goldfish (public/models/<kind>.glb, built by scripts/models/build-familiars.mjs),
@@ -35,8 +35,10 @@ class Quadruped implements FamiliarBody {
   private time = 0;
   private bite = 0;
 
-  constructor(parts: Map<string, THREE.Mesh>) {
+  /** `scale`: model units → metres (the imported iguana is modelled big). */
+  constructor(parts: Map<string, THREE.Mesh>, scale = 1) {
     this.group.add(this.body);
+    this.body.scale.setScalar(scale);
     const grab = (test: (name: string) => boolean) => {
       const out: THREE.Mesh[] = [];
       for (const [name, mesh] of parts) if (test(name)) out.push(mesh);
@@ -63,7 +65,7 @@ class Quadruped implements FamiliarBody {
     const tb = box(tailMeshes);
     this.tail = tailMeshes.length ? attachAtPivot(this.body, ORIGIN, new THREE.Vector3(0, tb.min.y + 0.06, tb.max.z), tailMeshes) : null;
 
-    const capeMeshes = grab((n) => n === 'cape');
+    const capeMeshes = grab((n) => n.startsWith('cape'));
     const cb = box(capeMeshes);
     this.cape = capeMeshes.length ? attachAtPivot(this.body, ORIGIN, new THREE.Vector3(0, cb.max.y, cb.max.z), capeMeshes) : null;
 
@@ -105,14 +107,17 @@ class Quadruped implements FamiliarBody {
 }
 
 const ORIGIN = new THREE.Vector3();
+/** The iguana model (public/models/iguana.glb) is ~3.8 units nose to tail; ~1.7 m in the game. */
+const IGUANA_SCALE = 0.45;
 
 /** Loads a body for every familiar kind. */
 export async function loadFamiliarBodies(base: string, crabScale: number): Promise<Record<FamiliarKind, FamiliarBody>> {
-  const [crab, capy, wolf, fish] = await Promise.all([
+  const [crab, capy, wolf, fish, iguana] = await Promise.all([
     Crab.load(`${base}models/crab.glb`, crabScale),
     loadParts(`${base}models/capybara.glb`),
     loadParts(`${base}models/wolf.glb`),
     loadParts(`${base}models/fishbowl.glb`),
+    loadParts(`${base}models/iguana.glb`),
   ]);
-  return { crab, capybara: new Quadruped(capy), wolf: new Quadruped(wolf), goldfish: new Quadruped(fish) };
+  return { crab, capybara: new Quadruped(capy), wolf: new Quadruped(wolf), goldfish: new Quadruped(fish), iguana: new Quadruped(iguana, IGUANA_SCALE) };
 }

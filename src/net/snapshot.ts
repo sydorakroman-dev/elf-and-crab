@@ -39,6 +39,8 @@ export interface HeroState {
   v: number;
   /** Invisible (Wind Walk): 1. */
   i?: number;
+  /** Inside the iguana's Jade Ward: 1. */
+  w?: number;
 }
 
 export interface FamState {
@@ -61,7 +63,7 @@ export type GameEvent =
   | { e: 'twang' }
   | { e: 'glob'; x: number; z: number; k?: number }
   /** A familiar spell went off (id: index into SPELL_IDS). */
-  | { e: 'spell'; id: number; x: number; z: number; h?: number }
+  | { e: 'spell'; id: number; x: number; z: number; h?: number; d?: number }
   | { e: 'bite' }
   | { e: 'land'; x: number; z: number }
   | { e: 'heal'; x: number; z: number }

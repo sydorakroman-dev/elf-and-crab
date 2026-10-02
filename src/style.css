@@ -360,9 +360,10 @@ kbd {
 .fam-hud .role-badge.locked .chg { display: none; }
 
 /* Creature picker */
-.picker { width: min(1100px, 100%); max-height: 100%; overflow-y: auto; text-align: center; cursor: default; padding-block: 8px; }
+.picker { width: min(1240px, 100%); max-height: 100%; overflow-y: auto; text-align: center; cursor: default; padding-block: 8px; }
 .picker h2 { margin: 0 0 14px; font-size: clamp(24px, 4vw, 36px); text-shadow: 0 0 20px rgba(111, 232, 214, 0.5); }
-.pick-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.pick-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+@media (min-width: 1000px) { .pick-cards { grid-template-columns: repeat(5, 1fr); } }
 .pick-card {
   --c: #6fe8d6;
   display: flex;

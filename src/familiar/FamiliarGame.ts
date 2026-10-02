@@ -20,6 +20,7 @@ import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, pounceLanding, type Famil
 import { POWER_CODES, SLIME_KIND_CODES, SnapshotBuffer, type GameEvent, type Snapshot } from '../net/snapshot';
 import type { FamiliarLink, FamiliarStatus } from '../net/client';
 import { FamiliarHud } from './hud';
+import { jadeRing } from '../game/Game';
 
 const FOV = 45;
 /** Third-person follow camera: always looking north, this far back (m) and this steep (radians). */
@@ -68,6 +69,8 @@ export class FamiliarGame {
   private readonly sfx = new Sfx();
   private readonly shieldBubble: THREE.Mesh;
   private readonly famRing: THREE.Mesh;
+  /** The iguana's Jade Ward around the elf. */
+  private readonly wardRing = jadeRing(SPELLS.ward.radius);
   private readonly rangeRing: THREE.Mesh;
   private readonly pounceMark: THREE.Mesh;
   private time = 0;
@@ -124,6 +127,7 @@ export class FamiliarGame {
       this.effects.rings,
       this.shieldBubble,
       this.famRing,
+      this.wardRing,
       this.rangeRing,
       this.pounceMark,
       this.telegraph.group,
@@ -141,6 +145,7 @@ export class FamiliarGame {
     bodies.wolf.onStep = (s) => this.sfx.scuttle(s * 0.6);
     bodies.capybara.onStep = (s) => this.sfx.footstep(s * 0.4);
     bodies.goldfish.onStep = (s) => this.sfx.scuttle(s * 0.5);
+    bodies.iguana.onStep = (s) => this.sfx.footstep(s * 0.35);
 
     session.onSnapshot = (s) => this.receive(s);
     session.onStatus = (s) => this.setStatus(s);
@@ -214,7 +219,7 @@ export class FamiliarGame {
           this.sfx.spit();
           break;
         case 'spell':
-          this.playSpell(SPELL_IDS[ev.id], ev.x, ev.z, famColor, ev.h ?? 0);
+          this.playSpell(SPELL_IDS[ev.id], ev.x, ev.z, famColor, ev.h ?? 0, ev.d ?? 0);
           break;
         case 'bite':
           this.currentBody()?.pinch();
@@ -274,7 +279,7 @@ export class FamiliarGame {
     }
   }
 
-  private playSpell(id: (typeof SPELL_IDS)[number] | undefined, x: number, z: number, color: THREE.Color, heading: number): void {
+  private playSpell(id: (typeof SPELL_IDS)[number] | undefined, x: number, z: number, color: THREE.Color, heading: number, reach: number): void {
     if (!id) return;
     const spell = SPELLS[id];
     this.currentBody()?.pinch();
@@ -308,6 +313,13 @@ export class FamiliarGame {
         break;
       case 'bubble':
         this.sfx.bubble();
+        break;
+      case 'tongue':
+        for (let i = 1; i <= 8; i++) this.effects.burst(x + (Math.sin(heading) * reach * i) / 8, 0.7, z + (Math.cos(heading) * reach * i) / 8, new THREE.Color(0xff7aa8), 3, 1.5, 0.08);
+        this.sfx.whoosh();
+        break;
+      case 'ward':
+        this.sfx.spring();
         break;
       case 'jet':
         for (let i = 1; i <= 6; i++) this.effects.burst(x + Math.sin(heading) * i * 1.15, 0.7, z + Math.cos(heading) * i * 1.15, new THREE.Color(0x5cc4ff), 8, 3 + i * 0.3, 0.12);
@@ -411,6 +423,11 @@ export class FamiliarGame {
     this.elf.group.position.set(h.x, 0, h.z);
     this.elf.group.visible = h.v === 1;
     this.elf.setGhost(h.i === 1);
+    this.wardRing.visible = h.w === 1;
+    if (h.w === 1) {
+      this.wardRing.position.set(h.x, 0, h.z);
+      this.wardRing.rotation.y += dt * 0.6;
+    }
     this.elf.update(dt, { speed: h.s, moveYaw: h.m, facing: h.f, aiming: h.a === 1, dashing: h.d === 1 });
     const shielded = s.powers.some(([code]) => POWER_CODES[code] === 'shield');
     this.shieldBubble.visible = shielded;

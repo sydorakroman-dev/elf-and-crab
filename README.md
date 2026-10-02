@@ -161,6 +161,7 @@ Two roles:
 | 🦫 Capybara | slow | ♨️ **Soothing Spring** — a 6 m pool for 6 s: enemies in it are 60% slower, the elf heals 1 heart in it (4 s) · 🌸 **Calm Aura** — enemies within 7 m stop chasing and wander off, harmless, for 5 s (3.2 s) |
 | 🐺 Wolf | fast | 🐾 **Pounce** — leap up to 10 m the way it's heading, 25 damage to every enemy on the way (2 s) · 🌕 **War Howl** — enemies within 8 m panic and flee for 3 s (bosses only flinch), and the elf gets Rapid fire for 5 s (5.6 s) |
 | 🐠 Goldfish | medium | 🫧 **Bubble Shield** — the elf gets a bubble that blocks the next 2 hits (5.6 s) · 💦 **Water Jet** — a 7 m blast of water ahead: 6 damage, knocks enemies ~5 m back and slows them by half for 3 s (3.2 s) |
+| 🦎 Iguana | medium | 👅 **Tongue Lash** — yanks the nearest enemy within 9 m over to the iguana and stuns it 1.5 s (bosses just flinch) (3.6 s) · 💚 **Jade Ward** — a jade circle around the elf for 5 s: heals 6 HP/s and slows enemies in it by 40% (5.6 s) |
 
 Solo is just the elf; the familiar only appears while a second player is connected.
 
@@ -208,7 +209,8 @@ URL; free instances sleep when idle and take ~30-60 s to wake). The GitHub Pages
 
 - `src/world/rooms.ts` — the six rooms and the run's progression; `src/world/dungeon.ts` builds a room: instanced floor
   tiles and wall bricks, gates and doors, pillars, its centrepiece, torches.
-- `src/player/elf.ts`, `src/player/crab.ts`, `src/player/beasts.ts` — the hero and the three familiars
+- `src/player/elf.ts`, `src/player/crab.ts`, `src/player/beasts.ts` — the hero and the familiars (the iguana is an imported
+  Blender model, renamed and simplified by `node scripts/models/prepare-iguana.mjs`)
   (`public/models/`; the familiars are built by `node scripts/models/build-familiars.mjs`). They're static, unrigged
   meshes, so `src/player/rig.ts` groups their named parts under pivots and the classes animate them in code. The elf
   is built by `scripts/models/build-elf.mjs` (`node scripts/models/build-elf.mjs`; shapes and the GLB writer in

@@ -23,7 +23,7 @@ export interface CompanionResult {
 }
 
 /**
- * The familiar: a creature (crab, capybara, wolf or goldfish) a second player steers from a tablet.
+ * The familiar: a creature (crab, capybara, wolf, goldfish or iguana) a second player steers from a tablet.
  * It walks to wherever they tap, bites slimes in reach on its own, and casts its spells on
  * request (cooldowns enforced here, on the hero's machine, which runs the game). Only present
  * while a familiar is connected and has picked a creature.
