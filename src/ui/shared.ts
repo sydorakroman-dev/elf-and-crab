@@ -1,5 +1,5 @@
 import { POWER_UPS, type PowerUpType } from '../game/powerups';
-import { ROOMS, WAVES_PER_ROOM } from '../world/rooms';
+import { ROOMS } from '../world/rooms';
 import { enemyName } from '../game/enemies';
 
 /** HUD pieces shared by the hero's screen and the familiar's tablet. */
@@ -134,7 +134,7 @@ export class Fade {
     if (!show || card === this.shown) return;
     this.shown = card;
     const room = ROOMS[card];
-    const boss = room.waves[WAVES_PER_ROOM - 1].boss;
+    const boss = room.waves.at(-1)?.boss;
     const img = this.card.querySelector<HTMLImageElement>('.rc-art')!;
     // Hidden until the new picture is decoded — otherwise the previous room's art shows for a moment.
     img.style.visibility = 'hidden';

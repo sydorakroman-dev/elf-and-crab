@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Dungeon, WALL_HEIGHT } from '../world/dungeon';
-import { ROOMS, WAVES_PER_ROOM, runLabel, type RunPhase } from '../world/rooms';
+import { ROOMS, runLabel, type RunPhase } from '../world/rooms';
 import { TelegraphRings } from './telegraph';
 import { Player, type Arena, type InputMode } from '../player/controls';
 import { TouchControls } from '../ui/touch';
@@ -536,13 +536,13 @@ export class Game {
 
   private familiarCommand(cmd: FamiliarCommand): void {
     if (cmd.type === 'parade') {
-      // Practice room only: one monster appears a little way off and strolls about.
+      // Practice room only: one monster appears a little way off and behaves as it does in its room.
       const kind = ENEMY_KIND_LIST.find((k) => k === cmd.kind);
       if (!this.practice || !kind) return;
       const f = this.companion.present ? this.companion.position : this.player.position;
       const d = Math.hypot(f.x, f.z) || 1;
       const at = { x: f.x - (f.x / d) * 9, z: f.z - (f.z / d) * 9 }; // toward the middle of the room
-      const e = this.enemies.parade(kind, at.x, at.z);
+      const e = this.enemies.showcase(kind, at.x, at.z);
       this.effects.ring(e.x, e.z, e.color, Math.max(1.5, e.radius * 1.5));
       this.effects.burst(e.x, 1, e.z, e.color, 24, 5, 0.12);
       this.events.push({ e: 'poof', x: q(e.x), z: q(e.z) });
@@ -823,7 +823,7 @@ export class Game {
       this.waveBreak = WAVE_BREAK;
       if (this.waveInRoom > 0) {
         this.heal(HEALING.waveClear);
-        if (this.waveInRoom >= WAVES_PER_ROOM) {
+        if (this.waveInRoom >= ROOMS[this.room].waves.length) {
           if (!ROOMS[this.room].hasExit) {
             this.victory();
             return;
@@ -858,7 +858,7 @@ export class Game {
       this.banner(`⚔️ ${boss.bossName}!`);
       this.sfx.burst();
     } else {
-      this.banner(`Wave ${this.waveInRoom}/${WAVES_PER_ROOM}`);
+      this.banner(`Wave ${this.waveInRoom}/${room.waves.length}`);
     }
     this.sfx.wave();
   }
@@ -942,7 +942,7 @@ export class Game {
   }
 
   private bossState(): Snapshot['boss'] {
-    const b = this.practice ? null : this.enemies.boss; // no boss bar for a practice showcase
+    const b = this.enemies.boss;
     return b ? { hp: Math.max(0, b.hp), max: b.maxHp, name: b.bossName! } : null;
   }
 
@@ -971,6 +971,15 @@ export class Game {
   }
 
   private gameOver(): void {
+    if (this.practice) {
+      // The practice room: the elf can't die — back to full health.
+      this.health = MAX_HEALTH;
+      this.hud.setHealth(this.health);
+      const p = this.player.position;
+      this.effects.burst(p.x, 1.2, p.z, new THREE.Color(0xff4d5e), 20, 5, 0.12);
+      this.events.push({ e: 'heal', x: q(p.x), z: q(p.z) });
+      return;
+    }
     this.state = 'over';
     this.elf.group.visible = true;
     const run = { score: this.score, wave: this.wave };

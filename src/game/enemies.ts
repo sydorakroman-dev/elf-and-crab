@@ -68,8 +68,6 @@ export interface Enemy {
   removed: boolean;
   readonly stunned: boolean;
   readonly calmed: boolean;
-  /** Showcase (the practice room): strolls about, never attacks or takes damage. */
-  parade: boolean;
   /** Can't be hit or targeted right now (burrowed). */
   readonly hidden?: boolean;
   /** No contact damage right now (stunned, calmed…). */
@@ -174,12 +172,10 @@ export class Enemies {
     return w.boss ? this.add(createEnemy(w.boss, bossX, bossZ)) : null;
   }
 
-  /** The practice room's showcase: replaces everything with one monster of `kind`, strolling about. */
-  parade(kind: EnemyKind, x: number, z: number): Enemy {
+  /** The practice room's showcase: replaces everything with one monster of `kind`, behaving as usual. */
+  showcase(kind: EnemyKind, x: number, z: number): Enemy {
     this.clear();
-    const e = createEnemy(kind, x, z);
-    e.parade = true;
-    return this.add(e);
+    return this.add(createEnemy(kind, x, z));
   }
 
   clear(): void {

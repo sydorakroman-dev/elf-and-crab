@@ -30,7 +30,7 @@ export interface RoomDef {
   trees?: [number, number][];
   /** Outdoors: hedge walls with wooden gates, daylight and open sky instead of brick and torches. */
   outdoor?: boolean;
-  /** The room's three waves; the last one brings its boss. */
+  /** The room's waves (usually three); the last one brings its boss. */
   waves: RoomWave[];
   /** Who lives here, for the room's intro card (with their illustration, public/art/<art>.jpg). */
   group: string;
@@ -57,7 +57,7 @@ export const ROOMS: RoomDef[] = [
   {
     name: 'The Woodland',
     shape: 'circle',
-    group: 'Forest beasts',
+    group: 'Forest beasts and living plants',
     art: 'beasts',
     scene: 'scene-woodland',
     half: 24,
@@ -66,9 +66,9 @@ export const ROOMS: RoomDef[] = [
     trees: [[-12, -12], [11, -14], [-15, 2], [15, -2], [-8, 4], [9, 5], [-13, 15], [14, 14], [0, -6]],
     outdoor: true,
     waves: [
-      { mix: { beetle: 8, snake: 2 } },
-      { mix: { beetle: 8, snake: 4, direwolf: 2, boar: 1 } },
-      { mix: { beetle: 6, direwolf: 1 }, boss: 'bear' },
+      { mix: { beetle: 8, snake: 2, vine: 2 } },
+      { mix: { beetle: 6, snake: 2, direwolf: 2, boar: 1, vine: 1, treant: 1 } },
+      { mix: { beetle: 6, vine: 2 }, boss: 'bear' },
     ],
     torchLight: 0xffe7b0,
     torchFlame: 0xfff3c0,
@@ -166,13 +166,13 @@ export const ROOMS: RoomDef[] = [
   {
     name: 'The Flooded Hall',
     shape: 'octagon',
-    group: 'Goblins',
+    group: 'Goblins and water elementals',
     art: 'goblins',
     scene: 'scene-flooded-hall',
     waves: [
-      { mix: { brawler: 8, riveter: 3, rotor: 2 } },
-      { mix: { brawler: 8, rotor: 3, riveter: 3, lobber: 2, tinkerer: 2 } },
-      { mix: { brawler: 6, riveter: 2, lobber: 2 }, boss: 'scrapboss' },
+      { mix: { brawler: 8, riveter: 3, rotor: 2, water: 1 } },
+      { mix: { brawler: 8, rotor: 3, riveter: 3, lobber: 2, tinkerer: 2, water: 2 } },
+      { mix: { brawler: 6, riveter: 2, lobber: 2, water: 1 }, boss: 'scrapboss' },
     ],
     half: 28,
     pillars: [[-9, -15], [9, -15], [-9, -5], [9, -5], [-9, 5], [9, 5], [-9, 15], [9, 15]],
@@ -192,13 +192,13 @@ export const ROOMS: RoomDef[] = [
   {
     name: 'The Lava Chamber',
     shape: 'circle',
-    group: 'Nature elementals',
+    group: 'Fire, wind and stone elementals',
     art: 'elementals',
     scene: 'scene-lava-chamber',
     waves: [
-      { mix: { vine: 5, wind: 3, water: 2, fire: 2 } },
-      { mix: { vine: 5, wind: 3, water: 3, fire: 3, golem: 1, treant: 1 } },
-      { mix: { vine: 3, fire: 2, golem: 1 }, boss: 'inferno' },
+      { mix: { fire: 4, wind: 4, golem: 1 } },
+      { mix: { fire: 5, wind: 4, golem: 2 } },
+      { mix: { fire: 3, wind: 2, golem: 1 }, boss: 'inferno' },
     ],
     half: 26,
     pillars: [[7.5, -13], [15, 0], [7.5, 13], [-7.5, 13], [-15, 0], [-7.5, -13]],
@@ -218,13 +218,12 @@ export const ROOMS: RoomDef[] = [
   {
     name: "The Ash King's Lair",
     shape: 'circle',
-    group: 'The Ash King and his fire',
+    group: 'The Ash King',
     art: 'elementals',
     scene: 'scene-ash-king',
     waves: [
-      { mix: { fire: 5, wind: 3, vine: 3, golem: 2 } },
-      { mix: { fire: 6, golem: 2, treant: 2, water: 2, wind: 2 } },
-      { mix: { fire: 3, golem: 1 }, boss: 'ashking' },
+      // One wave: the Ash King alone (he calls in fire elementals himself).
+      { mix: {}, boss: 'ashking' },
     ],
     half: 34,
     pillars: [],
@@ -246,7 +245,6 @@ export const ROOMS: RoomDef[] = [
   },
 ];
 
-export const WAVES_PER_ROOM = 3;
 
 /** ready: in the first room, waiting for the hero to start · fight · cleared (door open) · transition (walking through). */
 export type RunPhase = 'ready' | 'fight' | 'cleared' | 'transition';
@@ -259,5 +257,5 @@ export function runLabel(room: number, wave: number, remaining: number, phase: R
   if (phase === 'ready') return `${name} · ready when you are`;
   if (wave === 0) return `${name} · get ready…`;
   if (bossName) return `${name} · ${bossName}`;
-  return `${name} · Wave ${wave}/${WAVES_PER_ROOM} · ${remaining} ${remaining === 1 ? 'foe' : 'foes'} left`;
+  return `${name} · Wave ${wave}/${ROOMS[room]?.waves.length ?? 0} · ${remaining} ${remaining === 1 ? 'foe' : 'foes'} left`;
 }

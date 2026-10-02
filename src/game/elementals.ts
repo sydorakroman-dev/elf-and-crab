@@ -9,7 +9,8 @@ import { ENEMY_KIND_LIST } from './enemyKinds';
 import { q } from '../net/snapshot';
 
 /**
- * The nature elementals (the Lava Chamber, the last and hardest room). Melee ones walk up and hit hard; ranged ones hold a
+ * The nature elementals: thorn vines and treants in the Woodland, water elementals in the Flooded Hall,
+ * fire, wind and rock golems in the Lava Chamber and the Ash King's Lair. Melee ones walk up and hit hard; ranged ones hold a
  * distance and throw bolts (gust / water / fire, see globs.ts; effects in balance.ts).
  */
 export interface ElementalDef {
@@ -27,20 +28,20 @@ export interface ElementalDef {
 }
 
 export const ELEMENTALS: Record<ElementalKind, ElementalDef> = {
-  vine: { name: 'Thorn Vine', tier: 'normal', style: 'melee', hp: 55, speed: 4.3, radius: 0.8, touch: 10, push: 6, score: 20, color: 0x4f9a3a, drop: 0.08 },
+  vine: { name: 'Thorn Vine', tier: 'normal', style: 'melee', hp: 22, speed: 3.9, radius: 0.8, touch: 8, push: 6, score: 20, color: 0x4f9a3a, drop: 0.08 },
   wind: { name: 'Wind Elemental', tier: 'normal', style: 'ranged', hp: 65, speed: 4.8, radius: 0.85, touch: 8, push: 7, score: 25, color: 0xcfe6f2, drop: 0.08 },
-  water: { name: 'Water Elemental', tier: 'normal', style: 'ranged', hp: 80, speed: 3.3, radius: 0.9, touch: 10, push: 6, score: 30, color: 0x3fa8e0, drop: 0.1 },
+  water: { name: 'Water Elemental', tier: 'normal', style: 'ranged', hp: 65, speed: 3.3, radius: 0.9, touch: 10, push: 6, score: 30, color: 0x3fa8e0, drop: 0.1 },
   fire: { name: 'Fire Elemental', tier: 'tough', style: 'ranged', hp: 105, speed: 3.5, radius: 0.85, touch: 15, push: 5, score: 45, color: 0xff7a2a, drop: 0.15 },
-  treant: { name: 'Treant', tier: 'elite', style: 'melee', hp: 220, speed: 2.6, radius: 1.3, touch: 15, push: 2, score: 70, color: 0x7a5a32, drop: 0.25 },
+  treant: { name: 'Treant', tier: 'elite', style: 'melee', hp: 90, speed: 2.6, radius: 1.3, touch: 12, push: 2, score: 70, color: 0x7a5a32, drop: 0.25 },
   golem: { name: 'Rock Golem', tier: 'elite', style: 'melee', hp: 255, speed: 2.4, radius: 1.3, touch: 15, push: 1.5, score: 80, color: 0x8a8378, drop: 0.25 },
 };
 
 // Thorn vine: rears back, then lashes a vine out in front.
-export const VINE = { range: 3.0, windup: 0.5, reach: 2.0, radius: 1.4, damage: 15, knock: 10, cooldown: 2.0 };
+export const VINE = { range: 3.0, windup: 0.55, reach: 2.0, radius: 1.4, damage: 10, knock: 10, cooldown: 2.0 };
 // Rock golem: raises both fists, then punches with huge knockback.
 export const GOLEM = { range: 3.0, windup: 0.75, reach: 1.6, radius: 2.2, damage: 30, knock: 34, cooldown: 2.4 };
 // Treant: roots burst out of the ground under the hero (warning ring first).
-export const TREANT = { range: 14, windup: 1.1, radius: 2.2, damage: 22, knock: 6, slowSeconds: 1.5, slowFactor: 0.5, cooldown: 5 };
+export const TREANT = { range: 14, windup: 1.2, radius: 2.2, damage: 16, knock: 6, slowSeconds: 1.5, slowFactor: 0.5, cooldown: 5 };
 // Ranged elementals: distance band, time between shots, cast wind-up.
 export const CASTERS: Record<'wind' | 'water' | 'fire', { min: number; max: number; interval: number; windup: number; shot: ProjectileKind }> = {
   wind: { min: 10.5, max: 18, interval: 2.4, windup: 0.5, shot: 'gust' },
@@ -66,8 +67,6 @@ export class Elemental implements Enemy {
   dying = false;
   removed = false;
   slow = 1;
-  /** Showcase (the practice room): just strolls about — no attacks, no damage. */
-  parade = false;
   /** Drenched (the goldfish's Water Jet): slowed to `soakFactor` for a while. */
   private soakTimer = 0;
   private soakFactor = 1;
@@ -121,7 +120,7 @@ export class Elemental implements Enemy {
     return this.calmTimer > 0;
   }
   get harmless(): boolean {
-    return this.parade || this.stunned || this.calmed;
+    return this.stunned || this.calmed;
   }
   get touchDamage(): number {
     return this.def.touch;
@@ -137,7 +136,6 @@ export class Elemental implements Enemy {
   }
 
   hurt(amount: number, dirX: number, dirZ: number): boolean {
-    if (this.parade) return false;
     if (this.dying) return false;
     this.hp -= amount;
     this.flash = 1;
@@ -215,12 +213,12 @@ export class Elemental implements Enemy {
     let spits: Spit[] = [];
     if (this.stunTimer > 0) {
       this.stunTimer = Math.max(0, this.stunTimer - dt);
-    } else if (this.calmTimer > 0 || this.parade) {
+    } else if (this.calmTimer > 0) {
       this.calmTimer = Math.max(0, this.calmTimer - dt);
       this.wander += (Math.random() - 0.5) * dt * 3;
       const away = Math.atan2(p.x - target.x, p.z - target.z);
       const dir = away * 0.4 + this.wander * 0.6;
-      speed = this.def.speed * (this.parade ? 0.6 : 0.45) * this.slow;
+      speed = this.def.speed * 0.45 * this.slow;
       this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, obstacles, half);
     } else {
       [speed, spits] = this.think(dt, target, others, obstacles, half);

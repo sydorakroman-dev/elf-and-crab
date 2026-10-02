@@ -25,20 +25,20 @@ Aim assist is wider on touch.
 ## The run
 
 The run waits in the Woodland until you're ready — press **Enter** (or tap **Start**) and the first wave comes; handy
-while a friend joins as your familiar. Seven rooms, three waves each; every room's third wave brings its boss. Clear a room and its north door opens — walk
+while a friend joins as your familiar. Seven rooms, three waves each (the last room has just one: its boss); every room's last wave brings its boss. Clear a room and its north door opens — walk
 through to the next one (your familiar comes along, and you're healed to full). Every room opens with an intro
 card — its foes' illustration (`public/art/`), name and boss — and a random one shows while the game loads. The last room ends with **the
 Ash King**, a volcanic dragon; beat him to win.
 
 | Room | Who lives there | Boss |
 | --- | --- | --- |
-| 1 · The Woodland — a round, sunny clearing, trees, hedges | forest beasts | 🐻 The Crystal Bear |
+| 1 · The Woodland — a round, sunny clearing, trees, hedges | forest beasts, thorn vines, a treant | 🐻 The Crystal Bear |
 | 2 · The Crystal Cave — eight-sided, glowing crystal clusters | underworld dwellers | 🪱 The Giant Cave Worm |
 | 3 · The Crypt — square, torches, a brazier, four pillars | the undead | 💀 The Necromancer |
 | 4 · The Throne Room — square, a colonnade and a throne | orcs | 🪓 The Orc Chieftain |
-| 5 · The Flooded Hall — eight-sided, pillars, cold light, puddles | goblins | ⚙️ The Scrap Boss |
-| 6 · The Lava Chamber — round, a lava pit (arrows fly over it) | nature elementals | 🔥 The Inferno  |
-| 7 · The Ash King's Lair — a vast round hall: obsidian spires, lava pools and lavafalls, a rune circle | the Ash King's fire | 🐉 **The Ash King** (final boss) |
+| 5 · The Flooded Hall — eight-sided, pillars, cold light, puddles | goblins, water elementals | ⚙️ The Scrap Boss |
+| 6 · The Lava Chamber — round, a lava pit (arrows fly over it) | fire and wind elementals, rock golems | 🔥 The Inferno |
+| 7 · The Ash King's Lair — a vast round hall: obsidian spires, lava pools and lavafalls, a rune circle | — (one wave: the dragon alone) | 🐉 **The Ash King** (final boss) |
 
 ## Enemies
 
@@ -46,7 +46,7 @@ Full tables with every number: [`docs/enemies.csv`](docs/enemies.csv) and [`docs
 generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 10. Each room's group is tougher than
 the last.
 
-**Woodland — forest beasts** (all melee)
+**Woodland — forest beasts and living plants** (all melee)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
@@ -54,6 +54,8 @@ the last.
 | Venomous Snake | normal | 30 | 10 | coils, then lunges (18) |
 | Dire Wolf | tough | 50 | 15 | very fast; bites, backs off, comes again |
 | Thorn Boar | elite | 90 | 15 | paws the ground, then charges (30); dazed if it hits a tree or wall |
+| Thorn Vine | normal | 22 | 10 | lashes from 3 m |
+| Treant | elite | 90 | 16 | roots erupt where you stand, after a warning ring, and slow |
 | **Crystal Bear** | boss | 450 | 22 | fast; swipe (28), ground pound with warning ring (25) that flings 8 crystal shards, a charge from afar (26; dazed if it hits a tree); at half health roars in 6 beetles and enrages |
 
 **Crystal Cave — underworld dwellers** (critters of the deep: poison and acid)
@@ -89,7 +91,7 @@ the last.
 | Orc Shield Guard | elite | 170 | 22 | its shield blocks almost every arrow to the front |
 | **Orc Chieftain** | boss | 745 | 28 / 30 | hammer swings, ground slam with warning ring, long charges; war-cry brings 3 warriors |
 
-**Flooded Hall — goblins** (quick, well-armed tinkerers with nasty gadgets)
+**Flooded Hall — goblins and water elementals** (quick, well-armed tinkerers with nasty gadgets)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
@@ -98,21 +100,19 @@ the last.
 | Rivet Shooter | normal | 50 | 14 | keeps its distance, fires rivets |
 | Bomb Lobber | tough | 55 | 26 | bombs land where you stand, after a warning ring |
 | Boiler Tinkerer | elite | 130 | 24 | steam burst around itself |
+| Water Elemental | normal | 65 | 12 | water bolts that slow you for 2 s |
 | **Scrap Boss** | boss | 950 | 32 | stomp shockwave, mech punches; drops 4 brawlers at 2/3 and 1/3 health |
 
-**Lava Chamber — nature elementals**
+**Lava Chamber — fire, wind and stone elementals**
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| Thorn Vine | normal | 55 | 15 | lashes from 3 m |
 | Wind Elemental | normal | 65 | 8 | gust bolts with a big shove |
-| Water Elemental | normal | 80 | 12 | water bolts that slow you for 2 s |
 | Fire Elemental | tough | 105 | 15 | fireballs that leave burning ground (10 HP/s) |
-| Treant | elite | 220 | 22 | roots erupt where you stand, after a warning ring, and slow |
 | Rock Golem | elite | 255 | 30 | slow; heavy punch with huge knockback |
 | **The Inferno** | final boss | 1380 | 30 / 15 / 22 | flame ring around itself, 5-fireball fans, meteors at your spot (all leave fire); calls fire elementals |
 
-**The Ash King's Lair — the final boss** (with fire elementals, golems, treants and wind)
+**The Ash King's Lair — the final boss**, alone in a single wave (he calls in fire elementals himself)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
@@ -139,7 +139,7 @@ Two roles:
 - **Practice room:** type **TEST** as the code (or open `…/?join=TEST`) to practise as the familiar on your own:
   no server, no other player, no monsters. The elf stands in the Woodland (a little hurt, so heals show),
   power-ups drop every few seconds, and the creature can be swapped any time. The **👾 Monsters**
-  button shows any monster or boss from the game, strolling about (no attacks, no damage) to look at up close. The hero's game runs hidden in
+  button brings in any monster or boss from the game, behaving just as in its room — but here the elf can't die. The hero's game runs hidden in
   the same browser (`src/net/local.ts`).
  The creature can be changed between runs or while the elf is paused.
 

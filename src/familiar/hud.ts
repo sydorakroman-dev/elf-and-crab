@@ -144,7 +144,7 @@ export class FamiliarHud {
       const buttons = kinds.map((k) => `<button type="button" data-kind="${k}">${enemyName(k)}</button>`).join('');
       return `<section><h3>${room.name}</h3><div class="parade-list">${buttons}</div></section>`;
     }).join('');
-    root.insertAdjacentHTML('beforeend', `<div class="parade-panel" hidden><div class="parade-head"><h2>👾 Show a monster</h2><button type="button" data-parade-close>✕</button></div>${groups}</div>`);
+    root.insertAdjacentHTML('beforeend', `<div class="parade-panel" hidden><div class="parade-head"><h2>👾 Fight a monster</h2><button type="button" data-parade-close>✕</button></div>${groups}</div>`);
     this.paradePanel = root.querySelector('.parade-panel')!;
     this.paradeBtn.addEventListener('click', () => (this.paradePanel.hidden = !this.paradePanel.hidden));
     this.paradePanel.addEventListener('click', (e) => {

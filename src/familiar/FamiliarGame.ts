@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Dungeon } from '../world/dungeon';
-import { ROOMS, WAVES_PER_ROOM } from '../world/rooms';
+import { ROOMS } from '../world/rooms';
 import { TelegraphRings } from '../game/telegraph';
 import { BeastVisual } from '../game/beastVisual';
 import { ElementalVisual } from '../game/elementalVisual';
@@ -405,7 +405,7 @@ export class FamiliarGame {
     if (s.fam) this.camGoal.set(s.fam.x, 0, s.fam.z);
     else this.camGoal.set(h.x, 0, h.z);
     this.pointers.elf.at = (this.pointers.elf.at ?? new THREE.Vector3()).set(h.x, 1.4, h.z);
-    const bossKind = s.boss ? ROOMS[s.room]?.waves[WAVES_PER_ROOM - 1].boss : undefined;
+    const bossKind = s.boss ? ROOMS[s.room]?.waves.at(-1)?.boss : undefined;
     const bossT = bossKind ? s.slimes.find((t) => SLIME_KIND_CODES[t[1]] === bossKind) : undefined;
     this.pointers.boss.at = bossT ? (this.pointers.boss.at ?? new THREE.Vector3()).set(bossT[2], 2, bossT[3]) : null;
     this.elf.group.position.set(h.x, 0, h.z);

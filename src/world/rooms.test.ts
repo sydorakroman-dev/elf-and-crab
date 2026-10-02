@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROOMS, WAVES_PER_ROOM, runLabel } from './rooms';
+import { ROOMS, runLabel } from './rooms';
 import { insideArena } from '../game/combat';
 import { createEnemy, type EnemyKind, type RoomWave } from '../game/enemies';
 
@@ -35,19 +35,28 @@ describe('rooms', () => {
     }
   });
 
-  it('has three waves per room, the last one bringing a boss', () => {
+  it('has waves in every room, the last one bringing a boss; the Ash King comes alone', () => {
     for (const r of ROOMS) {
-      expect(r.waves).toHaveLength(WAVES_PER_ROOM);
+      expect(r.waves.length).toBeGreaterThan(0);
       expect(r.waves.slice(0, -1).every((w) => !w.boss)).toBe(true);
-      const boss = createEnemy(r.waves[WAVES_PER_ROOM - 1].boss!, 0, 0);
-      expect(boss.bossName).toBeTruthy();
+      expect(createEnemy(r.waves.at(-1)!.boss!, 0, 0).bossName).toBeTruthy();
+    }
+    expect(ROOMS.at(-1)!.waves).toEqual([{ mix: {}, boss: 'ashking' }]);
+  });
+
+  it('gets tougher room by room (total HP of each wave, and of each boss wave)', () => {
+    for (let r = 1; r < ROOMS.length; r++) {
+      const [a, b] = [ROOMS[r - 1].waves, ROOMS[r].waves];
+      for (let w = 0; w < Math.min(a.length, b.length) - 1; w++) expect(waveHp(b[w])).toBeGreaterThan(waveHp(a[w]));
+      expect(waveHp(b.at(-1)!)).toBeGreaterThan(waveHp(a.at(-1)!));
     }
   });
 
-  it('gets tougher room by room (total HP of each wave)', () => {
-    for (let w = 0; w < WAVES_PER_ROOM; w++) {
-      for (let r = 1; r < ROOMS.length; r++) expect(waveHp(ROOMS[r].waves[w])).toBeGreaterThan(waveHp(ROOMS[r - 1].waves[w]));
-    }
+  it('only puts vines and treants in the woodland, and water elementals in the flooded hall', () => {
+    const where = (k: string) => ROOMS.filter((r) => r.waves.some((w) => k in w.mix)).map((r) => r.name);
+    expect(where('vine')).toEqual(['The Woodland']);
+    expect(where('treant')).toEqual(['The Woodland']);
+    expect(where('water')).toEqual(['The Flooded Hall']);
   });
 
   it('labels each phase of the run', () => {
