@@ -9,4 +9,5 @@ export const ENEMY_KIND_LIST: EnemyKind[] = [
   'orcscout', 'orcwarrior', 'orcarcher', 'shaman', 'shieldguard', 'chieftain',
   'spider', 'ooze', 'sporecrawler', 'mushroom', 'mold', 'caveworm',
   'inferno',
+  'ashking',
 ];

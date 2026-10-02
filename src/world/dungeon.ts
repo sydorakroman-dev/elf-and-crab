@@ -77,6 +77,8 @@ export class Dungeon {
   private exitOpen = 0; // 0 closed → 1 open (animated)
   private exitTarget = 0;
   private readonly fireflies: { sprite: THREE.Sprite; base: THREE.Vector3; seed: number }[] = [];
+  /** Embers rising through the dragon's lair. */
+  private readonly embers: { sprite: THREE.Sprite; x: number; z: number; speed: number; seed: number }[] = [];
 
   constructor(scene: THREE.Scene, room: RoomDef, shadowMapSize = 2048) {
     this.room = room;
@@ -125,6 +127,12 @@ export class Dungeon {
       const t = time * 0.6 + f.seed;
       f.sprite.position.set(f.base.x + Math.sin(t * 1.3) * 1.5, f.base.y + Math.sin(t * 2.1) * 0.5, f.base.z + Math.cos(t * 0.9) * 1.5);
       f.sprite.material.opacity = 0.35 + 0.65 * Math.max(0, Math.sin(t * 3 + f.seed * 5));
+    }
+
+    for (const e of this.embers) {
+      const y = (time * e.speed + e.seed * 7) % 16;
+      e.sprite.position.set(e.x + Math.sin(time * 0.8 + e.seed) * 0.8, y, e.z + Math.cos(time * 0.6 + e.seed) * 0.8);
+      e.sprite.material.opacity = Math.min(1, y / 2) * Math.max(0, 1 - y / 16);
     }
 
     this.exitOpen += (this.exitTarget - this.exitOpen) * (1 - Math.exp(-3 * dt));
@@ -496,6 +504,91 @@ export class Dungeon {
           light.position.set(x, 3, z);
           this.group.add(light);
         }
+        break;
+      }
+      case 'dragonlair': {
+        const h = this.half;
+        // Obsidian spires: tall jagged black shards veined with lava; they block like pillars.
+        const obsidian = new THREE.MeshStandardMaterial({ color: 0x1f1719, roughness: 0.35, metalness: 0.2, flatShading: true });
+        const vein = this.glow(0x3a0a02, 0xff5a10, 1.4);
+        for (const [x, z] of room.spires ?? []) {
+          const spire = new THREE.Group();
+          for (let i = 0; i < 3; i++) {
+            const height = 9 + rng() * 6 - i * 3;
+            const shard = new THREE.Mesh(new THREE.ConeGeometry(1.4 - i * 0.35, height, 5).translate(0, height / 2, 0), obsidian);
+            shard.position.set((rng() - 0.5) * 1.2 * i, 0, (rng() - 0.5) * 1.2 * i);
+            shard.rotation.set((rng() - 0.5) * 0.15, rng() * Math.PI, (rng() - 0.5) * 0.15);
+            shard.castShadow = shard.receiveShadow = true;
+            const crack = new THREE.Mesh(new THREE.BoxGeometry(0.12, height * 0.7, 0.12).translate(0, height * 0.35, 0), vein);
+            crack.position.copy(shard.position).add(new THREE.Vector3(0.7 - i * 0.2, 0.3, 0.55));
+            crack.rotation.copy(shard.rotation);
+            spire.add(shard, crack);
+          }
+          spire.position.set(x, 0, z);
+          this.group.add(spire);
+          this.occluders.push(spire);
+          this.obstacles.push({ x, z, radius: 1.6 });
+        }
+        // Lava pools with dark rims; walking is blocked, arrows fly over.
+        for (const [x, z] of room.pools ?? []) {
+          const lava = new THREE.Mesh(new THREE.CircleGeometry(2.9, 24).rotateX(-Math.PI / 2), this.glow(0x4a1004, 0xff5010, 1.7));
+          lava.position.set(x, 0.03, z);
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(3.05, 0.4, 5, 24).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x241414, flatShading: true }));
+          rim.position.set(x, 0.12, z);
+          rim.castShadow = rim.receiveShadow = true;
+          this.group.add(lava, rim);
+          this.obstacles.push({ x, z, radius: 3.3, low: true });
+          this.addFlame(x, 1, z, 3.5, 22, 22, 0xff5a20, 0xff6a20, 1.5);
+        }
+        // Lavafalls pouring down the walls into glowing basins.
+        const fall = this.glow(0x7a1a04, 0xff4a0a, 1.15, { side: THREE.DoubleSide });
+        for (const a of [Math.PI * 0.2, -Math.PI * 0.2, Math.PI * 0.45, -Math.PI * 0.45, Math.PI * 0.8, -Math.PI * 0.8]) {
+          const nx = -Math.sin(a);
+          const nz = -Math.cos(a);
+          const d = h - 0.4;
+          for (let k = 0; k < 3; k++) {
+            const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.1 - k * 0.25, WALL_HEIGHT + 2), fall);
+            strip.position.set(nx * (d - k * 0.05) + Math.cos(a) * (k - 1) * 0.9, (WALL_HEIGHT + 2) / 2, nz * (d - k * 0.05) - Math.sin(a) * (k - 1) * 0.9);
+            strip.rotation.y = a;
+            this.group.add(strip);
+          }
+          const basin = new THREE.Mesh(new THREE.CircleGeometry(2.2, 18).rotateX(-Math.PI / 2), this.glow(0x4a1004, 0xff5010, 1.5));
+          basin.position.set(nx * (d - 1.6), 0.03, nz * (d - 1.6));
+          this.group.add(basin);
+          this.addFlame(nx * (d - 1.5), 2.5, nz * (d - 1.5), 3, 20, 24, 0xff5a20, 0xff7a30, 1);
+        }
+        // A great rune circle in the middle of the floor.
+        const rune = this.glow(0x2a0a04, 0xff7a2a, 1.1);
+        for (const r of [7, 8.2]) {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.12, 4, 64).rotateX(Math.PI / 2), rune);
+          ring.position.y = 0.04;
+          this.group.add(ring);
+        }
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          const mark = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), rune);
+          mark.scale.set(1, 0.08, 1.8);
+          mark.position.set(Math.sin(a) * 7.6, 0.05, Math.cos(a) * 7.6);
+          mark.rotation.y = a;
+          this.group.add(mark);
+        }
+        // Cracks of lava across the floor, and embers rising everywhere.
+        for (let i = 0; i < 22; i++) {
+          const crack = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 2.5 + rng() * 5).rotateX(-Math.PI / 2), this.glow(0x3a0a02, 0xff4a10, 1.2));
+          const [cx, cz] = this.spot(rng, 4);
+          crack.position.set(cx, 0.02, cz);
+          crack.rotation.y = rng() * Math.PI;
+          this.group.add(crack);
+        }
+        const emberMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffa040, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+        for (let i = 0; i < 70; i++) {
+          const sprite = new THREE.Sprite(emberMat.clone());
+          sprite.scale.setScalar(0.25 + rng() * 0.3);
+          const [ex, ez] = this.spot(rng, 2);
+          this.embers.push({ sprite, x: ex, z: ez, speed: 0.6 + rng() * 1.2, seed: rng() * 10 });
+          this.group.add(sprite);
+        }
+        this.addFlame(0, 3, 0, 4, 26, 40, 0xff6a30, 0xff7a30, 2);
         break;
       }
       case 'throne': {

@@ -11,13 +11,13 @@ describe('rooms', () => {
     expect(new Set(ROOMS.map((r) => r.shape))).toEqual(new Set(['square', 'circle', 'octagon']));
   });
 
-  it('has six rooms, starting in the woodland, only the last without an exit', () => {
-    expect(ROOMS).toHaveLength(6);
-    expect(ROOMS.map((r) => r.name)).toEqual(['The Woodland', 'The Crystal Cave', 'The Crypt', 'The Throne Room', 'The Flooded Hall', 'The Lava Chamber']);
-    expect(ROOMS.map((r) => r.hasExit)).toEqual([true, true, true, true, true, false]);
+  it('has seven rooms, starting in the woodland, only the last without an exit', () => {
+    expect(ROOMS).toHaveLength(7);
+    expect(ROOMS.map((r) => r.name)).toEqual(['The Woodland', 'The Crystal Cave', 'The Crypt', 'The Throne Room', 'The Flooded Hall', 'The Lava Chamber', "The Ash King's Lair"]);
+    expect(ROOMS.map((r) => r.hasExit)).toEqual([true, true, true, true, true, true, false]);
     for (const r of ROOMS) {
       expect(Number.isInteger(r.half)).toBe(true);
-      for (const [x, z] of [...r.pillars, ...(r.crystals ?? []), ...(r.trees ?? [])]) {
+      for (const [x, z] of [...r.pillars, ...(r.crystals ?? []), ...(r.trees ?? []), ...(r.spires ?? []), ...(r.pools ?? [])]) {
         expect(insideArena(x, z, r.half, 2, r.shape)).toBe(true);
       }
     }
@@ -26,7 +26,7 @@ describe('rooms', () => {
   it('keeps the entry spot and the walk to the exit clear of pillars and crystals', () => {
     for (const r of ROOMS) {
       const entryZ = r.half - 12; // matches Dungeon.entry
-      for (const [x, z] of [...r.pillars, ...(r.crystals ?? []), ...(r.trees ?? [])]) {
+      for (const [x, z] of [...r.pillars, ...(r.crystals ?? []), ...(r.trees ?? []), ...(r.spires ?? []), ...(r.pools ?? [])]) {
         // Nothing within 3.5 m of where the elf (and the camera behind them) arrives…
         expect(Math.hypot(x, z - entryZ)).toBeGreaterThan(3.5);
         // …or right in front of the exit door.

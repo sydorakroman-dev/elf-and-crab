@@ -25,10 +25,10 @@ Aim assist is wider on touch.
 ## The run
 
 The run waits in the Woodland until you're ready — press **Enter** (or tap **Start**) and the first wave comes; handy
-while a friend joins as your familiar. Six rooms, three waves each; every room's third wave brings its boss. Clear a room and its north door opens — walk
+while a friend joins as your familiar. Seven rooms, three waves each; every room's third wave brings its boss. Clear a room and its north door opens — walk
 through to the next one (your familiar comes along, and you're healed to full). Every room opens with an intro
 card — its foes' illustration (`public/art/`), name and boss — and a random one shows while the game loads. The last room ends with **the
-Inferno**; beat it to win.
+Ash King**, a volcanic dragon; beat him to win.
 
 | Room | Who lives there | Boss |
 | --- | --- | --- |
@@ -37,7 +37,8 @@ Inferno**; beat it to win.
 | 3 · The Crypt — square, torches, a brazier, four pillars | the undead | 💀 The Necromancer |
 | 4 · The Throne Room — square, a colonnade and a throne | orcs | 🪓 The Orc Chieftain |
 | 5 · The Flooded Hall — eight-sided, pillars, cold light, puddles | goblins | ⚙️ The Scrap Boss |
-| 6 · The Lava Chamber — round, a lava pit (arrows fly over it) | nature elementals | 🔥 The Inferno (final boss) |
+| 6 · The Lava Chamber — round, a lava pit (arrows fly over it) | nature elementals | 🔥 The Inferno  |
+| 7 · The Ash King's Lair — a vast round hall: obsidian spires, lava pools and lavafalls, a rune circle | the Ash King's fire | 🐉 **The Ash King** (final boss) |
 
 ## Enemies
 
@@ -110,6 +111,12 @@ the last.
 | Treant | elite | 220 | 22 | roots erupt where you stand, after a warning ring, and slow |
 | Rock Golem | elite | 255 | 30 | slow; heavy punch with huge knockback |
 | **The Inferno** | final boss | 1380 | 30 / 15 / 22 | flame ring around itself, 5-fireball fans, meteors at your spot (all leave fire); calls fire elementals |
+
+**The Ash King's Lair — the final boss** (with fire elementals, golems, treants and wind)
+
+| | Tier | HP | Damage | Special |
+| --- | --- | --- | --- | --- |
+| **🐉 The Ash King** | final boss | 2600 | 24–34 | a volcanic dragon: wing slam around himself (warning ring, leaves fire), swoops across the lair from 9 m+, 9-fireball breath fans, falling ash where you stand (burning ground), bites; calls 3 fire elementals at 2/3 and 1/3 health |
 
 The models (`public/models/`) are static, part-named meshes; `src/game/monsterVisual.ts`, `beastVisual.ts` and
 `elementalVisual.ts` rig them in code. Health and damage live in `src/game/balance.ts` and the `BEASTS`

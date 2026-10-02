@@ -3,7 +3,7 @@ import type { ArenaShape } from '../game/combat';
 
 /** The rooms of the dungeon run, as data. The Dungeon builds whichever one is current. */
 
-export type RoomFeature = 'woodland' | 'brazier' | 'puddles' | 'lava' | 'crystals' | 'throne';
+export type RoomFeature = 'woodland' | 'brazier' | 'puddles' | 'lava' | 'crystals' | 'throne' | 'dragonlair';
 
 export interface Hsl {
   h: number;
@@ -22,6 +22,10 @@ export interface RoomDef {
   feature: RoomFeature;
   /** Crystal clusters (crystal cave): positions; they block like pillars. */
   crystals?: [number, number][];
+  /** Obsidian spires (dragon's lair): positions; they block like pillars. */
+  spires?: [number, number][];
+  /** Lava pools (dragon's lair): positions; walking is blocked, arrows fly over. */
+  pools?: [number, number][];
   /** Trees (woodland): positions; they block like pillars. */
   trees?: [number, number][];
   /** Outdoors: hedge walls with wooden gates, daylight and open sky instead of brick and torches. */
@@ -209,7 +213,36 @@ export const ROOMS: RoomDef[] = [
     moonIntensity: 1.2,
     hemiSky: 0x9b6b5f,
     hemiGround: 0x1a0805,
-    hasExit: false, // the final room: the Inferno waits here
+    hasExit: true,
+  },
+  {
+    name: "The Ash King's Lair",
+    shape: 'circle',
+    group: 'The Ash King and his fire',
+    art: 'elementals',
+    scene: 'scene-ash-king',
+    waves: [
+      { mix: { fire: 5, wind: 3, vine: 3, golem: 2 } },
+      { mix: { fire: 6, golem: 2, treant: 2, water: 2, wind: 2 } },
+      { mix: { fire: 3, golem: 1 }, boss: 'ashking' },
+    ],
+    half: 34,
+    pillars: [],
+    // A vast round hall: towering obsidian spires, lava pools, lavafalls down the walls, a rune circle.
+    spires: [[-22, -10], [22, -10], [-13, -22], [13, -22], [-24, 8], [24, 8], [-12, 20], [12, 20]],
+    pools: [[-16, -1], [16, -1], [-8, 9], [8, 9]],
+    feature: 'dragonlair',
+    torchLight: 0xff4a10,
+    torchFlame: 0xff6a20,
+    floor: { h: 0.0, s: 0.15, l: 0.2 },
+    wall: { h: 0.0, s: 0.22, l: 0.17 },
+    stone: 0x4a3634,
+    fog: 0x1c1010,
+    moon: 0xff7a50,
+    moonIntensity: 1.3,
+    hemiSky: 0x8b4b3f,
+    hemiGround: 0x1a0503,
+    hasExit: false, // the final room: the Ash King waits here
   },
 ];
 

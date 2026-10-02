@@ -4,6 +4,7 @@ import { steerMove } from './steer';
 import type { BeastPose } from './beastVisual';
 import { MonsterVisual } from './monsterVisual';
 import { ElementalVisual } from './elementalVisual';
+import { DragonVisual } from './dragonVisual';
 import type { Enemy, EnemyKind, EnemyTuple, MonsterKind, Spit, Strike, Summon, Telegraph } from './enemies';
 import type { ProjectileKind } from './globs';
 import { ENEMY_KIND_LIST } from './enemyKinds';
@@ -197,7 +198,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
     summonAt: { at: [0.66, 0.33], kind: 'brawler', count: 4 },
   },
 
-  // ── The final boss (Lava Chamber) ──
+  // ── The Lava Chamber's boss ──
   inferno: {
     name: 'The Inferno', tier: 'boss', style: 'ranged', hp: 1380, speed: 2.6, radius: 2.0, touch: 20, push: 0.4, score: 1000, drop: 0, bossName: 'The Inferno',
     keepAway: [9, 18],
@@ -208,6 +209,24 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
     ],
     summonAt: { at: [2 / 3, 1 / 3], kind: 'fire', count: 2 },
   },
+
+  // ── The final boss (the Ash King's Lair): a volcanic dragon ──
+  ashking: {
+    name: 'The Ash King', tier: 'boss', style: 'melee', hp: 2600, speed: 2.8, radius: 2.6, touch: 22, push: 0.25, score: 2500, drop: 0, bossName: 'The Ash King',
+    attacks: [
+      // Wing slam: everything around him, with a warning ring; leaves fire behind.
+      { type: 'area', at: 'self', range: 7, windup: 1.2, radius: 6.5, damage: 30, knock: 28, cooldown: 7, zone: 'fire' },
+      // Swoop: a long rush across the lair.
+      { type: 'lunge', range: 24, minRange: 9, windup: 1.0, speed: 18, time: 1.1, damage: 34, knock: 30, cooldown: 9 },
+      // Fire breath: a wide fan of fireballs.
+      { type: 'shoot', range: 28, windup: 0.9, cooldown: 3.4, shot: 'fire', count: 9, spread: 0.1 },
+      // Falling ash: a meteor where you stand, leaving burning ground.
+      { type: 'area', at: 'target', range: 28, windup: 1.0, radius: 2.8, damage: 24, knock: 12, cooldown: 4, zone: 'fire' },
+      // Bite.
+      { type: 'melee', range: 3.6, windup: 0.6, reach: 1.8, radius: 2.6, damage: 30, knock: 26, cooldown: 2 },
+    ],
+    summonAt: { at: [2 / 3, 1 / 3], kind: 'fire', count: 3 },
+  },
 };
 
 /** Splat / hit colour for each kind. */
@@ -217,6 +236,7 @@ const COLORS: Record<MonsterKind, number> = {
   orcscout: 0x7a9a3a, orcwarrior: 0x7a9a3a, orcarcher: 0x7a9a3a, shaman: 0x9a50c0, shieldguard: 0x7a9a3a, chieftain: 0x7a9a3a,
   spider: 0x6a5a9a, ooze: 0x9bd03a, sporecrawler: 0x9a7a3a, mushroom: 0xc04a40, mold: 0xa090c0, caveworm: 0x6a5a8a,
   inferno: 0xff7a2a,
+  ashking: 0xd23a2c,
 };
 
 /** The Inferno is a giant fire elemental. */
@@ -229,6 +249,7 @@ export interface MonsterLook {
 
 /** The right visual for a monster kind (shared with the familiar's view). */
 export function createMonsterVisual(kind: MonsterKind): MonsterLook {
+  if (kind === 'ashking') return new DragonVisual();
   return kind === 'inferno' ? new ElementalVisual('fire', INFERNO_HEIGHT) : new MonsterVisual(kind);
 }
 

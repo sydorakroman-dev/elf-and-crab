@@ -6,6 +6,7 @@ import { loadFamiliarBodies } from './player/beasts';
 import { loadBeastTemplates } from './game/beastVisual';
 import { loadElementalTemplates } from './game/elementalVisual';
 import { loadMonsterTemplates } from './game/monsterVisual';
+import { loadDragonTemplate } from './game/dragonVisual';
 import type { InputMode } from './player/controls';
 import { FamiliarGame } from './familiar/FamiliarGame';
 import { FamiliarSession, HeroSession } from './net/client';
@@ -44,6 +45,7 @@ async function boot(): Promise<void> {
     loadBeastTemplates(base),
     loadElementalTemplates(base),
     loadMonsterTemplates(base),
+    loadDragonTemplate(base),
   ]);
   let game: Game | FamiliarGame;
   if (joinCode === PRACTICE_CODE) {

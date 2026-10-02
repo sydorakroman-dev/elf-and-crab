@@ -12,7 +12,8 @@ export type MonsterKind =
   | 'skeleton' | 'skelarcher' | 'ghost' | 'zombie' | 'knight' | 'necromancer'
   | 'orcscout' | 'orcwarrior' | 'orcarcher' | 'shaman' | 'shieldguard' | 'chieftain'
   | 'spider' | 'ooze' | 'sporecrawler' | 'mushroom' | 'mold' | 'caveworm'
-  | 'inferno';
+  | 'inferno'
+  | 'ashking';
 export type EnemyKind = BeastKind | ElementalKind | MonsterKind;
 export const BEAST_KIND_LIST: BeastKind[] = ['beetle', 'snake', 'direwolf', 'boar', 'bear'];
 export const ELEMENTAL_KIND_LIST: ElementalKind[] = ['vine', 'wind', 'water', 'fire', 'treant', 'golem'];

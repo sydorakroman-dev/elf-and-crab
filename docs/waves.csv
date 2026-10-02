@@ -17,3 +17,6 @@ room,room_name,wave,enemies,enemy_count,total_hp,boss
 6,The Lava Chamber,1,5 Thorn Vine + 3 Wind Elemental + 2 Water Elemental + 2 Fire Elemental,12,840,
 6,The Lava Chamber,2,5 Thorn Vine + 3 Wind Elemental + 3 Water Elemental + 3 Fire Elemental + 1 Rock Golem + 1 Treant,16,1500,
 6,The Lava Chamber,3,3 Thorn Vine + 2 Fire Elemental + 1 Rock Golem,6,2010,The Inferno
+7,The Ash King's Lair,1,5 Fire Elemental + 3 Wind Elemental + 3 Thorn Vine + 2 Rock Golem,13,1395,
+7,The Ash King's Lair,2,6 Fire Elemental + 2 Rock Golem + 2 Treant + 2 Water Elemental + 2 Wind Elemental,14,1870,
+7,The Ash King's Lair,3,3 Fire Elemental + 1 Rock Golem,4,3170,The Ash King
