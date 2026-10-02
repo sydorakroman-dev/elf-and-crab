@@ -21,6 +21,7 @@ import { POWER_CODES, SLIME_KIND_CODES, SnapshotBuffer, type GameEvent, type Sna
 import type { FamiliarLink, FamiliarStatus } from '../net/client';
 import { FamiliarHud } from './hud';
 import { DamageNumbers } from '../game/numbers';
+import { AutoQuality } from '../ui/quality';
 import { jadeRing } from '../game/Game';
 
 const FOV = 45;
@@ -71,6 +72,7 @@ export class FamiliarGame {
   private readonly shieldBubble: THREE.Mesh;
   private readonly famRing: THREE.Mesh;
   private readonly numbers = new DamageNumbers();
+  private quality: AutoQuality | null = null;
   /** The iguana's Jade Ward around the elf. */
   private readonly wardRing = jadeRing(SPELLS.ward.radius);
   private readonly rangeRing: THREE.Mesh;
@@ -409,6 +411,7 @@ export class FamiliarGame {
     if (s) this.apply(s, dt);
     this.effects.update(dt);
     this.numbers.update(dt);
+    (this.quality ??= new AutoQuality(this.renderer)).frame(dt);
     // The tablet plays the same music as the hero.
     const latest = this.buffer.latest;
     this.sfx.music.play(latest && latest.state !== 'ready' ? latest.room : -1, !!latest?.boss);

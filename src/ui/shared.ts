@@ -122,8 +122,18 @@ export class Fade {
     );
     this.el = root.querySelector('.fade')!;
     this.card = this.el.querySelector('.room-card')!;
-    // Fetch every room's art up front, so a card never waits on (or flashes) a half-loaded image.
-    for (const room of ROOMS) new Image().src = roomArtUrl(room);
+    // The first room's art now; each next room's while the current one is played (preload()).
+    this.preload(0);
+  }
+
+  private readonly fetched = new Set<number>();
+
+  /** Fetches room `index`'s art ahead of time (once), so its card never waits on a half-loaded image. */
+  preload(index: number): void {
+    const room = ROOMS[index];
+    if (!room || this.fetched.has(index)) return;
+    this.fetched.add(index);
+    new Image().src = roomArtUrl(room);
   }
 
   /** `card`: index of the room whose card to show on the black (-1: just black). */
@@ -133,6 +143,7 @@ export class Fade {
     this.card.classList.toggle('on', show);
     if (!show || card === this.shown) return;
     this.shown = card;
+    this.preload(card + 1); // the next room's art, ready by the time its door opens
     const room = ROOMS[card];
     const boss = room.waves.at(-1)?.boss;
     const img = this.card.querySelector<HTMLImageElement>('.rc-art')!;

@@ -18,6 +18,7 @@ import { Monster } from './monsters';
 import { Resources, WIND_WALK_SECONDS } from './abilities';
 import { DIFFICULTIES, difficulty, scaledDamage } from './difficulty';
 import { DamageNumbers } from './numbers';
+import { AutoQuality } from '../ui/quality';
 import { reachRoom, recordWin } from './progress';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { FamiliarCommand } from '../net/protocol';
@@ -135,6 +136,7 @@ export class Game {
   private readonly wardRing: THREE.Group;
   /** Floating damage numbers, camera shake (metres, decays), and hit-stop (seconds the action freezes). */
   private readonly numbers = new DamageNumbers();
+  private quality!: AutoQuality;
   private shake = 0;
   private hitStop = 0;
   private readonly shakeOffset = new THREE.Vector3();
@@ -331,6 +333,7 @@ export class Game {
       this.accumulator -= STEP;
     }
     this.numbers.update(real);
+    if (!this.headless) (this.quality ??= new AutoQuality(this.renderer)).frame(real);
     // Music: the room's theme while a run is on (the boss version while one is out), silent on the title.
     this.sfx.music.play(this.state === 'playing' || this.state === 'won' ? this.room : -1, !!this.enemies.boss && this.state === 'playing');
     this.sfx.music.update();

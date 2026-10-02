@@ -1,19 +1,36 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 /**
  * Helpers for "rigging" static glTF models in code: our models are sets of named, unrigged
  * parts, so we group parts under pivot objects (hips, shoulders…) and animate those.
  */
 
+/**
+ * Compressed models store vertices quantized (small integer types, normalised). We bake transforms
+ * into the vertices and generate outline hulls from them, so turn them back into plain floats.
+ */
+function toFloat(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  for (const name of Object.keys(geo.attributes)) {
+    const attr = geo.getAttribute(name);
+    if (!(attr instanceof THREE.InterleavedBufferAttribute) && attr.array instanceof Float32Array && !attr.normalized) continue;
+    const out = new Float32Array(attr.count * attr.itemSize);
+    for (let i = 0; i < attr.count; i++) for (let k = 0; k < attr.itemSize; k++) out[i * attr.itemSize + k] = attr.getComponent(i, k);
+    geo.setAttribute(name, new THREE.BufferAttribute(out, attr.itemSize));
+  }
+  return geo;
+}
+
 /** Loads a model and returns its meshes by name, with transforms baked into geometry (shared origin). */
 export async function loadParts(url: string): Promise<Map<string, THREE.Mesh>> {
-  const gltf = await new GLTFLoader().loadAsync(url);
+  // Built models are meshopt-compressed (scripts/compress-models.mjs); dev serves them as-is.
+  const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url);
   gltf.scene.updateMatrixWorld(true);
   const parts = new Map<string, THREE.Mesh>();
   gltf.scene.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
-    o.geometry = o.geometry.clone().applyMatrix4(o.matrixWorld);
+    o.geometry = toFloat(o.geometry.clone()).applyMatrix4(o.matrixWorld);
     o.position.set(0, 0, 0);
     o.quaternion.identity();
     o.scale.set(1, 1, 1);
