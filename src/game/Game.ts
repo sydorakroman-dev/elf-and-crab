@@ -12,7 +12,7 @@ import { Globs, PROJECTILES, PROJECTILE_KINDS, type GlobImpact } from './globs';
 import { Effects } from './effects';
 import { Companion } from './companion';
 import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_PER_HP } from './balance';
-import { FAMILIARS, FAMILIAR_KINDS, POUNCE_DAMAGE, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
+import { FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, POUNCE_DAMAGE, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
 import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
 import type { FamiliarCommand } from '../net/protocol';
@@ -45,6 +45,7 @@ const IDLE_SNAPSHOT_EVERY = 12; // 5 Hz on menus / pause
 const STUN_STAR = new THREE.Color(0xfff27a);
 const CALM_PINK = new THREE.Color(0xffb8dc);
 const SPRING_BLUE = new THREE.Color(0x8fe8f5);
+const HOWL_BLUE = new THREE.Color(0x9fd0ff);
 const HEAL_GREEN = 0x7dff8a;
 
 type State = 'ready' | 'playing' | 'over' | 'won';
@@ -420,6 +421,24 @@ export class Game {
         this.effects.burst(c.x, 0.3, c.z, new THREE.Color(0xb8a98f), 10, 3, 0.1);
         this.sfx.whoosh();
         break;
+      case 'howl': {
+        // Enemies around panic and run off (calmed: harmless, wandering away); bosses only flinch.
+        const near = this.enemies.all.filter((s) => s.alive && !s.hidden && Math.hypot(s.x - c.x, s.z - c.z) <= spell.radius + s.radius);
+        for (const s of near) {
+          if (s.bossName) s.stun(HOWL_BOSS_FLINCH);
+          else s.calm(spell.duration);
+          this.effects.burst(s.x, s.radius * 1.6, s.z, HOWL_BLUE, 5, 2, 0.1);
+        }
+        this.effects.ring(c.x, c.z, HOWL_BLUE, spell.radius);
+        this.effects.burst(c.x, 1.2, c.z, HOWL_BLUE, 30, 6, 0.12);
+        // …and the elf, roused, shoots faster for a while.
+        this.powers.add('rapid', HOWL_RAPID_SECONDS);
+        const p = this.player.position;
+        this.effects.burst(p.x, 1.1, p.z, new THREE.Color(POWER_UPS.rapid.color), 16, 4, 0.1);
+        this.hud.toast(`🌕 War Howl! ${POWER_UPS.rapid.icon} ${POWER_UPS.rapid.label}`, POWER_UPS.rapid.color);
+        this.sfx.howl();
+        break;
+      }
     }
     this.events.push({ e: 'spell', id: SPELL_IDS.indexOf(id), x: q(c.x), z: q(c.z) });
   }

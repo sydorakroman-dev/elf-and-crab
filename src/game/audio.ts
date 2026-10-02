@@ -129,6 +129,13 @@ export class Sfx {
     [0, 4, 7, 11, 14].forEach((semi, i) => this.tone('sine', 523 * Math.pow(2, semi / 12), 523 * Math.pow(2, semi / 12), 0.8, 0.05, i * 0.11));
   }
 
+  /** The wolf's war howl: a rising, wavering cry. */
+  howl(): void {
+    this.tone('sawtooth', 220, 440, 0.5, 0.05);
+    this.tone('triangle', 330, 660, 0.9, 0.08, 0.15);
+    this.tone('sine', 660, 520, 0.6, 0.06, 0.8);
+  }
+
   /** The exit portcullis grinding open. */
   door(): void {
     this.hiss(0.9, 0.12, 300, 'lowpass');

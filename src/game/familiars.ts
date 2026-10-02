@@ -3,10 +3,10 @@ import type { Point } from './combat';
 /** The familiar creatures a second player can pick, and their spells. Pure data + math; unit tested. */
 
 export type FamiliarKind = 'crab' | 'capybara' | 'wolf';
-export type SpellId = 'burst' | 'shell' | 'spring' | 'calm' | 'pounce';
+export type SpellId = 'burst' | 'shell' | 'spring' | 'calm' | 'pounce' | 'howl';
 
 export const FAMILIAR_KINDS: FamiliarKind[] = ['crab', 'capybara', 'wolf'];
-export const SPELL_IDS: SpellId[] = ['burst', 'shell', 'spring', 'calm', 'pounce'];
+export const SPELL_IDS: SpellId[] = ['burst', 'shell', 'spring', 'calm', 'pounce', 'howl']; // index = wire code: append only
 
 export interface FamiliarDef {
   name: string;
@@ -65,7 +65,7 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     biteDamage: 12,
     biteCooldown: 0.55,
     radius: 0.6,
-    spells: ['pounce'],
+    spells: ['pounce', 'howl'],
     blurb: 'Fast hunter. Big damage.',
   },
 };
@@ -86,7 +86,8 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   shell: { name: 'Shell Shield', icon: '🐚', cooldown: 11, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next hit.' },
   spring: { name: 'Soothing Spring', icon: '♨️', cooldown: 10, radius: 3, duration: 6, description: 'A warm pool: enemies in it slow down, the elf heals a heart in it.' },
   calm: { name: 'Calm Aura', icon: '🌸', cooldown: 8, radius: 7, duration: 5, description: 'Enemies near you stop chasing and wander off.' },
-  pounce: { name: 'Pounce', icon: '🐾', cooldown: 5, radius: 0, duration: 0.35, description: 'Leap toward where you tapped, hitting every enemy on the way.' },
+  pounce: { name: 'Pounce', icon: '🐾', cooldown: 5, radius: 0, duration: 0.35, description: 'Leap the way you are heading, hitting every enemy on the way.' },
+  howl: { name: 'War Howl', icon: '🌕', cooldown: 14, radius: 8, duration: 3, description: 'Enemies around you panic and flee; the elf gets Rapid fire for a while.' },
 };
 
 /** Soothing Spring: enemies inside move at this fraction of their speed (60% slower). */
@@ -95,6 +96,9 @@ export const POUNCE_RANGE = 10;
 export const POUNCE_DAMAGE = 25;
 /** How close (beyond body radii) an enemy must be to the pounce path to get hit. */
 export const POUNCE_WIDTH = 0.8;
+/** War Howl: the elf's Rapid fire lasts this long; bosses (who don't panic) flinch this long. */
+export const HOWL_RAPID_SECONDS = 5;
+export const HOWL_BOSS_FLINCH = 1.2;
 
 /** Seconds left on each spell's cooldown. */
 export class SpellCooldowns {

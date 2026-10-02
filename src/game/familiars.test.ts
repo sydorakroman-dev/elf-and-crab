@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FAMILIARS, FAMILIAR_KINDS, POUNCE_RANGE, SPELLS, SpellCooldowns, distanceToSegment, pounceLanding } from './familiars';
+import { FAMILIARS, FAMILIAR_KINDS, POUNCE_RANGE, SPELLS, SPELL_IDS, SpellCooldowns, distanceToSegment, pounceLanding } from './familiars';
 
 describe('familiar roster', () => {
   it('has three creatures with distinct speeds and valid spells', () => {
@@ -11,7 +11,7 @@ describe('familiar roster', () => {
     for (const k of FAMILIAR_KINDS) for (const s of FAMILIARS[k].spells) expect(SPELLS[s]).toBeDefined();
     expect(FAMILIARS.crab.spells).toEqual(['burst', 'shell']);
     expect(FAMILIARS.capybara.spells).toEqual(['spring', 'calm']);
-    expect(FAMILIARS.wolf.spells).toEqual(['pounce']);
+    expect(FAMILIARS.wolf.spells).toEqual(['pounce', 'howl']);
   });
 });
 
@@ -55,5 +55,11 @@ describe('distanceToSegment', () => {
     expect(distanceToSegment({ x: 5, z: 3 }, a, b)).toBeCloseTo(3);
     expect(distanceToSegment({ x: -4, z: 3 }, a, b)).toBeCloseTo(5);
     expect(distanceToSegment({ x: 2, z: 0 }, a, a)).toBeCloseTo(2);
+  });
+
+  it('every creature has two spells; spell codes stay stable on the wire', () => {
+    for (const k of Object.keys(FAMILIARS) as (keyof typeof FAMILIARS)[]) expect(FAMILIARS[k].spells).toHaveLength(2);
+    expect(FAMILIARS.wolf.spells).toEqual(['pounce', 'howl']);
+    expect(SPELL_IDS.slice(0, 5)).toEqual(['burst', 'shell', 'spring', 'calm', 'pounce']);
   });
 });

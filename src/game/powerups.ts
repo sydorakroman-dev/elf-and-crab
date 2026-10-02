@@ -30,8 +30,9 @@ export class ActivePowers {
   private readonly timers = new Map<PowerUpType, number>();
 
   /** Starts or extends a timed power-up (instant ones are ignored here). */
-  add(type: PowerUpType): void {
-    const d = POWER_UPS[type].duration;
+  /** Adds `seconds` (default: the power-up's own duration) to a timed power-up, up to the cap. */
+  add(type: PowerUpType, seconds = POWER_UPS[type].duration): void {
+    const d = seconds;
     if (d <= 0) return;
     this.timers.set(type, Math.min(MAX_STACK, (this.timers.get(type) ?? 0) + d));
   }

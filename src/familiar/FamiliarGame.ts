@@ -304,6 +304,11 @@ export class FamiliarGame {
         this.effects.burst(x, 0.3, z, new THREE.Color(0xb8a98f), 10, 3, 0.1);
         this.sfx.whoosh();
         break;
+      case 'howl':
+        this.effects.ring(x, z, 0x9fd0ff, spell.radius);
+        this.effects.burst(x, 1.2, z, new THREE.Color(0x9fd0ff), 30, 6, 0.12);
+        this.sfx.howl();
+        break;
     }
   }
 
