@@ -546,3 +546,7 @@ kbd {
 .keys-row kbd { padding: 3px 9px; border-radius: 6px; background: rgba(255, 255, 255, 0.15); font: 600 13px/1 system-ui, sans-serif; }
 .keys-row .keys-empty { color: rgba(255, 255, 255, 0.45); }
 .keys-reset { margin-top: 12px; padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.3); background: none; color: #fff; cursor: pointer; }
+
+/* The game's emblem above the title. */
+.emblem { display: block; width: 92px; height: 92px; margin: 0 auto 4px; border-radius: 22px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
+@media (max-height: 520px) { .emblem { width: 56px; height: 56px; border-radius: 14px; } }

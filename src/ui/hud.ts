@@ -56,6 +56,7 @@ export class Hud {
        </div>
        <div class="overlay">
          <div class="card">
+           <img class="emblem" src="${import.meta.env.BASE_URL}icons/emblem.jpg" alt="" />
            <h1 data-title>Elf &amp; Crab</h1>
            <p data-message>Goblins, the undead, orcs and worse are pouring out of every gate. Fight from the woodland down through the dungeon to the Ash King, the dragon in his lair — alone, or with a friend as your familiar.</p>
            <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
