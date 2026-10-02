@@ -18,6 +18,7 @@ import { Monster } from './monsters';
 import { Resources, WIND_WALK_SECONDS } from './abilities';
 import { DIFFICULTIES, difficulty, scaledDamage } from './difficulty';
 import { DamageNumbers } from './numbers';
+import { reachRoom, recordWin } from './progress';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { FamiliarCommand } from '../net/protocol';
 import { pickAimTarget } from './combat';
@@ -186,7 +187,7 @@ export class Game {
 
     this.hud = new Hud(root, MAX_HEALTH, mode, () => {
       this.sfx.unlock();
-      if (this.state !== 'playing') this.newGame();
+      if (this.state !== 'playing') this.newGame(this.hud.startRoom);
       this.banner(`${ROOMS[this.room].name}`);
       this.player.activate();
     }, () => this.beginFight());
@@ -282,8 +283,10 @@ export class Game {
     this.events = [];
   }
 
-  private newGame(): void {
-    if (this.room !== 0 || this.dungeon.room !== ROOMS[0]) this.loadRoom(0);
+  /** Starts a run in room `start` (0: the Woodland; later rooms once reached — "continue"). */
+  private newGame(start = 0): void {
+    const room = Math.max(0, Math.min(ROOMS.length - 1, start));
+    if (this.room !== room || this.dungeon.room !== ROOMS[room]) this.loadRoom(room);
     this.resetWorld();
     this.state = 'playing';
     this.health = MAX_HEALTH;
@@ -300,7 +303,7 @@ export class Game {
     this.doorT = DOOR_FADE;
     this.doorSwitched = true;
     this.cardSkip = false;
-    this.hud.fade.set(true, 0);
+    this.hud.fade.set(true, room);
     this.invulnerable = 0;
     this.playTime = 0;
     this.dungeon.setExitOpen(false);
@@ -1033,6 +1036,7 @@ export class Game {
     if (!this.doorSwitched && this.doorT >= DOOR_FADE) {
       this.doorSwitched = true;
       this.loadRoom(this.room + 1);
+      this.hud.setProgress(reachRoom(this.room));
       this.enemies.clear();
       this.arrows.clear();
       this.globs.clear();
@@ -1115,6 +1119,7 @@ export class Game {
     this.hud.setScore(this.score);
     const run = { score: this.score, wave: this.wave };
     const isBest = recordRun(run);
+    this.hud.setProgress(recordWin(difficulty()));
     this.hud.bossBar.set(null);
     this.hud.showVictory(this.score, this.playTime, isBest);
     this.hud.setBest(loadBest() ?? run);

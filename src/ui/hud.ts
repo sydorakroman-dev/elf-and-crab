@@ -5,6 +5,8 @@ import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey } from 
 import { normalizeCode } from '../net/protocol';
 import { ActionBar } from './actionbar';
 import { DIFFICULTIES, DIFFICULTY_LIST, difficulty, setDifficulty, type Difficulty } from '../game/difficulty';
+import { loadProgress, type Progress } from '../game/progress';
+import { ROOMS } from '../world/rooms';
 import type { ConnStatus } from '../net/client';
 import QRCode from 'qrcode';
 import { FAMILIARS, type FamiliarKind } from '../game/familiars';
@@ -24,6 +26,7 @@ export class Hud {
   private readonly popups: Popups;
   readonly bossBar: BossBar;
   readonly actionBar: ActionBar;
+  private startSelect!: HTMLSelectElement;
   readonly fade: Fade;
   private readonly hud: HTMLElement;
   private readonly overlay: HTMLElement;
@@ -63,6 +66,8 @@ export class Hud {
            <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
            <div class="difficulty" data-difficulty>${DIFFICULTY_LIST.map((d) => `<button type="button" data-diff="${d}" title="${DIFFICULTIES[d].blurb}">${DIFFICULTIES[d].icon} ${DIFFICULTIES[d].label}</button>`).join('')}</div>
            <button type="button" data-play>Begin the hunt</button>
+           <div class="continue" data-continue hidden><span>Start in</span><select data-start-room aria-label="Start in room"></select></div>
+           <p class="trophies" data-trophies hidden></p>
            <p class="best" data-best hidden></p>
            <button type="button" class="keys-btn" data-keys>⚙️ Keys</button>
            <div class="invite" data-invite>
@@ -114,6 +119,9 @@ export class Hud {
     this.linkEl = root.querySelector('[data-link]')!;
     this.inviteStatus = root.querySelector('[data-istatus]')!;
     this.showDifficulty();
+    this.startSelect = root.querySelector('[data-start-room]')!;
+    this.startSelect.addEventListener('click', (e) => e.stopPropagation());
+    this.setProgress(loadProgress());
     // Its own layer (not inside the HUD bar), so it sits above the touch controls.
     root.insertAdjacentHTML(
       'beforeend',
@@ -157,6 +165,23 @@ export class Hud {
       location.search = `?join=${code}`;
     });
     joinInput.addEventListener('input', () => joinInput.classList.remove('bad'));
+  }
+
+  /** The room the next run starts in (0 unless the player picked a room they've reached). */
+  get startRoom(): number {
+    return Number(this.startSelect.value) || 0;
+  }
+
+  /** "Start in" choices (every room reached so far) and the difficulties beaten. */
+  setProgress(p: Progress): void {
+    const wrap = this.overlay.querySelector<HTMLElement>('[data-continue]')!;
+    const keep = this.startSelect.value;
+    this.startSelect.innerHTML = ROOMS.slice(0, p.furthest + 1).map((r, i) => `<option value="${i}">Room ${i + 1} · ${r.name.replace(/^The /, '')}</option>`).join('');
+    this.startSelect.value = keep && Number(keep) <= p.furthest ? keep : '0';
+    wrap.hidden = p.furthest === 0;
+    const trophies = this.overlay.querySelector<HTMLElement>('[data-trophies]')!;
+    trophies.hidden = p.wins.length === 0;
+    trophies.textContent = `👑 Ash King beaten on: ${DIFFICULTY_LIST.filter((d) => p.wins.includes(d)).map((d) => `${DIFFICULTIES[d].icon} ${DIFFICULTIES[d].label}`).join(' · ')}`;
   }
 
   /** Highlights the chosen difficulty; locked (dimmed) while a run is paused. */
