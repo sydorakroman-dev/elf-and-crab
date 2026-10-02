@@ -541,8 +541,10 @@ export class FamiliarGame {
       // Strength 0..1 past a small dead zone, along the drag direction.
       const mag = Math.min(1, len / STICK_RADIUS);
       const strength = mag < STICK_DEAD_ZONE ? 0 : (mag - STICK_DEAD_ZONE) / (1 - STICK_DEAD_ZONE);
-      st.x = len ? (dx / Math.hypot(dx, dy)) * strength : 0;
-      st.z = len ? (dy / Math.hypot(dx, dy)) * strength : 0;
+      // Inside the dead zone (but clearly pushed): a tiny vector, which only turns the creature.
+      const k = strength > 0 ? strength : len > 8 ? 0.01 : 0;
+      st.x = len ? (dx / Math.hypot(dx, dy)) * k : 0;
+      st.z = len ? (dy / Math.hypot(dx, dy)) * k : 0;
       if (this.time - this.lastSteerSent >= STEER_SEND_INTERVAL) this.sendSteer();
     });
     const end = (e: PointerEvent) => {
@@ -559,7 +561,7 @@ export class FamiliarGame {
   private sendSteer(): void {
     const st = this.stick!;
     this.lastSteerSent = this.time;
-    this.session.send({ type: 'steer', dx: Math.round(st.x * 100) / 100, dz: Math.round(st.z * 100) / 100 });
+    this.session.send({ type: 'steer', dx: Math.round(st.x * 1000) / 1000, dz: Math.round(st.z * 1000) / 1000 });
   }
 
   /** While the stick is held, keep telling the hero (so it keeps running after a pounce, say). */

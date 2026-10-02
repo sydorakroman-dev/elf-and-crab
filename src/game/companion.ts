@@ -8,6 +8,8 @@ import { FAMILIARS, POUNCE_WIDTH, SPELLS, SpellCooldowns, distanceToSegment, pou
 
 const BITE_REACH = 1.0; // gap between body edges
 const TURN_RATE = 10;
+/** Joystick pushes shorter than this only turn the creature (sent by the tablet inside its dead zone). */
+const TURN_ONLY = 0.05;
 const LEAP_HEIGHT = 1.3;
 
 export interface CompanionResult {
@@ -37,6 +39,8 @@ export class Companion {
   private hasTarget = false;
   /** Joystick direction × strength (0..1), or zero when the stick is let go. */
   private readonly steer = { x: 0, z: 0 };
+  /** A tiny joystick push: turn on the spot to face this yaw. */
+  private faceTo: number | null = null;
   /** Last tapped spot (kept after arriving, used to aim a pounce). */
   private lastTap: { x: number; z: number } | null = null;
   private heading = 0;
@@ -114,9 +118,11 @@ export class Companion {
       return;
     }
     if (c.type === 'steer') {
-      // Joystick: run that way; a pounce goes where it's heading.
-      this.steer.x = c.dx;
-      this.steer.z = c.dz;
+      // Joystick: run that way (a pounce goes where it's heading). A tiny push only turns it.
+      const len = Math.hypot(c.dx, c.dz);
+      this.faceTo = len > 0 && len < TURN_ONLY ? Math.atan2(c.dx, c.dz) : null;
+      this.steer.x = len < TURN_ONLY ? 0 : c.dx;
+      this.steer.z = len < TURN_ONLY ? 0 : c.dz;
       this.hasTarget = false;
       this.lastTap = null;
       return;
@@ -181,6 +187,9 @@ export class Companion {
     } else if (speed > 0.4) {
       if (def.gait === 'sideways') this.heading = sidewaysHeading(this.heading, this.velocity.x, this.velocity.z, step);
       else this.heading += clamp(angleDelta(this.heading, Math.atan2(this.velocity.x, this.velocity.z)), -step, step);
+    } else if (this.faceTo !== null) {
+      if (def.gait === 'sideways') this.heading = sidewaysHeading(this.heading, Math.sin(this.faceTo), Math.cos(this.faceTo), step);
+      else this.heading += clamp(angleDelta(this.heading, this.faceTo), -step, step);
     } else if (prey) {
       this.heading += clamp(angleDelta(this.heading, Math.atan2(prey.x - this.position.x, prey.z - this.position.z)), -step, step);
     }
@@ -212,9 +221,13 @@ export class Companion {
     const blend = 1 - Math.exp(-12 * dt);
     this.velocity.x += (wantX - this.velocity.x) * blend;
     this.velocity.z += (wantZ - this.velocity.z) * blend;
+    const fromX = this.position.x;
+    const fromZ = this.position.z;
     this.position.addScaledVector(this.velocity, dt);
     pushOutOfCircles(this.position, radius, obstacles);
     clampToArena(this.position, half, radius);
+    // Velocity is what actually happened: sliding along a wall it faces along the wall, not into it.
+    if (dt > 0) this.velocity.set((this.position.x - fromX) / dt, 0, (this.position.z - fromZ) / dt);
   }
 
   private startPounce(): void {

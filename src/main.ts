@@ -18,6 +18,19 @@ const CRAB_SCALE = 0.32; // companion-sized: ~1.4 m across with claws
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
+// Block the browser's own touch gestures (pinch-zoom, Safari's page zoom, pull-to-refresh), which
+// iPad Safari allows despite the viewport setting: in full screen they "fold" the view. Scrolling
+// stays possible inside the panels that need it.
+const SCROLLABLE = '.picker, .parade-panel, .keys-panel, .overlay';
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener(
+  'touchmove',
+  (e) => {
+    if (e.touches.length > 1 || !(e.target as Element | null)?.closest?.(SCROLLABLE)) e.preventDefault();
+  },
+  { passive: false },
+);
+
 async function boot(): Promise<void> {
   let renderer: THREE.WebGLRenderer;
   try {

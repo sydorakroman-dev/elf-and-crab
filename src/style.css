@@ -7,7 +7,10 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
-canvas { touch-action: none; }
+/* No browser gestures anywhere (pinch-zoom, double-tap zoom, pull-to-refresh): on tablets in full
+   screen they shrink or shift the whole view. Panels that scroll get vertical panning back. */
+html, body, #app, canvas { touch-action: none; }
+.picker, .parade-panel, .keys-panel, .overlay { touch-action: pan-y; }
 canvas { display: block; }
 [hidden] { display: none !important; }
 

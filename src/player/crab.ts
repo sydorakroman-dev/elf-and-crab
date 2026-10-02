@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { attachAtPivot, bounds, loadParts, take } from './rig';
 import { toonify } from './toon';
 
+/** Seconds the crab's claw attack takes. */
+const CRAB_ATTACK = 0.45;
+
 interface Limb {
   pivot: THREE.Group;
   side: number;
@@ -81,7 +84,7 @@ export class Crab {
 
   /** Snap both claws shut (used when the crab attacks). */
   pinch(): void {
-    this.pinchTimer = 0.35;
+    this.pinchTimer = CRAB_ATTACK;
   }
 
   /** `speed` in m/s drives the gait; legs tuck up while airborne. */
@@ -103,14 +106,21 @@ export class Crab {
     this.body.position.y = Math.abs(Math.sin(this.walkPhase)) * 0.05 * move + Math.sin(this.time * 2) * 0.02;
     this.body.rotation.z = Math.sin(this.walkPhase) * 0.04 * move;
 
+    // Attack: both claws rear up high, then slam down and snap shut; the body dips with the blow.
+    const t = this.pinchTimer > 0 ? 1 - this.pinchTimer / CRAB_ATTACK : 1; // 0 → 1 over the attack
+    const attacking = this.pinchTimer > 0;
+    const raise = attacking && t < 0.45 ? Math.sin((t / 0.45) * Math.PI * 0.5) : 0; // up…
+    const slam = attacking && t >= 0.45 ? Math.sin(((t - 0.45) / 0.55) * Math.PI) : 0; // …and down
+    this.body.position.y -= slam * 0.12;
+    this.body.rotation.x = slam * 0.12;
     for (const arm of this.arms) {
-      const wave = Math.sin(this.time * 1.6 + arm.phase) * 0.07 + (airborne ? 0.25 : 0) - (this.pinchTimer > 0 ? 0.3 : 0);
+      const wave = Math.sin(this.time * 1.6 + arm.phase) * 0.07 + (airborne ? 0.25 : 0) + raise * 0.55 - slam * 0.45;
       arm.pivot.rotation.z = wave * arm.side;
     }
     for (const p of this.pincers) {
       const idle = Math.pow(Math.max(0, Math.sin(this.time * 2.3 + p.phase)), 6);
-      const snap = this.pinchTimer > 0 ? 1 : idle;
-      p.pivot.rotation.z = -p.side * snap * 0.5;
+      const snap = attacking ? (t < 0.45 ? 0 : 1) : idle; // wide open on the way up, shut on the slam
+      p.pivot.rotation.z = -p.side * (snap * 0.55 - (attacking && t < 0.45 ? 0.25 : 0));
     }
     this.magic.forEach((m, i) => {
       m.position.y = Math.sin(this.time * 1.8 + i) * 0.12;

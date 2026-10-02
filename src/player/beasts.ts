@@ -36,7 +36,11 @@ class Quadruped implements FamiliarBody {
   private bite = 0;
 
   /** `scale`: model units → metres (the imported iguana is modelled big). */
-  constructor(parts: Map<string, THREE.Mesh>, scale = 1) {
+  /** How it attacks: wolf lunges, capybara headbutts, goldfish hops, iguana whips its tail. */
+  private readonly attack: AttackStyle;
+
+  constructor(parts: Map<string, THREE.Mesh>, attack: AttackStyle, scale = 1) {
+    this.attack = attack;
     this.group.add(this.body);
     this.body.scale.setScalar(scale);
     const grab = (test: (name: string) => boolean) => {
@@ -88,24 +92,47 @@ class Quadruped implements FamiliarBody {
     const before = Math.floor(this.phase / Math.PI);
     this.phase += dt * (3 + speed * 2.2);
     if (move > 0.15 && !airborne && Math.floor(this.phase / Math.PI) !== before) this.onStep?.(move);
-    this.bite = Math.max(0, this.bite - dt * 4);
+    this.bite = Math.max(0, this.bite - dt / ATTACK_TIME);
+
+    // Attack curve: a quick wind-up (0 → 0.3), the strike (peaks at ~0.5), then recovery.
+    const t = 1 - this.bite; // 0 at the start of the attack … 1 at the end (and at rest)
+    const active = this.bite > 0;
+    const strike = active ? Math.sin(Math.min(1, t * 1.6) * Math.PI) : 0; // 0 → 1 → 0, early peak
+    const windup = active && t < 0.3 ? Math.sin((t / 0.3) * Math.PI) : 0;
+    const style = this.attack;
 
     for (const leg of this.legs) {
       // Airborne: front legs reach forward, back legs stretch back.
-      leg.pivot.rotation.x = airborne ? (leg.front ? -0.9 : 0.8) : Math.sin(this.phase + leg.phase) * 0.6 * move;
+      let x = airborne ? (leg.front ? -0.9 : 0.8) : Math.sin(this.phase + leg.phase) * 0.6 * move;
+      if (style === 'lunge') x += leg.front ? -0.9 * strike : 0.5 * strike; // paws reach out
+      if (style === 'hop') x += (leg.front ? -0.4 : 0.4) * strike; // legs spread for the jump
+      leg.pivot.rotation.x = x;
     }
     const bob = airborne ? 0 : Math.abs(Math.sin(this.phase)) * 0.04 * move;
-    this.body.position.y = bob + Math.sin(this.time * 2) * 0.008;
-    this.body.rotation.x = airborne ? -0.25 : 0.03 * move;
-    // Bite: the head lunges forward and down; idle, it bobs and glances.
-    const lunge = Math.sin(this.bite * Math.PI);
-    this.head.position.z = (this.head.userData.baseZ ??= this.head.position.z) + lunge * 0.14;
-    this.head.rotation.set(lunge * 0.35 + Math.sin(this.time * 1.5) * 0.04, Math.sin(this.time * 0.7) * 0.12 * (1 - move), 0);
-    if (this.cape) this.cape.rotation.x = -(0.18 * move + Math.sin(this.time * 6) * 0.03 * move + (airborne ? 0.3 : 0));
-    if (this.tail) this.tail.rotation.y = Math.sin(this.time * (4 + speed)) * (0.15 + 0.25 * move);
+    this.body.position.y = bob + Math.sin(this.time * 2) * 0.008 + (style === 'hop' ? strike * 0.35 : style === 'lunge' ? strike * 0.08 : 0);
+    this.body.position.z = (style === 'lunge' ? 0.3 : style === 'headbutt' ? 0.18 : style === 'hop' ? 0.15 : 0.06) * strike - 0.05 * windup;
+    this.body.rotation.x = (airborne ? -0.25 : 0.03 * move) + (style === 'headbutt' ? 0.22 * strike - 0.12 * windup : style === 'lunge' ? -0.12 * strike : 0);
+    this.body.rotation.y = style === 'whip' ? Math.sin(t * Math.PI * 2) * 0.35 * (active ? 1 : 0) : 0;
+
+    // Head: bites / butts / darts forward and down; idle, it bobs and glances.
+    const headReach = style === 'headbutt' ? 0.12 : style === 'hop' ? 0.18 : 0.2;
+    const headDip = style === 'headbutt' ? 0.6 : style === 'lunge' ? 0.45 : 0.3;
+    this.head.position.z = (this.head.userData.baseZ ??= this.head.position.z) + strike * headReach;
+    this.head.rotation.set(strike * headDip - windup * 0.25 + Math.sin(this.time * 1.5) * 0.04, Math.sin(this.time * 0.7) * 0.12 * (1 - move), 0);
+    if (this.cape) this.cape.rotation.x = -(0.18 * move + Math.sin(this.time * 6) * 0.03 * move + (airborne ? 0.3 : 0) + 0.25 * strike);
+    if (this.tail) {
+      const sway = Math.sin(this.time * (4 + speed)) * (0.15 + 0.25 * move);
+      // The iguana's tail whips round; the others flick theirs up as they strike.
+      this.tail.rotation.y = sway + (style === 'whip' && active ? Math.sin(t * Math.PI * 2) * 1.1 : 0);
+      this.tail.rotation.x = -0.35 * strike * (style === 'whip' ? 0 : 1);
+    }
   }
 }
 
+/** How each four-legged familiar attacks. */
+type AttackStyle = 'lunge' | 'headbutt' | 'hop' | 'whip';
+/** Seconds an attack animation takes. */
+const ATTACK_TIME = 0.42;
 const ORIGIN = new THREE.Vector3();
 /** The iguana model (public/models/iguana.glb) is ~3.8 units nose to tail; ~1.7 m in the game. */
 const IGUANA_SCALE = 0.45;
@@ -119,5 +146,5 @@ export async function loadFamiliarBodies(base: string, crabScale: number): Promi
     loadParts(`${base}models/fishbowl.glb`),
     loadParts(`${base}models/iguana.glb`),
   ]);
-  return { crab, capybara: new Quadruped(capy), wolf: new Quadruped(wolf), goldfish: new Quadruped(fish), iguana: new Quadruped(iguana, IGUANA_SCALE) };
+  return { crab, capybara: new Quadruped(capy, 'headbutt'), wolf: new Quadruped(wolf, 'lunge'), goldfish: new Quadruped(fish, 'hop'), iguana: new Quadruped(iguana, 'whip', IGUANA_SCALE) };
 }
