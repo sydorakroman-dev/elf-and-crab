@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Dungeon } from '../world/dungeon';
-import { ROOMS } from '../world/rooms';
+import { ROOMS, WAVES_PER_ROOM } from '../world/rooms';
 import { TelegraphRings } from '../game/telegraph';
 import { BeastVisual } from '../game/beastVisual';
 import { ElementalVisual } from '../game/elementalVisual';
@@ -20,10 +20,17 @@ import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, pounceLanding, type Famil
 import { POWER_CODES, SLIME_KIND_CODES, SnapshotBuffer, type GameEvent, type Snapshot } from '../net/snapshot';
 import type { FamiliarLink, FamiliarStatus } from '../net/client';
 import { FamiliarHud } from './hud';
-import { overviewDistance } from './input';
 
-const FOV = 40;
-const PITCH = 1.22; // radians down from horizontal: a high, slightly tilted overview
+const FOV = 45;
+/** Third-person follow camera: always looking north, this far back (m) and this steep (radians). */
+const FOLLOW_DISTANCE = 17;
+const FOLLOW_PITCH = 0.95;
+const FOLLOW_LAG = 6; // higher = tighter follow
+/** Screen-edge arrows (elf, boss) sit this far in from the edge (fraction of half the screen). */
+const EDGE = 0.86;
+/** …and stay clear of the top bar and the spell buttons (screen space, −1…1, y up). */
+const EDGE_TOP = 0.8;
+const EDGE_BOTTOM = -0.55;
 const STEER_SEND_INTERVAL = 0.1; // joystick updates at 10 Hz (resent while held)
 const STICK_RADIUS = 60; // px of drag for full speed
 const STICK_DEAD_ZONE = 0.15;
@@ -62,6 +69,17 @@ export class FamiliarGame {
   private readonly rangeRing: THREE.Mesh;
   private readonly pounceMark: THREE.Mesh;
   private time = 0;
+  /** Where the camera looks (eases after the familiar), and where it should be looking. */
+  private readonly camFocus = new THREE.Vector3();
+  private readonly camGoal = new THREE.Vector3();
+  private camPlaced = false;
+  /** Pillars, trees and crystals that fade out when they stand between the camera and the creature. */
+  private fadeables: { obj: THREE.Object3D; mats: THREE.Material[]; opacity: number }[] = [];
+  /** Off-screen pointers to the elf and the boss. */
+  private readonly pointers: Record<'elf' | 'boss', { el: HTMLElement; at: THREE.Vector3 | null }> = {
+    elf: { el: null!, at: null },
+    boss: { el: null!, at: null },
+  };
   /** The virtual joystick: where the finger went down, and the stick (direction × 0..1). */
   private stick: { id: number; ox: number; oy: number; x: number; z: number } | null = null;
   private lastSteerSent = -1;
@@ -76,6 +94,7 @@ export class FamiliarGame {
     this.bodies = bodies;
     this.session = session;
     this.dungeon = new Dungeon(this.scene, ROOMS[0], 1024);
+    this.collectFadeables();
     for (const b of Object.values(bodies)) b.group.visible = false;
 
     const additive = (color: number, opacity: number) =>
@@ -107,6 +126,9 @@ export class FamiliarGame {
     );
 
     this.hud = new FamiliarHud(root, session.code);
+    root.insertAdjacentHTML('beforeend', '<div class="edge-arrow elf" hidden><span>🧝</span></div><div class="edge-arrow boss" hidden><span>⚔️</span></div>');
+    this.pointers.elf.el = root.querySelector<HTMLElement>('.edge-arrow.elf')!;
+    this.pointers.boss.el = root.querySelector<HTMLElement>('.edge-arrow.boss')!;
     this.hud.onStart = () => this.sfx.unlock();
     this.hud.onChoose = (kind) => this.session.send({ type: 'choose', kind });
     this.hud.onSpell = (id) => this.session.send({ type: 'spell', id });
@@ -290,7 +312,42 @@ export class FamiliarGame {
     for (const v of this.slimes.values()) this.scene.remove(v.group);
     this.slimes.clear();
     this.effects.clear();
+    this.camPlaced = false; // snap to the new room's spot instead of gliding across
+    this.collectFadeables();
     this.resize();
+  }
+
+  /** Gives each occluder its own (fadeable) materials. */
+  private collectFadeables(): void {
+    this.fadeables = this.dungeon.occluders.map((obj) => {
+      const mats: THREE.Material[] = [];
+      obj.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return;
+        const m = (o.material as THREE.Material).clone();
+        m.transparent = true;
+        o.material = m;
+        mats.push(m);
+      });
+      return { obj, mats, opacity: 1 };
+    });
+  }
+
+  /** Fades occluders standing between the camera and what it follows (south of it, or right on top). */
+  private updateFades(dt: number): void {
+    const f = this.camFocus;
+    const camZ = this.camera.position.z;
+    for (const item of this.fadeables) {
+      const p = item.obj.position;
+      const dx = Math.abs(p.x - f.x);
+      const inLine = p.z > f.z - 2 && p.z < camZ && dx < 3.5 + (p.z - f.z) * 0.15;
+      const target = inLine || Math.hypot(p.x - f.x, p.z - f.z) < 3 ? 0.22 : 1;
+      if (Math.abs(item.opacity - target) < 0.01) continue;
+      item.opacity += (target - item.opacity) * (1 - Math.exp(-10 * dt));
+      for (const m of item.mats) {
+        m.opacity = item.opacity;
+        m.depthWrite = item.opacity > 0.95; // see-through when faded
+      }
+    }
   }
 
   private currentBody(): FamiliarBody | null {
@@ -307,13 +364,23 @@ export class FamiliarGame {
     if (s) this.apply(s, dt);
     this.effects.update(dt);
     this.updateStick();
+    this.updateCamera(dt);
+    this.updateFades(dt);
     this.renderer.render(this.scene, this.camera);
+    this.updatePointers();
     this.onFrame?.();
   }
 
   private apply(s: Snapshot, dt: number): void {
     // Elf: placed and animated from the hero's motion.
     const h = s.hero;
+    // The camera follows our creature (or the elf, before a creature is picked).
+    if (s.fam) this.camGoal.set(s.fam.x, 0, s.fam.z);
+    else this.camGoal.set(h.x, 0, h.z);
+    this.pointers.elf.at = (this.pointers.elf.at ?? new THREE.Vector3()).set(h.x, 1.4, h.z);
+    const bossKind = s.boss ? ROOMS[s.room]?.waves[WAVES_PER_ROOM - 1].boss : undefined;
+    const bossT = bossKind ? s.slimes.find((t) => SLIME_KIND_CODES[t[1]] === bossKind) : undefined;
+    this.pointers.boss.at = bossT ? (this.pointers.boss.at ?? new THREE.Vector3()).set(bossT[2], 2, bossT[3]) : null;
     this.elf.group.position.set(h.x, 0, h.z);
     this.elf.group.visible = h.v === 1;
     this.elf.update(dt, { speed: h.s, moveYaw: h.m, facing: h.f, aiming: h.a === 1, dashing: h.d === 1 });
@@ -455,18 +522,50 @@ export class FamiliarGame {
     if (this.stick && this.time - this.lastSteerSent >= STEER_SEND_INTERVAL) this.sendSteer();
   }
 
+  /** Third person, always facing north: eases after the creature from behind and above. */
+  private updateCamera(dt: number): void {
+    if (!this.camPlaced) {
+      this.camFocus.copy(this.camGoal);
+      this.camPlaced = true;
+    } else {
+      this.camFocus.lerp(this.camGoal, 1 - Math.exp(-FOLLOW_LAG * dt));
+    }
+    // A bit further back on a tall (portrait) screen, so the sides aren't cramped.
+    const d = FOLLOW_DISTANCE * (this.camera.aspect < 1 ? 1.35 : 1);
+    this.camera.position.set(this.camFocus.x, Math.sin(FOLLOW_PITCH) * d, this.camFocus.z + Math.cos(FOLLOW_PITCH) * d);
+    this.camera.lookAt(this.camFocus.x, 0.5, this.camFocus.z - 1);
+  }
+
+  /** Arrows at the screen edge toward the elf and the boss when they're off screen. */
+  private updatePointers(): void {
+    const v = new THREE.Vector3();
+    for (const p of Object.values(this.pointers)) {
+      if (!p.at) {
+        p.el.hidden = true;
+        continue;
+      }
+      v.copy(p.at).project(this.camera);
+      const behind = v.z > 1;
+      const onScreen = !behind && Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.92;
+      p.el.hidden = onScreen;
+      if (onScreen) continue;
+      let x = behind ? -v.x : v.x;
+      let y = behind ? -v.y : v.y;
+      // Push out along the direction to the edge of a box clear of the top bar and spell buttons.
+      const k = Math.min(EDGE / Math.max(Math.abs(x), 1e-6), (y > 0 ? EDGE_TOP : -EDGE_BOTTOM) / Math.max(Math.abs(y), 1e-6));
+      x *= k;
+      y *= k;
+      const angle = Math.atan2(-y, x); // screen space, y down
+      p.el.style.left = `${((x + 1) / 2) * innerWidth}px`;
+      p.el.style.top = `${((1 - y) / 2) * innerHeight}px`;
+      p.el.style.setProperty('--a', `${angle}rad`);
+    }
+  }
+
   private resize(): void {
-    const aspect = innerWidth / innerHeight;
-    this.camera.aspect = aspect;
-    const d = overviewDistance(this.dungeon.half, FOV, PITCH, aspect);
-    // Look at the arena centre from the south, high up.
-    this.camera.position.set(0, Math.sin(PITCH) * d, Math.cos(PITCH) * d + 1);
-    this.camera.lookAt(0, 0, 1);
+    this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
-    // The hero's fog is tuned for a close camera; push it back for the overview.
-    const fog = this.scene.fog as THREE.Fog;
-    fog.near = d * 0.9;
-    fog.far = d * 1.8;
     this.renderer.setSize(innerWidth, innerHeight);
   }
+
 }

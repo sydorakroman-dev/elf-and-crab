@@ -57,6 +57,8 @@ export class Dungeon {
   readonly room: RoomDef;
   readonly half: number;
   readonly obstacles: Circle[] = [];
+  /** Tall things (pillars, trees, crystal clusters) a close camera may need to see through. */
+  readonly occluders: THREE.Object3D[] = [];
   /** Just inside each enemy gate — where enemies enter. */
   readonly gates: THREE.Vector3[] = [];
   /** Where the elf arrives (inside the south gate). */
@@ -312,6 +314,7 @@ export class Dungeon {
       pillar.add(shaft, base, cap);
       pillar.position.set(x, 0, z);
       this.group.add(pillar);
+      this.occluders.push(pillar);
       this.obstacles.push({ x, z, radius: PILLAR_RADIUS });
     }
   }
@@ -359,6 +362,7 @@ export class Dungeon {
           tree.position.set(x, 0, z);
           tree.rotation.y = rng() * Math.PI * 2;
           this.group.add(tree);
+          this.occluders.push(tree);
           this.obstacles.push({ x, z, radius: 0.9 });
         }
         // Undergrowth: grass tufts, mushrooms and flowers (decoration only).
@@ -472,6 +476,7 @@ export class Dungeon {
           }
           cluster.position.set(x, 0, z);
           this.group.add(cluster);
+          this.occluders.push(cluster);
           this.obstacles.push({ x, z, radius: 1.4 });
         }
         // Two soft crystal lights to make the cave glow.
