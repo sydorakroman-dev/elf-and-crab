@@ -37,6 +37,8 @@ export interface HeroState {
   d: number;
   /** Visible (0 while blinking after a hit). */
   v: number;
+  /** Invisible (Wind Walk): 1. */
+  i?: number;
 }
 
 export interface FamState {

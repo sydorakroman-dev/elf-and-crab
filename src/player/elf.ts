@@ -135,6 +135,26 @@ export class Elf {
     toonify(this.group, NO_OUTLINE);
   }
 
+  private ghostly = false;
+
+  /** Wind Walk: see-through, no outline. */
+  setGhost(on: boolean): void {
+    if (on === this.ghostly) return;
+    this.ghostly = on;
+    this.group.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      if (o.userData.outline) {
+        o.visible = !on;
+        return;
+      }
+      const m = o.material as THREE.Material;
+      m.transparent = on;
+      m.opacity = on ? 0.28 : 1;
+      m.depthWrite = !on;
+      m.needsUpdate = true;
+    });
+  }
+
   /** Release: the string snaps forward and the bow kicks; then it's redrawn. */
   shoot(): void {
     this.recoil = 1;

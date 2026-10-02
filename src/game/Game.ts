@@ -15,6 +15,7 @@ import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_
 import { BUBBLE_HITS, FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, JET, POUNCE_DAMAGE, inJet, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
 import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
+import { Resources, WIND_WALK_SECONDS } from './abilities';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { FamiliarCommand } from '../net/protocol';
 import { pickAimTarget } from './combat';
@@ -112,6 +113,11 @@ export class Game {
   private waveBreak = 0;
   private fireCooldown = 0;
   private invulnerable = 0;
+  /** The elf's mana and stamina. */
+  private readonly resources = new Resources();
+  /** Wind Walk: seconds of invisibility left, and where the elf vanished (enemies head there). */
+  private invisible = 0;
+  private readonly vanishSpot = new THREE.Vector3();
   /** Hits the shield still absorbs (2 for a Bubble Shield, else 1). */
   private shieldHits = 0;
   private onFrame?: () => void;
@@ -168,6 +174,8 @@ export class Game {
       if (document.hidden) this.player.deactivate();
     });
     this.player.onDash = () => this.sfx.whoosh();
+    this.player.canDash = () => this.resources.spend('dash'); // a dash costs stamina
+    this.hud.actionBar.onUse = (slot) => this.useSlot(slot);
     elf.onStep = (strength) => this.sfx.footstep(strength);
     familiars.crab.onStep = (strength) => this.sfx.scuttle(strength);
     familiars.capybara.onStep = (strength) => this.sfx.footstep(strength * 0.4);
@@ -176,7 +184,11 @@ export class Game {
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
       else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && this.phase === 'ready') this.beginFight();
-      else this.cardSkip = true;
+      else {
+        this.cardSkip = true;
+        const slot = this.hud.actionBar.rebinding || e.repeat ? -1 : this.hud.actionBar.slotFor(e.code);
+        if (slot >= 0) this.useSlot(slot);
+      }
     });
     addEventListener('pointerdown', () => (this.cardSkip = true));
 
@@ -248,6 +260,9 @@ export class Game {
     this.resetWorld();
     this.state = 'playing';
     this.health = MAX_HEALTH;
+    this.resources.reset();
+    this.invisible = 0;
+    this.elf.setGhost(false);
     this.score = 0;
     this.wave = 0;
     this.waveInRoom = 0;
@@ -295,12 +310,17 @@ export class Game {
     if (this.net?.familiarConnected && this.steps % (running ? SNAPSHOT_EVERY : IDLE_SNAPSHOT_EVERY) === 0) {
       this.net.sendSnapshot(this.snapshot(running));
     }
+    this.hud.actionBar.setVisible(running && !this.headless);
     if (!running) {
       // Paused / title / game over: keep the scene alive but frozen.
       this.player.update(0, false);
       return;
     }
 
+    this.resources.tick(dt);
+    this.invisible = Math.max(0, this.invisible - dt);
+    this.elf.setGhost(this.invisible > 0);
+    this.hud.actionBar.update(this.resources);
     this.player.update(dt, true);
     this.playTime += dt;
     this.invulnerable = Math.max(0, this.invulnerable - dt);
@@ -309,7 +329,9 @@ export class Game {
     this.shoot(dt);
     this.updateZones(dt);
     const half = this.dungeon.half;
-    const { spits, strikes } = this.enemies.update(dt, this.player.position, this.dungeon.obstacles, half);
+    // Wind Walk: enemies lose track and head for the spot where the elf vanished.
+    const seen = this.invisible > 0 ? this.vanishSpot : this.player.position;
+    const { spits, strikes } = this.enemies.update(dt, seen, this.dungeon.obstacles, half);
     for (const spit of spits) {
       this.globs.fire(spit);
       this.sfx.spit();
@@ -343,6 +365,7 @@ export class Game {
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
     if (!this.player.trigger || this.fireCooldown > 0) return;
     this.fireCooldown = this.powers.has('rapid') ? FIRE_INTERVAL / 2 : FIRE_INTERVAL;
+    this.invisible = 0; // shooting gives you away
 
     const p = this.player.position;
     const dir = this.player.aimDirection(this.aim);
@@ -583,7 +606,7 @@ export class Game {
       t: q(this.time),
       state,
       ...(this.practice ? { practice: 1 } : {}),
-      hero: { x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0 },
+      hero: { x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0, ...(this.invisible > 0 ? { i: 1 } : {}) },
       fam: c.kind
         ? { k: FAMILIAR_KINDS.indexOf(c.kind), x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed), y: q(c.height) }
         : null,
@@ -791,6 +814,27 @@ export class Game {
     this.sfx.hurt();
     this.events.push({ e: 'hurt' });
     if (this.health <= 0) this.gameOver();
+  }
+
+  /** Uses whatever's in action slot `slot` (keys 1-9 by default, or a tap on the bar). */
+  private useSlot(slot: number): void {
+    const running = this.state === 'playing' && this.player.isActive;
+    const id = this.hud.actionBar.ability(slot);
+    if (!running || !id) return;
+    if (id === 'dash') {
+      this.player.queueDash(); // paid for when it happens (canDash)
+      return;
+    }
+    if (id === 'windwalk') {
+      if (this.invisible > 0 || !this.resources.spend('windwalk')) return;
+      this.invisible = WIND_WALK_SECONDS;
+      this.vanishSpot.copy(this.player.position);
+      const p = this.player.position;
+      this.effects.burst(p.x, 1.1, p.z, new THREE.Color(0xdff4ff), 26, 5, 0.12);
+      this.effects.ring(p.x, p.z, 0xdff4ff, 2);
+      this.sfx.whoosh();
+      this.hud.toast('🌬️ Wind Walk', 0xdff4ff);
+    }
   }
 
   /** The hero pressed Start (Enter / the button): the first wave comes. */

@@ -410,6 +410,7 @@ export class FamiliarGame {
     this.pointers.boss.at = bossT ? (this.pointers.boss.at ?? new THREE.Vector3()).set(bossT[2], 2, bossT[3]) : null;
     this.elf.group.position.set(h.x, 0, h.z);
     this.elf.group.visible = h.v === 1;
+    this.elf.setGhost(h.i === 1);
     this.elf.update(dt, { speed: h.s, moveYaw: h.m, facing: h.f, aiming: h.a === 1, dashing: h.d === 1 });
     const shielded = s.powers.some(([code]) => POWER_CODES[code] === 'shield');
     this.shieldBubble.visible = shielded;

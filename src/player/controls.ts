@@ -47,6 +47,8 @@ export class Player {
   /** Fires when play starts or stops (pointer lock gained/lost, or touch play toggled). */
   onActiveChange?: (active: boolean) => void;
   onDash?: () => void;
+  /** Asked before each dash; return false to refuse (e.g. out of stamina — it pays for the dash). */
+  canDash?: () => boolean;
   /** What the elf did on the last step (sent to the familiar's tablet). */
   readonly motion: ElfMotion = { speed: 0, moveYaw: 0, facing: 0, aiming: false, dashing: false };
 
@@ -243,7 +245,7 @@ export class Player {
 
     const wantsDash = controlling && this.dashQueued;
     this.dashQueued = false;
-    if (wantsDash && this.dashCooldown === 0) {
+    if (wantsDash && this.dashCooldown === 0 && (this.canDash?.() ?? true)) {
       this.dashTimer = DASH_TIME;
       this.dashCooldown = DASH_COOLDOWN;
       // Dash where you're steering, or straight ahead if you aren't.

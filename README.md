@@ -22,6 +22,18 @@ On phones and tablets (touch-first devices) the game shows on-screen controls in
 left thumb moves (floating joystick), right thumb drags the camera, hold 🏹 to shoot, tap 💨 to dash.
 Aim assist is wider on touch.
 
+## Skills and spells
+
+The elf has **stamina** (5 charges, one back every 4 s) and **mana** (a 100-point bar, refilling 4 per second).
+Skills cost stamina, spells cost mana. Nine action slots, used with keys **1–9** (rebind them under **⚙️ Keys** on
+the title / pause screen; saved in your browser); on touch screens, tap the slots.
+
+| Slot | | Cost | |
+| --- | --- | --- | --- |
+| 1 | 💨 **Dash** (also Space) | 1 stamina | a quick dash; you can't be hit while dashing |
+| 2 | 🌬️ **Wind Walk** | 2 stamina | invisible for 3 s: enemies lose track of you and head for where you vanished; shooting breaks it |
+| 3–9 | spells | mana | coming from the magic book |
+
 ## The run
 
 The run waits in the Woodland until you're ready — press **Enter** (or tap **Start**) and the first wave comes; handy

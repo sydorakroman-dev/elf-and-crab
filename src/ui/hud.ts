@@ -3,6 +3,7 @@ import type { InputMode } from '../player/controls';
 import type { PowerUpType } from '../game/powerups';
 import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey } from './shared';
 import { normalizeCode } from '../net/protocol';
+import { ActionBar } from './actionbar';
 import type { ConnStatus } from '../net/client';
 import QRCode from 'qrcode';
 import { FAMILIARS, type FamiliarKind } from '../game/familiars';
@@ -21,6 +22,7 @@ export class Hud {
   private powersKey = '';
   private readonly popups: Popups;
   readonly bossBar: BossBar;
+  readonly actionBar: ActionBar;
   readonly fade: Fade;
   private readonly hud: HTMLElement;
   private readonly overlay: HTMLElement;
@@ -59,6 +61,7 @@ export class Hud {
            <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
            <button type="button" data-play>Begin the hunt</button>
            <p class="best" data-best hidden></p>
+           <button type="button" class="keys-btn" data-keys>⚙️ Keys</button>
            <div class="invite" data-invite>
              <canvas class="qr" data-qr width="112" height="112" hidden></canvas>
              <div class="invite-text">
@@ -83,6 +86,7 @@ export class Hud {
     this.muted = root.querySelector('[data-muted]')!;
     this.powers = root.querySelector('[data-powers]')!;
     this.popups = new Popups(root);
+    this.actionBar = new ActionBar(root.querySelector('.hud .left')!, root, mode === 'touch');
     this.bossBar = new BossBar(root);
     this.fade = new Fade(root);
     this.hud = root.querySelector('.hud')!;
@@ -120,6 +124,10 @@ export class Hud {
     });
     // Clicking anywhere on the overlay plays — except inside the invite / join controls.
     this.overlay.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('[data-keys]')) {
+        this.actionBar.openPanel();
+        return;
+      }
       if ((e.target as HTMLElement).closest('[data-invite], [data-join]')) return;
       onPlay();
     });
