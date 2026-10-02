@@ -70,7 +70,7 @@ export class Hud {
              </div>
            </div>
            <form class="join" data-join>
-             <span>Got a code?</span>
+             <span title="Type TEST to practise as the familiar on your own">Got a code?</span>
              <input data-join-code maxlength="5" placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" />
              <button type="submit" class="join-btn">Join as familiar</button>
            </form>

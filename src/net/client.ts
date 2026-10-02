@@ -153,6 +153,24 @@ export class HeroSession {
 
 export type FamiliarStatus = ConnStatus | 'joined' | 'no-room' | 'room-full' | 'hero-away' | 'hero-left';
 
+/** What the hero's game needs from its link to a familiar: a real room (HeroSession) or the practice room. */
+export interface HeroLink {
+  onRoom?: (code: string) => void;
+  onFamiliar?: (connected: boolean) => void;
+  onCommand?: (cmd: FamiliarCommand) => void;
+  onStatus?: (s: ConnStatus) => void;
+  familiarConnected: boolean;
+  sendSnapshot(s: Snapshot): void;
+}
+
+/** What the familiar's view needs from its link to the hero: a real room (FamiliarSession) or the practice room. */
+export interface FamiliarLink {
+  readonly code: string;
+  onSnapshot?: (s: Snapshot) => void;
+  onStatus?: (s: FamiliarStatus) => void;
+  send(cmd: FamiliarCommand): void;
+}
+
 /** Familiar side: joins a room by code, receives snapshots, sends commands. */
 export class FamiliarSession {
   onSnapshot?: (s: Snapshot) => void;

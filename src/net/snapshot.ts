@@ -90,6 +90,8 @@ export interface Snapshot {
   room: number;
   rw: number;
   phase: RunPhase;
+  /** 1 in the practice room (code TEST). */
+  practice?: number;
   /** Room whose intro card is up (-1: none). */
   card: number;
   /** The current boss or mini-boss, while it lives. */

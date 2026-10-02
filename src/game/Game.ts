@@ -23,7 +23,7 @@ import { Sfx } from './audio';
 import { loadBest, recordRun } from './highscore';
 import { ActivePowers, POWER_UPS, pickPowerUp, randomSpawnPoint, spreadDirections, type PowerUpType } from './powerups';
 import { Pickups } from './pickups';
-import type { HeroSession } from '../net/client';
+import type { HeroLink } from '../net/client';
 import { POWER_CODES, q, type GameEvent, type Snapshot } from '../net/snapshot';
 
 const STEP = 1 / 60; // fixed simulation step
@@ -92,7 +92,11 @@ export class Game {
   private readonly mode: InputMode;
   private readonly sfx = new Sfx();
   private readonly aim = new THREE.Vector3();
-  private readonly net: HeroSession | null;
+  private readonly net: HeroLink | null;
+  /** Simulate only (no drawing): the practice room's hidden hero game. */
+  private readonly headless: boolean;
+  /** The practice room: no monsters, power-ups keep coming, the elf just stands there. */
+  private readonly practice: boolean;
   private events: GameEvent[] = [];
   private steps = 0;
   private readonly cameraRight = new THREE.Vector3();
@@ -113,10 +117,13 @@ export class Game {
     elf: Elf,
     familiars: Record<FamiliarKind, FamiliarBody>,
     mode: InputMode,
-    net: HeroSession | null,
+    net: HeroLink | null,
+    options: { headless?: boolean; practice?: boolean } = {},
   ) {
     this.renderer = renderer;
     this.net = net;
+    this.headless = !!options.headless;
+    this.practice = !!options.practice;
     this.elf = elf;
     this.mode = mode;
     this.shadowSize = mode === 'touch' ? 1024 : 2048;
@@ -134,7 +141,7 @@ export class Game {
 
     this.player = new Player(
       this.camera,
-      renderer.domElement,
+      this.headless ? document.createElement('canvas') : renderer.domElement, // headless: no mouse capture
       elf,
       this.arena,
       mode,
@@ -181,6 +188,15 @@ export class Game {
     this.resetWorld();
     addEventListener('resize', () => this.resize());
     this.resize();
+    if (this.practice) this.startPractice();
+  }
+
+  /** The practice room: straight into the Woodland, no intro card, no waves; the elf a bit hurt so heals show. */
+  private startPractice(): void {
+    this.newGame();
+    this.doorT = DOOR_TOTAL;
+    this.health = 60;
+    this.nextPickup = 1;
   }
 
   /** Optional per-frame hook (used for the dev FPS panel). */
@@ -189,6 +205,14 @@ export class Game {
   }
 
   start(): void {
+    if (this.headless) {
+      const loop = (t: number) => {
+        this.frame(t);
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+      return;
+    }
     this.renderer.setAnimationLoop((t) => this.frame(t));
   }
 
@@ -252,7 +276,7 @@ export class Game {
       this.update(STEP);
       this.accumulator -= STEP;
     }
-    this.renderer.render(this.scene, this.camera);
+    if (!this.headless) this.renderer.render(this.scene, this.camera);
     this.onFrame?.();
   }
 
@@ -260,7 +284,7 @@ export class Game {
     this.time += dt;
     this.dungeon.update(this.time, dt);
     this.updateAmbience(dt);
-    const running = this.state === 'playing' && this.player.isActive;
+    const running = this.state === 'playing' && (this.player.isActive || this.practice);
     this.steps++;
     if (this.net?.familiarConnected && this.steps % (running ? SNAPSHOT_EVERY : IDLE_SNAPSHOT_EVERY) === 0) {
       this.net.sendSnapshot(this.snapshot(running));
@@ -468,7 +492,7 @@ export class Game {
     }
     // Creatures can be picked any time at first, but only swapped between runs / while paused.
     const running = this.state === 'playing' && this.player.isActive;
-    if (this.companion.kind === cmd.kind || (this.companion.kind && running)) return;
+    if (this.companion.kind === cmd.kind || (this.companion.kind && running && !this.practice)) return;
     if (this.companion.kind) this.poof(this.companion.kind);
     const p = this.player.position;
     this.companion.appear(cmd.kind, p.x + 2, p.z + 2);
@@ -496,6 +520,7 @@ export class Game {
     const snap: Snapshot = {
       t: q(this.time),
       state,
+      ...(this.practice ? { practice: 1 } : {}),
       hero: { x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0 },
       fam: c.kind
         ? { k: FAMILIAR_KINDS.indexOf(c.kind), x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed), y: q(c.height) }
@@ -573,9 +598,10 @@ export class Game {
     this.powers.tick(dt);
 
     this.nextPickup -= dt;
-    if (this.nextPickup <= 0 && this.wave > 0) {
-      this.nextPickup = PICKUP_INTERVAL_MIN + Math.random() * (PICKUP_INTERVAL_MAX - PICKUP_INTERVAL_MIN);
-      if (this.pickups.count < MAX_PICKUPS) {
+    if (this.nextPickup <= 0 && (this.wave > 0 || this.practice)) {
+      // The practice room drops them much more often, to try them out.
+      this.nextPickup = this.practice ? 3 + Math.random() * 2 : PICKUP_INTERVAL_MIN + Math.random() * (PICKUP_INTERVAL_MAX - PICKUP_INTERVAL_MIN);
+      if (this.pickups.count < MAX_PICKUPS + (this.practice ? 1 : 0)) {
         const at = randomSpawnPoint(Math.random, this.dungeon.half, this.dungeon.obstacles, [p], 7);
         this.pickups.spawn(pickPowerUp(Math.random, this.health, MAX_HEALTH), at.x, at.z);
       }
@@ -891,6 +917,7 @@ export class Game {
   }
 
   private resize(): void {
+    if (this.headless) return; // the canvas belongs to the familiar's view
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);

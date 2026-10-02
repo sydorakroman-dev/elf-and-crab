@@ -135,7 +135,7 @@ export class RoomManager {
     for (;;) {
       let code = '';
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(this.rng() * CODE_ALPHABET.length)];
-      if (!this.rooms.has(code)) return code;
+      if (!this.rooms.has(code) && code !== 'TEST') return code; // TEST opens the practice room (src/net/local.ts)
     }
   }
 

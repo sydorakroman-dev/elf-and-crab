@@ -208,14 +208,14 @@ export class FamiliarHud {
       this.powersKey = key;
       this.powers.innerHTML = powerChipsHtml(list);
     }
-    const w = s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.rw, s.remaining, s.phase, s.boss?.name ?? null);
+    const w = s.practice ? '🧪 Practice room · no monsters' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.rw, s.remaining, s.phase, s.boss?.name ?? null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
     this.bossBar.set(s.boss);
     this.fade.set(s.phase === 'transition', s.card ?? -1);
 
     // Creature can be changed between runs or while paused (or before it's placed at all).
-    this.canChange = s.state !== 'playing' || !s.fam;
+    this.canChange = s.state !== 'playing' || !s.fam || !!s.practice; // any time in the practice room
     this.changeBtn.classList.toggle('locked', !this.canChange);
 
     for (const [code, secs] of s.cds) {

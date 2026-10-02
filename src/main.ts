@@ -10,6 +10,7 @@ import type { InputMode } from './player/controls';
 import { FamiliarGame } from './familiar/FamiliarGame';
 import { FamiliarSession, HeroSession } from './net/client';
 import { normalizeCode } from './net/protocol';
+import { PRACTICE_CODE, practiceLink } from './net/local';
 import { showLoading } from './ui/shared';
 
 const CRAB_SCALE = 0.32; // companion-sized: ~1.4 m across with claws
@@ -44,9 +45,22 @@ async function boot(): Promise<void> {
     loadElementalTemplates(base),
     loadMonsterTemplates(base),
   ]);
-  const game = joinCode
-    ? new FamiliarGame(renderer, root, elf, familiars, new FamiliarSession(joinCode))
-    : new Game(renderer, root, elf, familiars, mode, multiplayerAvailable() ? new HeroSession() : null);
+  let game: Game | FamiliarGame;
+  if (joinCode === PRACTICE_CODE) {
+    // Practice room: the hero's game runs hidden in this browser (its own elf and creatures,
+    // nothing drawn), linked straight to the familiar's view — no server, no monsters.
+    const link = practiceLink();
+    const [simElf, simFamiliars] = await Promise.all([Elf.load(`${base}models/elf.glb`), loadFamiliarBodies(base, CRAB_SCALE)]);
+    const sim = new Game(renderer, document.createElement('div'), simElf, simFamiliars, 'mouse', link.hero, { headless: true, practice: true });
+    sim.start();
+    game = new FamiliarGame(renderer, root, elf, familiars, link.familiar);
+    link.connect();
+    if (import.meta.env.DEV) (window as unknown as { __practice: Game }).__practice = sim;
+  } else {
+    game = joinCode
+      ? new FamiliarGame(renderer, root, elf, familiars, new FamiliarSession(joinCode))
+      : new Game(renderer, root, elf, familiars, mode, multiplayerAvailable() ? new HeroSession() : null);
+  }
   game.start();
   loaded();
 

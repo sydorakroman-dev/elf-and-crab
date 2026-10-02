@@ -18,7 +18,7 @@ import { HEALING } from '../game/balance';
 import { POWER_UPS } from '../game/powerups';
 import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, pounceLanding, type FamiliarKind } from '../game/familiars';
 import { POWER_CODES, SLIME_KIND_CODES, SnapshotBuffer, type GameEvent, type Snapshot } from '../net/snapshot';
-import type { FamiliarSession, FamiliarStatus } from '../net/client';
+import type { FamiliarLink, FamiliarStatus } from '../net/client';
 import { FamiliarHud } from './hud';
 import { overviewDistance } from './input';
 
@@ -46,7 +46,7 @@ export class FamiliarGame {
   private readonly telegraph = new TelegraphRings();
   private readonly elf: Elf;
   private readonly bodies: Record<FamiliarKind, FamiliarBody>;
-  private readonly session: FamiliarSession;
+  private readonly session: FamiliarLink;
   private readonly hud: FamiliarHud;
   private readonly buffer = new SnapshotBuffer(0.1);
   /** Every enemy on screen, keyed by id: slimes and beasts draw differently. */
@@ -70,7 +70,7 @@ export class FamiliarGame {
   private status: FamiliarStatus = 'connecting';
   private onFrame?: () => void;
 
-  constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarSession) {
+  constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarLink) {
     this.renderer = renderer;
     this.elf = elf;
     this.bodies = bodies;
