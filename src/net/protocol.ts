@@ -99,6 +99,8 @@ export function parseServerMsg(raw: string): ServerMsg | null {
 /** What the familiar player can ask for. The hero validates and applies it. */
 export type FamiliarCommand =
   | { type: 'move'; x: number; z: number }
+  /** Virtual joystick: run in direction (dx, dz), length 0..1 = speed; (0, 0) stops. */
+  | { type: 'steer'; dx: number; dz: number }
   | { type: 'spell'; id: SpellId }
   /** Pick (or switch) creature. */
   | { type: 'choose'; kind: FamiliarKind };
@@ -109,5 +111,11 @@ export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
   if (v.type === 'spell' && (SPELL_IDS as unknown[]).includes(v.id)) return { type: 'spell', id: v.id as SpellId };
   if (v.type === 'choose' && (FAMILIAR_KINDS as unknown[]).includes(v.kind)) return { type: 'choose', kind: v.kind as FamiliarKind };
   if (v.type === 'move' && Number.isFinite(v.x) && Number.isFinite(v.z)) return { type: 'move', x: v.x as number, z: v.z as number };
+  if (v.type === 'steer' && Number.isFinite(v.dx) && Number.isFinite(v.dz)) {
+    // Never faster than full stick.
+    const len = Math.hypot(v.dx as number, v.dz as number);
+    const k = len > 1 ? 1 / len : 1;
+    return { type: 'steer', dx: (v.dx as number) * k, dz: (v.dz as number) * k };
+  }
   return null;
 }

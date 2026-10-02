@@ -20,11 +20,13 @@ import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, pounceLanding, type Famil
 import { POWER_CODES, SLIME_KIND_CODES, SnapshotBuffer, type GameEvent, type Snapshot } from '../net/snapshot';
 import type { FamiliarSession, FamiliarStatus } from '../net/client';
 import { FamiliarHud } from './hud';
-import { floorPoint, overviewDistance } from './input';
+import { overviewDistance } from './input';
 
 const FOV = 40;
 const PITCH = 1.22; // radians down from horizontal: a high, slightly tilted overview
-const MOVE_SEND_INTERVAL = 0.1; // throttle drag commands to 10 Hz
+const STEER_SEND_INTERVAL = 0.1; // joystick updates at 10 Hz (resent while held)
+const STICK_RADIUS = 60; // px of drag for full speed
+const STICK_DEAD_ZONE = 0.15;
 const EVENT_DELAY_MS = 100; // play events in step with the interpolation delay
 const STUN_STAR = new THREE.Color(0xfff27a);
 const CALM_PINK = new THREE.Color(0xffb8dc);
@@ -32,7 +34,7 @@ const SPRING_BLUE = new THREE.Color(0x8fe8f5);
 
 /**
  * The familiar's tablet: a top-down view of the whole arena, drawn from the hero's snapshots.
- * Pick a creature, tap or drag on the floor to move it, and tap the spell buttons to cast.
+ * Pick a creature, steer it with a virtual joystick (touch and drag anywhere), and tap the spell buttons to cast.
  * Runs no game logic itself — the hero's browser is the source of truth.
  */
 export class FamiliarGame {
@@ -58,14 +60,12 @@ export class FamiliarGame {
   private readonly shieldBubble: THREE.Mesh;
   private readonly famRing: THREE.Mesh;
   private readonly rangeRing: THREE.Mesh;
-  private readonly marker: THREE.Mesh;
   private readonly pounceMark: THREE.Mesh;
-  private readonly raycaster = new THREE.Raycaster();
-  private markerAge = 99;
   private time = 0;
-  private lastMoveSent = -1;
-  private dragging = false;
-  private lastTap: { x: number; z: number } | null = null;
+  /** The virtual joystick: where the finger went down, and the stick (direction × 0..1). */
+  private stick: { id: number; ox: number; oy: number; x: number; z: number } | null = null;
+  private lastSteerSent = -1;
+  private joy!: { base: HTMLElement; knob: HTMLElement };
   private shownKind: FamiliarKind | null = null;
   private status: FamiliarStatus = 'connecting';
   private onFrame?: () => void;
@@ -85,10 +85,9 @@ export class FamiliarGame {
     // A glowing ring under your creature so it's easy to find, and the reach of its area spell.
     this.famRing = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.3, 40).rotateX(-Math.PI / 2), additive(0xffffff, 0.7));
     this.rangeRing = new THREE.Mesh(new THREE.RingGeometry(0.975, 1, 72).rotateX(-Math.PI / 2), additive(0xffffff, 0.28));
-    this.marker = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 32).rotateX(-Math.PI / 2), additive(0xffffff, 0));
     // Where a pounce would land (wolf only).
     this.pounceMark = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 6).rotateX(-Math.PI / 2), additive(0xd9cbb0, 0.6));
-    for (const m of [this.famRing, this.rangeRing, this.marker, this.pounceMark]) m.position.y = 0.06;
+    for (const m of [this.famRing, this.rangeRing, this.pounceMark]) m.position.y = 0.06;
     this.famRing.visible = this.rangeRing.visible = this.pounceMark.visible = false;
 
     this.scene.add(
@@ -103,7 +102,6 @@ export class FamiliarGame {
       this.shieldBubble,
       this.famRing,
       this.rangeRing,
-      this.marker,
       this.pounceMark,
       this.telegraph.group,
     );
@@ -308,7 +306,7 @@ export class FamiliarGame {
     const s = this.buffer.sample(performance.now() / 1000);
     if (s) this.apply(s, dt);
     this.effects.update(dt);
-    this.updateMarker(dt);
+    this.updateStick();
     this.renderer.render(this.scene, this.camera);
     this.onFrame?.();
   }
@@ -392,52 +390,69 @@ export class FamiliarGame {
 
     this.pounceMark.visible = ready.has('pounce') && f.y < 0.05;
     if (this.pounceMark.visible) {
-      const land = pounceLanding({ x: f.x, z: f.z }, this.lastTap, f.h);
+      const land = pounceLanding({ x: f.x, z: f.z }, null, f.h);
       this.pounceMark.position.set(land.x, 0.06, land.z);
       this.pounceMark.rotation.y = this.time;
     }
   }
 
+  /**
+   * Virtual joystick: put a finger down anywhere on the floor and a stick appears under it; drag
+   * to steer (direction and speed), let go to stop. The room view stays fixed with north up, so
+   * screen right is world +x and screen down is world +z.
+   */
   private bindTouch(canvas: HTMLCanvasElement): void {
     canvas.style.touchAction = 'none';
-    const pointer = new THREE.Vector2();
-    const send = (e: PointerEvent, force: boolean) => {
-      if (this.hud.isBlocked) return;
-      pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-      this.raycaster.setFromCamera(pointer, this.camera);
-      const { origin, direction } = this.raycaster.ray;
-      const p = floorPoint(origin, direction, this.dungeon.half, 1);
-      if (!p) return;
-      this.lastTap = p;
-      this.marker.position.set(p.x, 0.06, p.z);
-      this.markerAge = 0;
-      if (!force && this.time - this.lastMoveSent < MOVE_SEND_INTERVAL) return;
-      this.lastMoveSent = this.time;
-      this.session.send({ type: 'move', x: Math.round(p.x * 100) / 100, z: Math.round(p.z * 100) / 100 });
-    };
+    canvas.insertAdjacentHTML('afterend', '<div class="joy" hidden><div class="joy-knob"></div></div>');
+    const base = canvas.parentElement!.querySelector<HTMLElement>('.joy')!;
+    this.joy = { base, knob: base.querySelector<HTMLElement>('.joy-knob')! };
     canvas.addEventListener('pointerdown', (e) => {
-      this.dragging = true;
+      if (this.hud.isBlocked || this.stick) return;
       canvas.setPointerCapture(e.pointerId);
-      send(e, true);
+      this.stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, z: 0 };
+      base.style.left = `${e.clientX}px`;
+      base.style.top = `${e.clientY}px`;
+      this.joy.knob.style.transform = 'translate(-50%, -50%)';
+      base.hidden = false;
     });
     canvas.addEventListener('pointermove', (e) => {
-      if (this.dragging) send(e, false);
+      const st = this.stick;
+      if (!st || e.pointerId !== st.id) return;
+      let dx = e.clientX - st.ox;
+      let dy = e.clientY - st.oy;
+      const len = Math.hypot(dx, dy);
+      if (len > STICK_RADIUS) {
+        dx *= STICK_RADIUS / len;
+        dy *= STICK_RADIUS / len;
+      }
+      this.joy.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      // Strength 0..1 past a small dead zone, along the drag direction.
+      const mag = Math.min(1, len / STICK_RADIUS);
+      const strength = mag < STICK_DEAD_ZONE ? 0 : (mag - STICK_DEAD_ZONE) / (1 - STICK_DEAD_ZONE);
+      st.x = len ? (dx / Math.hypot(dx, dy)) * strength : 0;
+      st.z = len ? (dy / Math.hypot(dx, dy)) * strength : 0;
+      if (this.time - this.lastSteerSent >= STEER_SEND_INTERVAL) this.sendSteer();
     });
     const end = (e: PointerEvent) => {
-      if (!this.dragging) return;
-      this.dragging = false;
-      send(e, true); // make sure the final spot is sent
+      if (!this.stick || e.pointerId !== this.stick.id) return;
+      this.stick = null;
+      base.hidden = true;
+      this.session.send({ type: 'steer', dx: 0, dz: 0 });
     };
     canvas.addEventListener('pointerup', end);
-    canvas.addEventListener('pointercancel', () => (this.dragging = false));
+    canvas.addEventListener('pointercancel', end);
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  private updateMarker(dt: number): void {
-    this.markerAge += dt;
-    const k = Math.min(1, this.markerAge / 0.6);
-    (this.marker.material as THREE.MeshBasicMaterial).opacity = (1 - k) * 0.9;
-    this.marker.scale.setScalar(1 + k * 0.8);
+  private sendSteer(): void {
+    const st = this.stick!;
+    this.lastSteerSent = this.time;
+    this.session.send({ type: 'steer', dx: Math.round(st.x * 100) / 100, dz: Math.round(st.z * 100) / 100 });
+  }
+
+  /** While the stick is held, keep telling the hero (so it keeps running after a pounce, say). */
+  private updateStick(): void {
+    if (this.stick && this.time - this.lastSteerSent >= STEER_SEND_INTERVAL) this.sendSteer();
   }
 
   private resize(): void {

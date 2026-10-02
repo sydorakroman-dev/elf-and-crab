@@ -35,6 +35,8 @@ export class Companion {
   private readonly velocity = new THREE.Vector3();
   private readonly target = new THREE.Vector3();
   private hasTarget = false;
+  /** Joystick direction × strength (0..1), or zero when the stick is let go. */
+  private readonly steer = { x: 0, z: 0 };
   /** Last tapped spot (kept after arriving, used to aim a pounce). */
   private lastTap: { x: number; z: number } | null = null;
   private heading = 0;
@@ -82,6 +84,7 @@ export class Companion {
     this.velocity.set(0, 0, 0);
     this.hasTarget = false;
     this.lastTap = null;
+    this.steer.x = this.steer.z = 0;
     this.queued = [];
     this.leap = null;
     this._height = 0;
@@ -108,6 +111,14 @@ export class Companion {
     if (!this._kind) return;
     if (c.type === 'spell') {
       if (FAMILIARS[this._kind].spells.includes(c.id)) this.queued.push(c.id);
+      return;
+    }
+    if (c.type === 'steer') {
+      // Joystick: run that way; a pounce goes where it's heading.
+      this.steer.x = c.dx;
+      this.steer.z = c.dz;
+      this.hasTarget = false;
+      this.lastTap = null;
       return;
     }
     if (c.type !== 'move') return;
@@ -184,7 +195,10 @@ export class Companion {
   private walk(dt: number, maxSpeed: number, radius: number, obstacles: readonly Circle[], half: number): void {
     let wantX = 0;
     let wantZ = 0;
-    if (this.hasTarget) {
+    if (this.steer.x || this.steer.z) {
+      wantX = this.steer.x * maxSpeed;
+      wantZ = this.steer.z * maxSpeed;
+    } else if (this.hasTarget) {
       const dx = this.target.x - this.position.x;
       const dz = this.target.z - this.position.z;
       const dist = Math.hypot(dx, dz);
@@ -207,6 +221,7 @@ export class Companion {
     const land = pounceLanding(this.position, this.lastTap, this.heading);
     this.leap = { from: this.position.clone(), to: new THREE.Vector3(land.x, 0, land.z), t: 0, hit: new Set() };
     this.hasTarget = false;
+    this.steer.x = this.steer.z = 0; // the leap takes over; steer again after landing
     this.velocity.set(0, 0, 0);
   }
 

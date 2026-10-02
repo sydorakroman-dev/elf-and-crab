@@ -45,5 +45,10 @@ describe('parseFamiliarCommand', () => {
     expect(parseFamiliarCommand({ type: 'move', x: 'a', z: 0 })).toBeNull();
     expect(parseFamiliarCommand({ type: 'move', x: Infinity, z: 0 })).toBeNull();
     expect(parseFamiliarCommand(null)).toBeNull();
+    expect(parseFamiliarCommand({ type: 'steer', dx: 0.6, dz: 0 })).toEqual({ type: 'steer', dx: 0.6, dz: 0 });
+    const full = parseFamiliarCommand({ type: 'steer', dx: 3, dz: 4 }) as { dx: number; dz: number }; // clamped to full stick
+    expect(full.dx).toBeCloseTo(0.6);
+    expect(full.dz).toBeCloseTo(0.8);
+    expect(parseFamiliarCommand({ type: 'steer', dx: NaN, dz: 0 })).toBeNull();
   });
 });

@@ -122,7 +122,8 @@ Two roles:
 
 - **Hero (the elf)** plays as usual on a computer (or phone). The title screen shows a room code and a QR code.
 - **Familiar** scans the QR code or opens the link (`…/?join=CODE`) on a tablet, or types the code under
-  "Got a code?", then **picks a creature**. Tap or drag on the floor to move — it bites any enemy it touches. It can grab power-ups too — they go
+  "Got a code?", then **picks a creature**. Touch anywhere and drag to steer — a virtual joystick appears under
+  your finger (drag further to run faster, let go to stop); it bites any enemy it touches. It can grab power-ups too — they go
   straight to the elf. Familiars
   can't be hurt: monsters only ever go for the elf.
   Spell buttons have their own cooldowns. The creature can be changed between runs or while the elf is paused.

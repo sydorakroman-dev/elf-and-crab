@@ -80,7 +80,7 @@ export class FamiliarHud {
        <div class="overlay fam-overlay">
          <div class="card" data-f-card>
            <h1 data-f-title>You're the familiar</h1>
-           <p data-f-message>Help the elf survive. <b>Tap the floor</b> to move — your creature bites any enemy it touches, and has <b>spells</b> to cast.</p>
+           <p data-f-message>Help the elf survive. <b>Touch and drag anywhere</b> to steer — your creature bites any enemy it touches, grabs power-ups for the elf, and has <b>spells</b> to cast.</p>
            <button type="button" data-f-action>Tap to join 🐾</button>
            <form class="join" data-f-retry hidden>
              <input maxlength="5" placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" />
