@@ -72,6 +72,8 @@ export type GameEvent =
   /** fam: the familiar grabbed it (at x, z); the elf's own burst comes as a second event. */
   | { e: 'pickup'; p: number; x: number; z: number; fam?: number }
   | { e: 'hurt' }
+  /** A damage number: k 0 hit, 1 heavy hit, 2 the elf hurt. */
+  | { e: 'num'; x: number; y: number; z: number; n: number; k: number }
   | { e: 'shield'; x: number; z: number }
   | { e: 'banner'; text: string }
   | { e: 'slam'; x: number; z: number; r: number }

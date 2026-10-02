@@ -17,6 +17,7 @@ import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from
 import { Monster } from './monsters';
 import { Resources, WIND_WALK_SECONDS } from './abilities';
 import { DIFFICULTIES, difficulty, scaledDamage } from './difficulty';
+import { DamageNumbers } from './numbers';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { FamiliarCommand } from '../net/protocol';
 import { pickAimTarget } from './combat';
@@ -131,6 +132,11 @@ export class Game {
   /** Jade Ward: seconds left on the healing circle around the elf (and its mesh). */
   private ward = 0;
   private readonly wardRing: THREE.Group;
+  /** Floating damage numbers, camera shake (metres, decays), and hit-stop (seconds the action freezes). */
+  private readonly numbers = new DamageNumbers();
+  private shake = 0;
+  private hitStop = 0;
+  private readonly shakeOffset = new THREE.Vector3();
   /** The elf's mana and stamina. */
   private readonly resources = new Resources();
   /** Wind Walk: seconds of invisibility left, and where the elf vanished (enemies head there). */
@@ -166,7 +172,7 @@ export class Game {
     );
     this.shieldBubble.visible = false;
     this.wardRing = jadeRing(SPELLS.ward.radius);
-    this.scene.add(this.wardRing);
+    this.scene.add(this.wardRing, this.numbers.group);
     this.scene.add(...Object.values(familiars).map((b) => b.group));
     this.scene.add(elf.group, this.springPools.group, this.enemies.group, this.arrows.group, this.globs.group, this.pickups.group, this.shieldBubble, this.effects.mesh, this.effects.rings, this.telegraph.group);
 
@@ -314,12 +320,22 @@ export class Game {
 
   private frame(timestamp: number): void {
     this.timer.update(timestamp);
-    this.accumulator += Math.min(this.timer.getDelta(), MAX_FRAME);
+    const real = Math.min(this.timer.getDelta(), MAX_FRAME);
+    if (this.hitStop > 0) this.hitStop = Math.max(0, this.hitStop - real); // the action freezes for a beat
+    else this.accumulator += real;
     while (this.accumulator >= STEP) {
       this.update(STEP);
       this.accumulator -= STEP;
     }
-    if (!this.headless) this.renderer.render(this.scene, this.camera);
+    this.numbers.update(real);
+    if (!this.headless) {
+      // Camera shake: a jitter that fades out (applied only for this render).
+      this.shake = Math.max(0, this.shake - real * 2.2);
+      this.shakeOffset.set((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+      this.camera.position.add(this.shakeOffset);
+      this.renderer.render(this.scene, this.camera);
+      this.camera.position.sub(this.shakeOffset);
+    }
     this.onFrame?.();
   }
 
@@ -698,9 +714,21 @@ export class Game {
   }
 
   private damage(slime: Enemy, dirX: number, dirZ: number, amount = HERO.arrowDamage): void {
+    const hpBefore = slime.hp;
     const killed = slime.hurt(amount, dirX, dirZ);
     const y = slime.radius;
     const big = slime.radius >= 1.2;
+    const dealt = Math.max(0, hpBefore - Math.max(0, slime.hp));
+    if (dealt > 0) {
+      const heavy = amount >= 20;
+      this.numbers.show(dealt, slime.x, y * 1.6 + 1, slime.z, heavy ? 'big' : 'hit');
+      this.events.push({ e: 'num', x: q(slime.x), y: q(y * 1.6 + 1), z: q(slime.z), n: Math.round(dealt), k: heavy ? 1 : 0 });
+    }
+    if (killed && slime.bossName) {
+      // A boss falls: freeze for a beat, and shake.
+      this.hitStop = 0.28;
+      this.shake = Math.max(this.shake, 0.9);
+    }
     if (killed) {
       this.score += Math.round(slime.score * DIFFICULTIES[difficulty()].score);
       this.hud.setScore(this.score);
@@ -863,7 +891,13 @@ export class Game {
       this.events.push({ e: 'shield', x: q(p.x), z: q(p.z) });
       return;
     }
-    this.health -= scaledDamage(amount);
+    const taken = scaledDamage(amount);
+    this.health -= taken;
+    this.numbers.show(taken, p.x, 2.4, p.z, 'hurt');
+    this.events.push({ e: 'num', x: q(p.x), y: 2.4, z: q(p.z), n: taken, k: 2 });
+    // Heavy hits shake the camera and freeze the action for a beat.
+    this.shake = Math.max(this.shake, Math.min(0.7, taken / 40));
+    if (taken >= 20) this.hitStop = Math.max(this.hitStop, 0.07);
     this.invulnerable = HERO.hurtInvulnerable;
     this.player.knockback(dirX, dirZ, knock);
     this.hud.setHealth(Math.max(0, this.health));
@@ -1043,6 +1077,9 @@ export class Game {
       this.effects.ring(s.x, s.z, red, s.r);
       this.effects.burst(s.x, 0.4, s.z, red, 40, 8, 0.18);
       this.sfx.land();
+      // Big slams shake the ground — more the closer the elf is.
+      const d = Math.hypot(this.player.position.x - s.x, this.player.position.z - s.z);
+      this.shake = Math.max(this.shake, Math.max(0, 0.6 - d * 0.03));
     } else {
       this.effects.burst(s.x, 0.6, s.z, new THREE.Color(0xffffff), 8, 3, 0.1);
     }

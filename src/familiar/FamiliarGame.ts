@@ -20,6 +20,7 @@ import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, pounceLanding, type Famil
 import { POWER_CODES, SLIME_KIND_CODES, SnapshotBuffer, type GameEvent, type Snapshot } from '../net/snapshot';
 import type { FamiliarLink, FamiliarStatus } from '../net/client';
 import { FamiliarHud } from './hud';
+import { DamageNumbers } from '../game/numbers';
 import { jadeRing } from '../game/Game';
 
 const FOV = 45;
@@ -69,6 +70,7 @@ export class FamiliarGame {
   private readonly sfx = new Sfx();
   private readonly shieldBubble: THREE.Mesh;
   private readonly famRing: THREE.Mesh;
+  private readonly numbers = new DamageNumbers();
   /** The iguana's Jade Ward around the elf. */
   private readonly wardRing = jadeRing(SPELLS.ward.radius);
   private readonly rangeRing: THREE.Mesh;
@@ -128,6 +130,7 @@ export class FamiliarGame {
       this.shieldBubble,
       this.famRing,
       this.wardRing,
+      this.numbers.group,
       this.rangeRing,
       this.pounceMark,
       this.telegraph.group,
@@ -269,6 +272,9 @@ export class FamiliarGame {
           this.effects.ring(ev.x, ev.z, ev.c, ev.r);
           this.effects.burst(ev.x, 1.5, ev.z, new THREE.Color(ev.c), 16, 4, 0.1);
           break;
+        case 'num':
+          this.numbers.show(ev.n, ev.x, ev.y, ev.z, ev.k === 2 ? 'hurt' : ev.k === 1 ? 'big' : 'hit');
+          break;
         case 'door':
           this.sfx.door();
           this.hud.popups.toast('↑ The elf can head through the north door', 0xffe0a0);
@@ -402,6 +408,7 @@ export class FamiliarGame {
     const s = this.buffer.sample(performance.now() / 1000);
     if (s) this.apply(s, dt);
     this.effects.update(dt);
+    this.numbers.update(dt);
     this.updateStick();
     this.updateCamera(dt);
     this.updateFades(dt);
