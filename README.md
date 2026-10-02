@@ -147,7 +147,8 @@ Two roles:
   your finger (drag further to run faster, let go to stop); it bites any enemy it touches. It can grab power-ups too — they go
   straight to the elf. Familiars
   can't be hurt: monsters only ever go for the elf.
-  Spell buttons have their own cooldowns.
+  Spell buttons have their own cooldowns. The corners button in the top bar puts the browser in **full screen** (tap again
+  to leave); it's hidden where the browser can't do it — iPhone Safari, or when opened from the home screen, which is already full screen.
 - **Practice room:** type **TEST** as the code (or open `…/?join=TEST`) to practise as the familiar on your own:
   no server, no other player, no monsters. The elf stands in the Woodland (a little hurt, so heals show),
   power-ups drop every few seconds, and the creature can be swapped any time. The **👾 Monsters**

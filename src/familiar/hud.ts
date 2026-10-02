@@ -1,6 +1,7 @@
 import { POWER_CODES } from '../net/snapshot';
 import type { Snapshot } from '../net/snapshot';
 import { normalizeCode } from '../net/protocol';
+import { fullscreenSupported, isFullscreen, onFullscreenChange, toggleFullscreen } from '../ui/fullscreen';
 import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey } from '../ui/shared';
 import { ROOMS, runLabel } from '../world/rooms';
 import { enemyName, type EnemyKind } from '../game/enemies';
@@ -10,6 +11,11 @@ import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, type FamiliarKind, type S
 export type Blocking = 'start' | 'pick' | 'no-room' | 'room-full' | 'hero-left' | null;
 
 const BASE = import.meta.env.BASE_URL;
+
+/** Four corner brackets (drawn, so it looks the same on every device); they point inward while full screen. */
+const FS_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+  <g class="fs-open"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></g>
+  <g class="fs-close"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></g></svg>`;
 
 /** 1–3 pips for how fast a creature moves. */
 function speedPips(speed: number): string {
@@ -78,6 +84,7 @@ export class FamiliarHud {
          <div class="right">
            <button type="button" class="role-badge parade-btn" data-f-parade hidden>👾 Monsters</button>
            <button type="button" class="role-badge" data-f-change title="Change creature">🐾 ${code}</button>
+           <button type="button" class="role-badge fs-btn" data-f-fullscreen title="Full screen" aria-label="Full screen" hidden>${FS_ICON}</button>
            <div class="score" data-f-score>0</div>
          </div>
        </div>
@@ -155,6 +162,19 @@ export class FamiliarHud {
       this.onParade?.(kind);
       this.paradePanel.hidden = true;
     });
+
+    // Full screen: a toggle in the top bar (hidden where the browser can't, e.g. iPhone Safari).
+    const fsBtn = root.querySelector<HTMLButtonElement>('[data-f-fullscreen]')!;
+    if (fullscreenSupported()) {
+      fsBtn.hidden = false;
+      const show = (on: boolean) => {
+        fsBtn.classList.toggle('on', on);
+        fsBtn.title = fsBtn.ariaLabel = on ? 'Exit full screen' : 'Full screen';
+      };
+      fsBtn.addEventListener('click', () => void toggleFullscreen());
+      onFullscreenChange(show);
+      show(isFullscreen());
+    }
 
     this.changeBtn.addEventListener('click', () => {
       if (this.canChange && this.blocking === null) this.setBlocking('pick');

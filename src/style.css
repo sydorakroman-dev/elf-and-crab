@@ -358,6 +358,12 @@ kbd {
 .fam-hud .role-badge .chg { opacity: 0.7; font-size: 11px; }
 .fam-hud .role-badge.locked { opacity: 0.55; cursor: default; }
 .fam-hud .role-badge.locked .chg { display: none; }
+.fam-hud .fs-btn { display: inline-flex; align-items: center; padding: 4px 8px; letter-spacing: 0; }
+.fam-hud .fs-btn[hidden] { display: none; }
+.fam-hud .fs-btn .fs-close { display: none; }
+.fam-hud .fs-btn.on .fs-open { display: none; }
+.fam-hud .fs-btn.on .fs-close { display: inline; }
+.fam-hud .fs-btn.on { background: rgba(111, 232, 214, 0.25); }
 
 /* Creature picker */
 .picker { width: min(1240px, 100%); max-height: 100%; overflow-y: auto; text-align: center; cursor: default; padding-block: 8px; }
