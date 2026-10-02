@@ -13,8 +13,8 @@ export class Model {
     this.parts = [];
   }
 
-  /** Adds a named part: geometry, colour (sRGB hex), transform; options: glow, smooth shading, roughness, metal, double-sided. */
-  add(name, geo, color, { pos = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1], glow = 0, smooth = false, roughness = 0.85, metal = 0, double = false } = {}) {
+  /** Adds a named part: geometry, colour (sRGB hex), transform; options: glow, smooth shading, roughness, metal, double-sided, opacity (glass, water). */
+  add(name, geo, color, { pos = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1], glow = 0, smooth = false, roughness = 0.85, metal = 0, double = false, opacity = 1 } = {}) {
     const g = geo.clone();
     const m = new THREE.Matrix4().compose(
       new THREE.Vector3(...pos),
@@ -22,7 +22,7 @@ export class Model {
       new THREE.Vector3(...(typeof scale === 'number' ? [scale, scale, scale] : scale)),
     );
     g.applyMatrix4(m);
-    this.parts.push({ name, geo: g, color, glow, smooth, roughness, metal, double });
+    this.parts.push({ name, geo: g, color, glow, smooth, roughness, metal, double, opacity });
     return this;
   }
 
@@ -212,13 +212,14 @@ export function toGLB(model, generator = 'Elf & Crab model builder') {
       json.accessors.push({ bufferView: iv, componentType: 5125, count: geo.index.count, type: 'SCALAR' });
       prim.indices = json.accessors.length - 1;
     }
-    const key = `${part.color}:${part.glow}:${part.roughness}:${part.metal}:${part.double}`;
+    const key = `${part.color}:${part.glow}:${part.roughness}:${part.metal}:${part.double}:${part.opacity}`;
     if (!matIndex.has(key)) {
       const c = new THREE.Color(part.color);
       const lin = [srgbToLinear(c.r), srgbToLinear(c.g), srgbToLinear(c.b)];
       json.materials.push({
         name: `c${part.color.toString(16)}`,
-        pbrMetallicRoughness: { baseColorFactor: [...lin, 1], metallicFactor: part.metal, roughnessFactor: part.roughness },
+        pbrMetallicRoughness: { baseColorFactor: [...lin, part.opacity], metallicFactor: part.metal, roughnessFactor: part.roughness },
+        ...(part.opacity < 1 ? { alphaMode: 'BLEND' } : {}),
         ...(part.glow ? { emissiveFactor: lin.map((v) => v * part.glow) } : {}),
         ...(part.double ? { doubleSided: true } : {}),
       });

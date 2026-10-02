@@ -88,6 +88,10 @@ export interface Enemy {
   hurt(amount: number, dirX: number, dirZ: number): boolean;
   stun(seconds: number): void;
   calm(seconds: number): void;
+  /** Pushed about `metres` along (dirX, dirZ) — less for heavy foes. */
+  shove(dirX: number, dirZ: number, metres: number): void;
+  /** Slowed to `factor` of its speed for `seconds` (drenched). */
+  soak(seconds: number, factor: number): void;
   setPosition(x: number, z: number): void;
   /** Called when its contact hit the hero (e.g. the wolf backs off). */
   onHitTarget(): void;

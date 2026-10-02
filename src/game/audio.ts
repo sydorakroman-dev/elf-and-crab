@@ -129,6 +129,17 @@ export class Sfx {
     [0, 4, 7, 11, 14].forEach((semi, i) => this.tone('sine', 523 * Math.pow(2, semi / 12), 523 * Math.pow(2, semi / 12), 0.8, 0.05, i * 0.11));
   }
 
+  /** Bubble Shield: a few bubbly pops. */
+  bubble(): void {
+    [0, 1, 2, 3].forEach((i) => this.tone('sine', 500 + i * 180, 900 + i * 220, 0.08, 0.07, i * 0.07));
+  }
+
+  /** Water Jet: a gushing splash. */
+  jet(): void {
+    this.hiss(0.45, 0.16, 1800, 'lowpass');
+    this.tone('sine', 300, 120, 0.3, 0.06);
+  }
+
   /** The wolf's war howl: a rising, wavering cry. */
   howl(): void {
     this.tone('sawtooth', 220, 440, 0.5, 0.05);

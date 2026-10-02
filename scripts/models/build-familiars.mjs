@@ -1,6 +1,6 @@
 /**
- * Builds the three familiars as GLBs, after their card art (public/art/*.webp): the crab, the
- * capybara and the wolf, each with the green cape and silver leaf clasp, and a circlet with a teal
+ * Builds the familiars as GLBs, after their card art (public/art/): the crab, the capybara, the
+ * wolf and the fishbowl, each with the green cape and silver leaf clasp, and a circlet with a teal
  * gem. Rounded, smooth-shaded parts for the cartoon (toon + outline) look.
  *
  * Crab: model units, ~4.4 tall, scaled in game (src/player/crab.ts reads its part names:
@@ -8,7 +8,7 @@
  * Capybara and wolf: metres, feet at y = 0, facing +Z (src/player/beasts.ts rigs them by name:
  *   leg_<x>_<z>* (x: −1 left / 1 right, z: −1 back / 1 front), head*, tail*, cape*).
  *
- *   node scripts/models/build-familiars.mjs   → public/models/{crab,capybara,wolf}.glb
+ *   node scripts/models/build-familiars.mjs   → public/models/{crab,capybara,wolf,fishbowl}.glb
  */
 import * as THREE from 'three';
 import fs from 'node:fs';
@@ -269,8 +269,88 @@ function wolf() {
   return m;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Fishbowl (metres; ~1.3 m tall): a goldfish in a glass bowl, carried on four brass legs.
+
+function fishbowl() {
+  const m = new Model('fishbowl', 0);
+  const BRASS = 0xf2c44f;
+  const BRASS_DARK = 0xd09a35;
+  const EMERALD = 0x2fe07a;
+  const GLASS = 0xbfe8ff;
+  const WATER = 0x4fb4ff;
+  const FISH = 0xff9a1a;
+  const FIN = 0xffb84a;
+  const metal = { smooth: true, metal: 0.55, roughness: 0.35 };
+
+  // Brass base: a band holding the bowl, rivets, and an emerald set in a pointed mount at the front.
+  m.add('base_band', new THREE.CylinderGeometry(0.42, 0.36, 0.16, 32, 1, true), BRASS, { ...metal, pos: [0, 0.6, 0], double: true });
+  m.add('base_plate', new THREE.CylinderGeometry(0.36, 0.3, 0.06, 32), BRASS_DARK, { ...metal, pos: [0, 0.52, 0] });
+  m.add('base_lip', new THREE.TorusGeometry(0.42, 0.025, 8, 36), BRASS_DARK, { ...metal, pos: [0, 0.68, 0], rot: [Math.PI / 2, 0, 0] });
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + 0.3;
+    m.add(`base_rivet_${i}`, new THREE.SphereGeometry(0.022, 8, 6), BRASS_DARK, { ...metal, pos: [Math.sin(a) * 0.405, 0.6, Math.cos(a) * 0.405] });
+  }
+  m.add('base_mount', new THREE.OctahedronGeometry(0.08, 0), BRASS_DARK, { ...metal, pos: [0, 0.6, 0.41], scale: [0.9, 1.3, 0.4] });
+  m.add('base_gem', new THREE.OctahedronGeometry(0.055, 1), EMERALD, { pos: [0, 0.6, 0.44], scale: [0.85, 1.25, 0.5], glow: 0.7, roughness: 0.2 });
+  m.both((s) => m.add(`base_rune_${s}`, new THREE.OctahedronGeometry(0.025, 0), EMERALD, { pos: [s * 0.13, 0.6, 0.395], scale: [1, 1, 0.3], glow: 1.1 }));
+
+  // The bowl: open-topped glass, a thicker rim, water up to a wavy surface, pebbles and seaweed.
+  const R = 0.46;
+  const CY = 0.98;
+  m.add('bowl_glass', new THREE.SphereGeometry(R, 36, 26, 0, Math.PI * 2, 0.42, Math.PI - 0.42), GLASS, { smooth: true, opacity: 0.18, roughness: 0.05, double: true, pos: [0, CY, 0] });
+  m.add('bowl_rim', new THREE.TorusGeometry(R * Math.sin(0.42), 0.035, 10, 40), GLASS, { smooth: true, opacity: 0.6, roughness: 0.05, pos: [0, CY + R * Math.cos(0.42), 0], rot: [Math.PI / 2, 0, 0] });
+  const waterTop = 0.62;
+  m.add('bowl_water', new THREE.SphereGeometry(R * 0.96, 32, 22, 0, Math.PI * 2, waterTop, Math.PI - waterTop), WATER, { smooth: true, opacity: 0.3, pos: [0, CY, 0] });
+  m.add('bowl_surface', new THREE.CircleGeometry(R * 0.96 * Math.sin(waterTop), 40).rotateX(-Math.PI / 2), 0xc4ecff, { opacity: 0.45, pos: [0, CY + R * 0.96 * Math.cos(waterTop), 0], double: true });
+  m.add('bowl_glint', new THREE.SphereGeometry(1, 12, 8), 0xffffff, { pos: [-0.24, 1.18, 0.31], rot: [0, 0, 0.6], scale: [0.03, 0.09, 0.015], glow: 0.8, opacity: 0.85 });
+  [[-0.18, 0.1], [0.05, -0.15], [0.2, 0.12], [-0.05, 0.2], [0.15, -0.05], [-0.22, -0.12]].forEach(([x, z], i) => {
+    m.add(`bowl_pebble_${i}`, new THREE.DodecahedronGeometry(0.07 + (i % 3) * 0.015, 0), i % 2 ? 0x2c4a7a : 0x3d5f94, { pos: [x, 0.6 + 0.04, z], rot: [i, i * 2, 0], scale: [1, 0.6, 1] });
+  });
+  [[-0.2, -0.05], [0.18, -0.12], [0.08, 0.16]].forEach(([x, z], i) => {
+    const h = 0.32 + i * 0.06;
+    m.add(`bowl_weed_${i}`, taperTube([[x, 0.6, z], [x + 0.04, 0.6 + h * 0.4, z], [x - 0.03, 0.6 + h * 0.75, z], [x + 0.02, 0.6 + h, z]], (t) => 0.035 * (1 - t) + 0.008, { segments: 14, radial: 6 }), 0x3fae5a, { ...smooth, scale: [1, 1, 0.5] });
+  });
+  [[0.16, 1.12, 0.25, 0.03], [0.22, 1.24, 0.2, 0.022], [0.12, 1.3, 0.24, 0.016]].forEach(([x, y, z, r], i) => {
+    m.add(`bowl_bubble_${i}`, new THREE.SphereGeometry(r, 10, 8), 0xe8fbff, { smooth: true, opacity: 0.7, pos: [x, y, z], glow: 0.3 });
+  });
+
+  // The goldfish (head_*: it can dart about inside the bowl; tail_*: its tail fin wags).
+  const F = [0, 0.98, 0.02];
+  const fishBody = new THREE.SphereGeometry(1, 26, 18);
+  deform(fishBody, (v) => {
+    if (v.z < 0) v.y *= 1 + v.z * 0.35; // taper toward the tail
+  });
+  m.add('head_fish', fishBody, FISH, { ...smooth, pos: F, scale: [0.12, 0.15, 0.2] });
+  m.add('head_scales', new THREE.SphereGeometry(1, 16, 12, Math.PI * 0.6, Math.PI * 0.8, 0.9, 1.2), 0xff8a10, { ...smooth, pos: [F[0], F[1] - 0.01, F[2] - 0.05], scale: [0.125, 0.13, 0.17] });
+  m.add('head_dorsal', taperTube([[0, F[1] + 0.13, F[2] + 0.06], [0, F[1] + 0.23, F[2] - 0.02], [0, F[1] + 0.2, F[2] - 0.1], [0, F[1] + 0.13, F[2] - 0.12]], (t) => 0.035 * (1 - t * 0.6), { segments: 14, radial: 8 }), FIN, { ...smooth, scale: [0.35, 1, 1] });
+  m.both((s) => {
+    m.add(`head_pectoral_${s}`, taperTube([[s * 0.1, F[1] - 0.06, F[2] + 0.02], [s * 0.17, F[1] - 0.12, F[2] - 0.03], [s * 0.15, F[1] - 0.16, F[2] - 0.08]], (t) => 0.04 * (1 - t) + 0.01, { segments: 10, radial: 8 }), FIN, { ...smooth, scale: [1, 1, 0.5] });
+  });
+  eyes(m, 'head_', { at: [0, F[1] + 0.05, F[2] + 0.15], spread: 0.065, r: 0.055, turn: 0.35, look: [0, 0.1] });
+  m.add('head_mouth', tube([[-0.04, F[1] - 0.05, F[2] + 0.185], [0, F[1] - 0.065, F[2] + 0.198], [0.04, F[1] - 0.05, F[2] + 0.185]], 0.008, 10, 5), INK, smooth);
+  const tail = taperTube([[0, F[1], F[2] - 0.17], [0, F[1] + 0.05, F[2] - 0.27], [0, F[1] + 0.12, F[2] - 0.34]], (t) => 0.03 + t * 0.03, { segments: 12, radial: 8 });
+  m.add('tail_fin_top', tail, FIN, { ...smooth, scale: [0.4, 1, 1] });
+  m.add('tail_fin_bottom', taperTube([[0, F[1] - 0.01, F[2] - 0.17], [0, F[1] - 0.07, F[2] - 0.26], [0, F[1] - 0.12, F[2] - 0.31]], (t) => 0.03 + t * 0.025, { segments: 12, radial: 8 }), FIN, { ...smooth, scale: [0.4, 1, 1] });
+
+  // Four brass legs at the corners: emerald hip joint (the leg's pivot), a straight brass strut,
+  // and a domed foot.
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      const hip = [sx * 0.3, 0.56, sz * 0.3];
+      const foot = [sx * 0.5, 0.1, sz * 0.5];
+      m.add(`leg_${sx}_${sz}`, new THREE.SphereGeometry(0.075, 16, 12), BRASS_DARK, { ...metal, pos: hip });
+      m.add(`leg_${sx}_${sz}_gem`, new THREE.SphereGeometry(0.05, 14, 10), EMERALD, { smooth: true, pos: [hip[0] * 1.2, hip[1], hip[2] * 1.2], glow: 0.6, roughness: 0.2 });
+      m.add(`leg_${sx}_${sz}_strut`, limb(hip, foot, 0.045, 0.04), BRASS, metal);
+      m.add(`leg_${sx}_${sz}_knee`, new THREE.SphereGeometry(0.05, 12, 10), BRASS_DARK, { ...metal, pos: [(hip[0] + foot[0]) / 2, (hip[1] + foot[1]) / 2, (hip[2] + foot[2]) / 2] });
+      m.add(`leg_${sx}_${sz}_foot`, new THREE.SphereGeometry(0.12, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), BRASS, { ...metal, pos: [foot[0], 0.02, foot[2]], scale: [1, 0.75, 1] });
+      m.add(`leg_${sx}_${sz}_sole`, new THREE.CylinderGeometry(0.125, 0.125, 0.025, 18), BRASS_DARK, { ...metal, pos: [foot[0], 0.012, foot[2]] });
+    }
+  return m;
+}
+
 fs.mkdirSync(OUT, { recursive: true });
-for (const build of [crab, capybara, wolf]) {
+for (const build of [crab, capybara, wolf, fishbowl]) {
   const model = build();
   if (model.height) model.normalise();
   const file = path.join(OUT, `${model.name}.glb`);

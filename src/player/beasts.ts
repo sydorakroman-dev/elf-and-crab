@@ -4,7 +4,7 @@ import { Crab } from './crab';
 import { attachAtPivot, bounds, loadParts } from './rig';
 import { toonify } from './toon';
 
-/** Anything that can be a familiar's body: the crab, the capybara, the wolf. */
+/** Anything that can be a familiar's body: the crab, the capybara, the wolf, the goldfish. */
 export interface FamiliarBody {
   readonly group: THREE.Group;
   onStep?: (strength: number) => void;
@@ -14,11 +14,11 @@ export interface FamiliarBody {
   pinch(): void;
 }
 
-/** Small or thin parts that shouldn't get an outline. */
-const NO_OUTLINE = /pupil|shine|nostril|mouth|smile|gem|clasp|circlet|magic_|brow|lid_/;
+/** Small or thin parts that shouldn't get an outline (and the fishbowl's water, pebbles and bubbles). */
+const NO_OUTLINE = /pupil|shine|nostril|mouth|smile|gem|clasp|circlet|magic_|brow|lid_|rune|rivet|bowl_(glass|water|surface|glint|pebble|weed|bubble)/;
 
 /**
- * A capybara or wolf (public/models/<kind>.glb, built by scripts/models/build-familiars.mjs),
+ * A capybara, wolf or goldfish (public/models/<kind>.glb, built by scripts/models/build-familiars.mjs),
  * rigged in code by part name: four legs swing from hip and shoulder in a diagonal gait, the head
  * lunges to bite, the tail wags, the cape flutters with speed; the body bobs. Front faces +Z;
  * origin at the feet; model units are metres.
@@ -103,10 +103,11 @@ const ORIGIN = new THREE.Vector3();
 
 /** Loads a body for every familiar kind. */
 export async function loadFamiliarBodies(base: string, crabScale: number): Promise<Record<FamiliarKind, FamiliarBody>> {
-  const [crab, capy, wolf] = await Promise.all([
+  const [crab, capy, wolf, fish] = await Promise.all([
     Crab.load(`${base}models/crab.glb`, crabScale),
     loadParts(`${base}models/capybara.glb`),
     loadParts(`${base}models/wolf.glb`),
+    loadParts(`${base}models/fishbowl.glb`),
   ]);
-  return { crab, capybara: new Quadruped(capy), wolf: new Quadruped(wolf) };
+  return { crab, capybara: new Quadruped(capy), wolf: new Quadruped(wolf), goldfish: new Quadruped(fish) };
 }

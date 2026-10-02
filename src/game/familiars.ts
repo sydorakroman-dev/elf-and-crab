@@ -2,11 +2,11 @@ import type { Point } from './combat';
 
 /** The familiar creatures a second player can pick, and their spells. Pure data + math; unit tested. */
 
-export type FamiliarKind = 'crab' | 'capybara' | 'wolf';
-export type SpellId = 'burst' | 'shell' | 'spring' | 'calm' | 'pounce' | 'howl';
+export type FamiliarKind = 'crab' | 'capybara' | 'wolf' | 'goldfish';
+export type SpellId = 'burst' | 'shell' | 'spring' | 'calm' | 'pounce' | 'howl' | 'bubble' | 'jet';
 
-export const FAMILIAR_KINDS: FamiliarKind[] = ['crab', 'capybara', 'wolf'];
-export const SPELL_IDS: SpellId[] = ['burst', 'shell', 'spring', 'calm', 'pounce', 'howl']; // index = wire code: append only
+export const FAMILIAR_KINDS: FamiliarKind[] = ['crab', 'capybara', 'wolf', 'goldfish']; // index = wire code: append only
+export const SPELL_IDS: SpellId[] = ['burst', 'shell', 'spring', 'calm', 'pounce', 'howl', 'bubble', 'jet']; // index = wire code: append only
 
 export interface FamiliarDef {
   name: string;
@@ -68,6 +68,19 @@ export const FAMILIARS: Record<FamiliarKind, FamiliarDef> = {
     spells: ['pounce', 'howl'],
     blurb: 'Fast hunter. Big damage.',
   },
+  goldfish: {
+    name: 'Goldfish',
+    emoji: '🐠',
+    art: 'art/goldfish.jpg',
+    color: 0xffb04d,
+    speed: 7,
+    gait: 'forward',
+    biteDamage: 7,
+    biteCooldown: 0.9,
+    radius: 0.65,
+    spells: ['bubble', 'jet'],
+    blurb: 'A bowl on brass legs. Shields and splashes.',
+  },
 };
 
 export interface SpellDef {
@@ -87,6 +100,8 @@ export const SPELLS: Record<SpellId, SpellDef> = {
   spring: { name: 'Soothing Spring', icon: '♨️', cooldown: 10, radius: 3, duration: 6, description: 'A warm pool: enemies in it slow down, the elf heals a heart in it.' },
   calm: { name: 'Calm Aura', icon: '🌸', cooldown: 8, radius: 7, duration: 5, description: 'Enemies near you stop chasing and wander off.' },
   pounce: { name: 'Pounce', icon: '🐾', cooldown: 5, radius: 0, duration: 0.35, description: 'Leap the way you are heading, hitting every enemy on the way.' },
+  bubble: { name: 'Bubble Shield', icon: '🫧', cooldown: 14, radius: 0, duration: 0, description: 'The elf gets a bubble that blocks the next 2 hits.' },
+  jet: { name: 'Water Jet', icon: '💦', cooldown: 8, radius: 0, duration: 3, description: 'A blast of water ahead knocks enemies back and slows them.' },
   howl: { name: 'War Howl', icon: '🌕', cooldown: 14, radius: 8, duration: 3, description: 'Enemies around you panic and flee; the elf gets Rapid fire for a while.' },
 };
 
@@ -99,6 +114,21 @@ export const POUNCE_WIDTH = 0.8;
 /** War Howl: the elf's Rapid fire lasts this long; bosses (who don't panic) flinch this long. */
 export const HOWL_RAPID_SECONDS = 5;
 export const HOWL_BOSS_FLINCH = 1.2;
+/** Bubble Shield: hits the elf's bubble absorbs. */
+export const BUBBLE_HITS = 2;
+/** Water Jet: how far ahead and how wide it reaches (m), damage, push (m), and the slow. */
+export const JET = { length: 7, width: 2.6, damage: 6, shove: 5, slow: 0.5 };
+
+/** True if a point lies in the water jet fired from `from` along `heading` (yaw). */
+export function inJet(from: Point, heading: number, p: Point, radius: number): boolean {
+  const dx = Math.sin(heading);
+  const dz = Math.cos(heading);
+  const rx = p.x - from.x;
+  const rz = p.z - from.z;
+  const along = rx * dx + rz * dz;
+  const side = Math.abs(rx * dz - rz * dx);
+  return along > -radius && along <= JET.length + radius && side <= JET.width / 2 + radius;
+}
 
 /** Seconds left on each spell's cooldown. */
 export class SpellCooldowns {

@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { FAMILIARS, FAMILIAR_KINDS, POUNCE_RANGE, SPELLS, SPELL_IDS, SpellCooldowns, distanceToSegment, pounceLanding } from './familiars';
+import { FAMILIARS, FAMILIAR_KINDS, JET, POUNCE_RANGE, SPELLS, SPELL_IDS, inJet, SpellCooldowns, distanceToSegment, pounceLanding } from './familiars';
 
 describe('familiar roster', () => {
-  it('has three creatures with distinct speeds and valid spells', () => {
-    expect(FAMILIAR_KINDS).toEqual(['crab', 'capybara', 'wolf']);
+  it('has four creatures with distinct speeds and valid spells', () => {
+    expect(FAMILIAR_KINDS).toEqual(['crab', 'capybara', 'wolf', 'goldfish']);
     const speeds = FAMILIAR_KINDS.map((k) => FAMILIARS[k].speed);
-    expect(new Set(speeds).size).toBe(3);
+    expect(new Set(speeds).size).toBe(4);
     expect(FAMILIARS.wolf.speed).toBeGreaterThan(FAMILIARS.crab.speed);
     expect(FAMILIARS.crab.speed).toBeGreaterThan(FAMILIARS.capybara.speed);
     for (const k of FAMILIAR_KINDS) for (const s of FAMILIARS[k].spells) expect(SPELLS[s]).toBeDefined();
     expect(FAMILIARS.crab.spells).toEqual(['burst', 'shell']);
     expect(FAMILIARS.capybara.spells).toEqual(['spring', 'calm']);
     expect(FAMILIARS.wolf.spells).toEqual(['pounce', 'howl']);
+    expect(FAMILIARS.goldfish.spells).toEqual(['bubble', 'jet']);
   });
 });
 
@@ -61,5 +62,14 @@ describe('distanceToSegment', () => {
     for (const k of Object.keys(FAMILIARS) as (keyof typeof FAMILIARS)[]) expect(FAMILIARS[k].spells).toHaveLength(2);
     expect(FAMILIARS.wolf.spells).toEqual(['pounce', 'howl']);
     expect(SPELL_IDS.slice(0, 5)).toEqual(['burst', 'shell', 'spring', 'calm', 'pounce']);
+  });
+
+  it('the water jet reaches a strip ahead of the goldfish, not behind or to the side', () => {
+    const from = { x: 0, z: 0 };
+    const north = Math.PI; // heading yaw: facing −z
+    expect(inJet(from, north, { x: 0, z: -5 }, 0.5)).toBe(true);
+    expect(inJet(from, north, { x: 0, z: -(JET.length + 2) }, 0.5)).toBe(false);
+    expect(inJet(from, north, { x: 0, z: 4 }, 0.5)).toBe(false);
+    expect(inJet(from, north, { x: 4, z: -3 }, 0.5)).toBe(false);
   });
 });

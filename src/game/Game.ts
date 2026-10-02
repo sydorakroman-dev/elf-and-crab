@@ -12,7 +12,7 @@ import { Globs, PROJECTILES, PROJECTILE_KINDS, type GlobImpact } from './globs';
 import { Effects } from './effects';
 import { Companion } from './companion';
 import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_PER_HP } from './balance';
-import { FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, POUNCE_DAMAGE, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
+import { BUBBLE_HITS, FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, JET, POUNCE_DAMAGE, inJet, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
 import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
 import type { FamiliarCommand } from '../net/protocol';
@@ -46,6 +46,7 @@ const STUN_STAR = new THREE.Color(0xfff27a);
 const CALM_PINK = new THREE.Color(0xffb8dc);
 const SPRING_BLUE = new THREE.Color(0x8fe8f5);
 const HOWL_BLUE = new THREE.Color(0x9fd0ff);
+const WATER_BLUE = new THREE.Color(0x5cc4ff);
 const HEAL_GREEN = 0x7dff8a;
 
 type State = 'ready' | 'playing' | 'over' | 'won';
@@ -110,6 +111,8 @@ export class Game {
   private waveBreak = 0;
   private fireCooldown = 0;
   private invulnerable = 0;
+  /** Hits the shield still absorbs (2 for a Bubble Shield, else 1). */
+  private shieldHits = 0;
   private onFrame?: () => void;
 
   constructor(
@@ -167,6 +170,7 @@ export class Game {
     elf.onStep = (strength) => this.sfx.footstep(strength);
     familiars.crab.onStep = (strength) => this.sfx.scuttle(strength);
     familiars.capybara.onStep = (strength) => this.sfx.footstep(strength * 0.4);
+    familiars.goldfish.onStep = (strength) => this.sfx.scuttle(strength * 0.5);
     familiars.wolf.onStep = (strength) => this.sfx.scuttle(strength * 0.6);
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
@@ -398,6 +402,7 @@ export class Game {
       }
       case 'shell':
         this.powers.add('shield');
+        this.shieldHits = Math.max(this.shieldHits, 1);
         this.effects.burst(p.x, 1.2, p.z, new THREE.Color(POWER_UPS.shield.color), 24, 5, 0.12);
         this.effects.ring(p.x, p.z, POWER_UPS.shield.color, 1.8);
         this.hud.toast('🐚 Shell Shield!', POWER_UPS.shield.color);
@@ -421,6 +426,30 @@ export class Game {
         this.effects.burst(c.x, 0.3, c.z, new THREE.Color(0xb8a98f), 10, 3, 0.1);
         this.sfx.whoosh();
         break;
+      case 'bubble':
+        this.powers.add('shield');
+        this.shieldHits = BUBBLE_HITS;
+        this.effects.burst(p.x, 1.2, p.z, WATER_BLUE, 28, 5, 0.12);
+        this.effects.ring(p.x, p.z, WATER_BLUE, 1.8);
+        this.hud.toast(`🫧 Bubble Shield! (${BUBBLE_HITS} hits)`, 0x8fd4ff);
+        this.sfx.bubble();
+        break;
+      case 'jet': {
+        // A blast of water the way the goldfish faces: knocks foes back and drenches them (slowed).
+        const h = this.companion.facing;
+        const dx = Math.sin(h);
+        const dz = Math.cos(h);
+        for (const s of [...this.enemies.all]) {
+          if (!s.alive || s.hidden || !inJet(c, h, s, s.radius)) continue;
+          this.damage(s, dx, dz, JET.damage);
+          s.shove(dx, dz, JET.shove);
+          s.soak(spell.duration, JET.slow);
+          this.effects.burst(s.x, s.radius, s.z, WATER_BLUE, 8, 4, 0.1);
+        }
+        for (let i = 1; i <= 6; i++) this.effects.burst(c.x + dx * i * 1.15, 0.7, c.z + dz * i * 1.15, WATER_BLUE, 8, 3 + i * 0.3, 0.12);
+        this.sfx.jet();
+        break;
+      }
       case 'howl': {
         // Enemies around panic and run off (calmed: harmless, wandering away); bosses only flinch.
         const near = this.enemies.all.filter((s) => s.alive && !s.hidden && Math.hypot(s.x - c.x, s.z - c.z) <= spell.radius + s.radius);
@@ -440,7 +469,7 @@ export class Game {
         break;
       }
     }
-    this.events.push({ e: 'spell', id: SPELL_IDS.indexOf(id), x: q(c.x), z: q(c.z) });
+    this.events.push({ e: 'spell', id: SPELL_IDS.indexOf(id), x: q(c.x), z: q(c.z), h: q(this.companion.facing) });
   }
 
   /** Soothing Spring pools slow enemies and heal the elf once; burning ground hurts while the elf stands in it. */
@@ -615,6 +644,7 @@ export class Game {
   private updatePowerUps(dt: number): void {
     const p = this.player.position;
     this.powers.tick(dt);
+    if (!this.powers.has('shield')) this.shieldHits = 0;
 
     this.nextPickup -= dt;
     if (this.nextPickup <= 0 && (this.wave > 0 || this.practice)) {
@@ -729,8 +759,9 @@ export class Game {
   private hurtPlayer(amount: number, dirX: number, dirZ: number, knock = 16): void {
     const p = this.player.position;
     if (this.powers.has('shield')) {
-      // The shield takes the hit instead.
-      this.powers.end('shield');
+      // The shield takes the hit instead (a Bubble Shield holds for a second one).
+      this.shieldHits--;
+      if (this.shieldHits <= 0) this.powers.end('shield');
       this.invulnerable = 0.8;
       this.player.knockback(dirX, dirZ, 10);
       this.effects.burst(p.x, 1.2, p.z, new THREE.Color(POWER_UPS.shield.color), 24, 6, 0.14);

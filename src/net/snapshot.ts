@@ -59,7 +59,7 @@ export type GameEvent =
   | { e: 'twang' }
   | { e: 'glob'; x: number; z: number; k?: number }
   /** A familiar spell went off (id: index into SPELL_IDS). */
-  | { e: 'spell'; id: number; x: number; z: number }
+  | { e: 'spell'; id: number; x: number; z: number; h?: number }
   | { e: 'bite' }
   | { e: 'land'; x: number; z: number }
   | { e: 'heal'; x: number; z: number }

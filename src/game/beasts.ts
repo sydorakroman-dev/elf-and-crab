@@ -69,6 +69,9 @@ export class Beast implements Enemy {
   dying = false;
   removed = false;
   slow = 1;
+  /** Drenched (the goldfish's Water Jet): slowed to `soakFactor` for a while. */
+  private soakTimer = 0;
+  private soakFactor = 1;
   telegraph: Telegraph | null = null;
   strike: Strike | null = null;
   summon: Summon | null = null;
@@ -174,6 +177,19 @@ export class Beast implements Enemy {
     if (this.mode !== 'chase') this.setMode('chase', 0);
   }
 
+  /** Shoved about `metres` along (dirX, dirZ) (heavier foes go less far). */
+  shove(dirX: number, dirZ: number, metres: number): void {
+    if (this.dying) return;
+    const v = metres * 8 * Math.min(1, this.def.push / 6); // knockback decays at 8/s: it travels ≈ v / 8
+    this.knock.set(dirX * v, dirZ * v);
+  }
+
+  soak(seconds: number, factor: number): void {
+    if (this.dying) return;
+    this.soakTimer = Math.max(this.soakTimer, seconds);
+    this.soakFactor = factor;
+  }
+
   calm(seconds: number): void {
     if (this.dying || this.kind === 'bear') return; // the bear can't be calmed
     this.calmTimer = Math.max(this.calmTimer, seconds);
@@ -209,6 +225,10 @@ export class Beast implements Enemy {
     p.x += this.knock.x * dt;
     p.z += this.knock.y * dt;
     this.knock.multiplyScalar(Math.exp(-8 * dt));
+    if (this.soakTimer > 0) {
+      this.soakTimer = Math.max(0, this.soakTimer - dt);
+      this.slow = Math.min(this.slow, this.soakFactor);
+    }
 
     let speed = 0;
     if (this.stunTimer > 0) {

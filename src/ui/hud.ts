@@ -63,7 +63,7 @@ export class Hud {
              <canvas class="qr" data-qr width="112" height="112" hidden></canvas>
              <div class="invite-text">
                <div class="invite-title">🐾 Play together</div>
-               <div class="invite-sub">A friend joins as your familiar — crab, capybara or wolf — on a tablet or phone:</div>
+               <div class="invite-sub">A friend joins as your familiar — crab, capybara, wolf or goldfish — on a tablet or phone:</div>
                <div class="code" data-code>····</div>
                <div class="invite-link" data-link></div>
                <div class="invite-status" data-istatus>Connecting to the server…</div>

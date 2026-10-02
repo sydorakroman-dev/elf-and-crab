@@ -71,6 +71,12 @@ export function toonifyMeshes(meshes: Iterable<THREE.Mesh>, noOutline: RegExp): 
     let mat = toon.get(src);
     if (!mat) {
       mat = new THREE.MeshToonMaterial({ color: src.color, emissive: src.emissive, emissiveIntensity: src.emissiveIntensity, gradientMap: sharedGradient, side: src.side });
+      if (src.transparent) {
+        // Glass and water stay see-through.
+        mat.transparent = true;
+        mat.opacity = src.opacity;
+        mat.depthWrite = false;
+      }
       toon.set(src, mat);
     }
     mesh.material = mat;

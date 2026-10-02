@@ -139,6 +139,7 @@ export class FamiliarGame {
     bodies.crab.onStep = (s) => this.sfx.scuttle(s);
     bodies.wolf.onStep = (s) => this.sfx.scuttle(s * 0.6);
     bodies.capybara.onStep = (s) => this.sfx.footstep(s * 0.4);
+    bodies.goldfish.onStep = (s) => this.sfx.scuttle(s * 0.5);
 
     session.onSnapshot = (s) => this.receive(s);
     session.onStatus = (s) => this.setStatus(s);
@@ -212,7 +213,7 @@ export class FamiliarGame {
           this.sfx.spit();
           break;
         case 'spell':
-          this.playSpell(SPELL_IDS[ev.id], ev.x, ev.z, famColor);
+          this.playSpell(SPELL_IDS[ev.id], ev.x, ev.z, famColor, ev.h ?? 0);
           break;
         case 'bite':
           this.currentBody()?.pinch();
@@ -272,7 +273,7 @@ export class FamiliarGame {
     }
   }
 
-  private playSpell(id: (typeof SPELL_IDS)[number] | undefined, x: number, z: number, color: THREE.Color): void {
+  private playSpell(id: (typeof SPELL_IDS)[number] | undefined, x: number, z: number, color: THREE.Color, heading: number): void {
     if (!id) return;
     const spell = SPELLS[id];
     this.currentBody()?.pinch();
@@ -303,6 +304,13 @@ export class FamiliarGame {
       case 'pounce':
         this.effects.burst(x, 0.3, z, new THREE.Color(0xb8a98f), 10, 3, 0.1);
         this.sfx.whoosh();
+        break;
+      case 'bubble':
+        this.sfx.bubble();
+        break;
+      case 'jet':
+        for (let i = 1; i <= 6; i++) this.effects.burst(x + Math.sin(heading) * i * 1.15, 0.7, z + Math.cos(heading) * i * 1.15, new THREE.Color(0x5cc4ff), 8, 3 + i * 0.3, 0.12);
+        this.sfx.jet();
         break;
       case 'howl':
         this.effects.ring(x, z, 0x9fd0ff, spell.radius);
