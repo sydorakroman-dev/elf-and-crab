@@ -16,6 +16,7 @@ import { BUBBLE_HITS, TONGUE_BOSS_FLINCH, WARD, FAMILIARS, FAMILIAR_KINDS, HOWL_
 import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
 import { Resources, WIND_WALK_SECONDS } from './abilities';
+import { DIFFICULTIES, difficulty, scaledDamage } from './difficulty';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { FamiliarCommand } from '../net/protocol';
 import { pickAimTarget } from './combat';
@@ -589,7 +590,7 @@ export class Game {
     const amount = Math.floor(this.burn);
     this.burn -= amount;
     if (this.powers.has('shield')) return; // the shield keeps the flames off
-    this.health -= amount;
+    this.health -= scaledDamage(amount);
     this.hud.setHealth(Math.max(0, this.health));
     this.hud.flashHurt();
     const p = this.player.position;
@@ -701,7 +702,7 @@ export class Game {
     const y = slime.radius;
     const big = slime.radius >= 1.2;
     if (killed) {
-      this.score += slime.score;
+      this.score += Math.round(slime.score * DIFFICULTIES[difficulty()].score);
       this.hud.setScore(this.score);
       this.effects.burst(slime.x, y, slime.z, slime.color, big ? 40 : 22, big ? 8 : 6);
       this.sfx.splat(big);
@@ -862,7 +863,7 @@ export class Game {
       this.events.push({ e: 'shield', x: q(p.x), z: q(p.z) });
       return;
     }
-    this.health -= amount;
+    this.health -= scaledDamage(amount);
     this.invulnerable = HERO.hurtInvulnerable;
     this.player.knockback(dirX, dirZ, knock);
     this.hud.setHealth(Math.max(0, this.health));

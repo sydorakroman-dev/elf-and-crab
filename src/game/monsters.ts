@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { scaledHp } from './difficulty';
 import { clampToArena, pushOutOfCircles, rangeIntent, type Circle } from './combat';
 import { steerMove } from './steer';
 import type { BeastPose } from './beastVisual';
@@ -305,7 +306,7 @@ export class Monster implements Enemy {
     this.radius = this.def.radius;
     this.score = this.def.score;
     this.color = new THREE.Color(COLORS[kind]);
-    this.maxHp = this.hp = this.def.hp;
+    this.maxHp = this.hp = scaledHp(this.def.hp); // per difficulty
     this.bossName = this.def.bossName ?? null;
     this.cooldowns = this.def.attacks.map(() => 0);
     // Shooters open fire a little after arriving, staggered so a group doesn't fire in unison.

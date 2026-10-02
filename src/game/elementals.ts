@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { scaledHp } from './difficulty';
 import { clampToArena, pushOutOfCircles, rangeIntent, type Circle } from './combat';
 import { steerMove } from './steer';
 import type { BeastPose } from './beastVisual';
@@ -92,7 +93,7 @@ export class Elemental implements Enemy {
     this.radius = this.def.radius;
     this.score = this.def.score;
     this.color = new THREE.Color(this.def.color);
-    this.maxHp = this.hp = this.def.hp;
+    this.maxHp = this.hp = scaledHp(this.def.hp); // per difficulty
     // Casters open fire a little after arriving, staggered so a group doesn't fire in unison;
     // brawlers swing as soon as they reach the hero.
     this.cooldown = this.def.style === 'ranged' ? 1 + Math.random() * 1.5 : 0.3;

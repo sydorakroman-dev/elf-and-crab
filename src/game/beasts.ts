@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { scaledHp } from './difficulty';
 import { clampToArena, pushOutOfCircles, type Circle } from './combat';
 import { steerMove } from './steer';
 import { BeastVisual, type BeastPose } from './beastVisual';
@@ -101,7 +102,7 @@ export class Beast implements Enemy {
     this.radius = this.def.radius;
     this.score = this.def.score;
     this.color = new THREE.Color(this.def.color);
-    this.maxHp = this.hp = this.def.hp;
+    this.maxHp = this.hp = scaledHp(this.def.hp); // per difficulty
     this.visual = new BeastVisual(kind);
     this.pose = { x, z, yaw: 0, y: 0, speed: 0, act: 0, mode: 0, flash: 0, stun: 0, death: 0, calm: 0 };
     this.visual.apply(this.pose, 0, 0);

@@ -4,6 +4,7 @@ import type { PowerUpType } from '../game/powerups';
 import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey } from './shared';
 import { normalizeCode } from '../net/protocol';
 import { ActionBar } from './actionbar';
+import { DIFFICULTIES, DIFFICULTY_LIST, difficulty, setDifficulty, type Difficulty } from '../game/difficulty';
 import type { ConnStatus } from '../net/client';
 import QRCode from 'qrcode';
 import { FAMILIARS, type FamiliarKind } from '../game/familiars';
@@ -60,6 +61,7 @@ export class Hud {
            <h1 data-title>Elf &amp; Crab</h1>
            <p data-message>Goblins, the undead, orcs and worse are pouring out of every gate. Fight from the woodland down through the dungeon to the Ash King, the dragon in his lair — alone, or with a friend as your familiar.</p>
            <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
+           <div class="difficulty" data-difficulty>${DIFFICULTY_LIST.map((d) => `<button type="button" data-diff="${d}" title="${DIFFICULTIES[d].blurb}">${DIFFICULTIES[d].icon} ${DIFFICULTIES[d].label}</button>`).join('')}</div>
            <button type="button" data-play>Begin the hunt</button>
            <p class="best" data-best hidden></p>
            <button type="button" class="keys-btn" data-keys>⚙️ Keys</button>
@@ -111,6 +113,7 @@ export class Hud {
     this.codeEl = root.querySelector('[data-code]')!;
     this.linkEl = root.querySelector('[data-link]')!;
     this.inviteStatus = root.querySelector('[data-istatus]')!;
+    this.showDifficulty();
     // Its own layer (not inside the HUD bar), so it sits above the touch controls.
     root.insertAdjacentHTML(
       'beforeend',
@@ -125,6 +128,15 @@ export class Hud {
     });
     // Clicking anywhere on the overlay plays — except inside the invite / join controls.
     this.overlay.addEventListener('click', (e) => {
+      const diff = (e.target as HTMLElement).closest<HTMLElement>('[data-diff]');
+      if (diff) {
+        // Difficulty can change between runs (not while one is paused).
+        if (this.button.textContent !== 'Resume') {
+          setDifficulty(diff.dataset.diff as Difficulty);
+          this.showDifficulty();
+        }
+        return;
+      }
       if ((e.target as HTMLElement).closest('[data-keys]')) {
         this.actionBar.openPanel();
         return;
@@ -147,6 +159,15 @@ export class Hud {
     joinInput.addEventListener('input', () => joinInput.classList.remove('bad'));
   }
 
+  /** Highlights the chosen difficulty; locked (dimmed) while a run is paused. */
+  showDifficulty(): void {
+    const locked = this.button.textContent === 'Resume';
+    for (const b of this.overlay.querySelectorAll<HTMLElement>('[data-diff]')) {
+      b.classList.toggle('on', b.dataset.diff === difficulty());
+      b.toggleAttribute('disabled', locked && b.dataset.diff !== difficulty());
+    }
+  }
+
   /** `inGame`: a run is in progress (so un-pausing resumes it). */
   setPaused(paused: boolean, inGame: boolean): void {
     this.overlay.hidden = !paused;
@@ -161,6 +182,7 @@ export class Hud {
       this.title.textContent = 'Paused';
       this.message.innerHTML = 'The monsters will wait. Probably.';
       this.button.textContent = 'Resume';
+      this.showDifficulty();
     }
   }
 
@@ -247,6 +269,7 @@ export class Hud {
     this.title.textContent = '👑 Victory!';
     this.message.innerHTML = `The Ash King has fallen. You cleared all seven rooms in <strong>${m}:${s}</strong> with <strong>${score}</strong> points${isBest ? ' — a new best!' : '.'}`;
     this.button.textContent = 'Play again';
+    this.showDifficulty();
     this.overlay.hidden = false;
   }
 
@@ -254,6 +277,7 @@ export class Hud {
     this.title.textContent = isBest && score > 0 ? 'New best!' : 'Overwhelmed';
     this.message.innerHTML = `You held out until wave <strong>${wave}</strong> with <strong>${score}</strong> points.`;
     this.button.textContent = 'Try again';
+    this.showDifficulty();
     this.overlay.hidden = false;
   }
 }
