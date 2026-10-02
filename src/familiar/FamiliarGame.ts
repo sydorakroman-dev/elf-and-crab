@@ -31,6 +31,8 @@ const EDGE = 0.86;
 /** …and stay clear of the top bar and the spell buttons (screen space, −1…1, y up). */
 const EDGE_TOP = 0.8;
 const EDGE_BOTTOM = -0.55;
+/** Within this many metres of the south wall, the wall turns half see-through. */
+const SOUTH_WALL_FADE_ZONE = 7;
 const STEER_SEND_INTERVAL = 0.1; // joystick updates at 10 Hz (resent while held)
 const STICK_RADIUS = 60; // px of drag for full speed
 const STICK_DEAD_ZONE = 0.15;
@@ -75,6 +77,8 @@ export class FamiliarGame {
   private camPlaced = false;
   /** Pillars, trees and crystals that fade out when they stand between the camera and the creature. */
   private fadeables: { obj: THREE.Object3D; mats: THREE.Material[]; opacity: number }[] = [];
+  /** The south wall and gate: half see-through while the creature is near it. */
+  private southWall: { mats: THREE.Material[]; opacity: number } = { mats: [], opacity: 1 };
   /** Off-screen pointers to the elf and the boss. */
   private readonly pointers: Record<'elf' | 'boss', { el: HTMLElement; at: THREE.Vector3 | null }> = {
     elf: { el: null!, at: null },
@@ -317,9 +321,9 @@ export class FamiliarGame {
     this.resize();
   }
 
-  /** Gives each occluder its own (fadeable) materials. */
+  /** Gives each occluder (and the south wall) its own fadeable materials. */
   private collectFadeables(): void {
-    this.fadeables = this.dungeon.occluders.map((obj) => {
+    const ownMaterials = (obj: THREE.Object3D) => {
       const mats: THREE.Material[] = [];
       obj.traverse((o) => {
         if (!(o instanceof THREE.Mesh)) return;
@@ -328,25 +332,34 @@ export class FamiliarGame {
         o.material = m;
         mats.push(m);
       });
-      return { obj, mats, opacity: 1 };
-    });
+      return mats;
+    };
+    this.fadeables = this.dungeon.occluders.map((obj) => ({ obj, mats: ownMaterials(obj), opacity: 1 }));
+    this.southWall = { mats: this.dungeon.southWall.flatMap(ownMaterials), opacity: 1 };
   }
 
   /** Fades occluders standing between the camera and what it follows (south of it, or right on top). */
   private updateFades(dt: number): void {
     const f = this.camFocus;
+    // Near the bottom (south) wall, the wall would hide the creature: make it half see-through.
+    const nearSouth = f.z > this.dungeon.half - SOUTH_WALL_FADE_ZONE;
+    this.fade(this.southWall, nearSouth ? 0.5 : 1, dt);
     const camZ = this.camera.position.z;
     for (const item of this.fadeables) {
       const p = item.obj.position;
       const dx = Math.abs(p.x - f.x);
       const inLine = p.z > f.z - 2 && p.z < camZ && dx < 3.5 + (p.z - f.z) * 0.15;
       const target = inLine || Math.hypot(p.x - f.x, p.z - f.z) < 3 ? 0.22 : 1;
-      if (Math.abs(item.opacity - target) < 0.01) continue;
-      item.opacity += (target - item.opacity) * (1 - Math.exp(-10 * dt));
-      for (const m of item.mats) {
-        m.opacity = item.opacity;
-        m.depthWrite = item.opacity > 0.95; // see-through when faded
-      }
+      this.fade(item, target, dt);
+    }
+  }
+
+  private fade(item: { mats: THREE.Material[]; opacity: number }, target: number, dt: number): void {
+    if (Math.abs(item.opacity - target) < 0.01) return;
+    item.opacity += (target - item.opacity) * (1 - Math.exp(-10 * dt));
+    for (const m of item.mats) {
+      m.opacity = item.opacity;
+      m.depthWrite = item.opacity > 0.95; // see-through when faded
     }
   }
 

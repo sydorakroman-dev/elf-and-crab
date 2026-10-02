@@ -124,7 +124,7 @@ Two roles:
 - **Familiar** scans the QR code or opens the link (`…/?join=CODE`) on a tablet, or types the code under
   "Got a code?", then **picks a creature**. The view is third person, following your creature and always facing north;
   arrows at the screen edge point to the elf and the boss when they're off screen, and trees and pillars in the way
-  fade out. Touch anywhere and drag to steer — a virtual joystick appears under
+  fade out, as does the bottom (south) wall — to half see-through — when the creature is near it. Touch anywhere and drag to steer — a virtual joystick appears under
   your finger (drag further to run faster, let go to stop); it bites any enemy it touches. It can grab power-ups too — they go
   straight to the elf. Familiars
   can't be hurt: monsters only ever go for the elf.

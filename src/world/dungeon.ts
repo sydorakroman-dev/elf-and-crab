@@ -59,6 +59,8 @@ export class Dungeon {
   readonly obstacles: Circle[] = [];
   /** Tall things (pillars, trees, crystal clusters) a close camera may need to see through. */
   readonly occluders: THREE.Object3D[] = [];
+  /** The walls (and gate) on the south side, between a south-facing camera and the room. */
+  readonly southWall: THREE.Object3D[] = [];
   /** Just inside each enemy gate — where enemies enter. */
   readonly gates: THREE.Vector3[] = [];
   /** Where the elf arrives (inside the south gate). */
@@ -202,15 +204,19 @@ export class Dungeon {
     const rows = WALL_HEIGHT / brickH;
     const perRow = Math.ceil((span * 2) / brickW) + 1;
     const { wall } = this.room;
-    const bricks = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(brickW - 0.06, brickH - 0.06, WALL_DEPTH),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true }),
-      sides * rows * perRow,
-    );
+    // Two brick meshes: the walls on the south (camera) side get their own, so a view from the
+    // south can make them see-through when they'd hide something.
+    const brickGeo = new THREE.BoxGeometry(brickW - 0.06, brickH - 0.06, WALL_DEPTH);
+    const brickMesh = () => {
+      const mesh = new THREE.InstancedMesh(brickGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true }), sides * rows * perRow);
+      mesh.count = 0; // filled below
+      return mesh;
+    };
+    const northBricks = brickMesh();
+    const southBricks = brickMesh();
     const m = new THREE.Matrix4();
     const rot = new THREE.Matrix4();
     const c = new THREE.Color();
-    let count = 0;
     const voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const trimMat = new THREE.MeshStandardMaterial({ color: this.room.stone, roughness: 0.9, flatShading: true });
     const ironMat = this.room.outdoor
@@ -220,6 +226,8 @@ export class Dungeon {
 
     for (let k = 0; k < sides; k++) {
       const angle = (k * Math.PI * 2) / sides;
+      const south = Math.cos(angle) < -0.01; // this segment's wall faces the room from the south
+      const bricks = south ? southBricks : northBricks;
       rot.makeRotationY(angle);
       // Gates are on the four walls facing north, west, south and east.
       const gateIndex = (k * 4) % sides === 0 ? (k * 4) / sides : -1;
@@ -242,9 +250,9 @@ export class Dungeon {
           } else {
             m.makeTranslation(x, row * brickH + brickH / 2, -(h + WALL_DEPTH / 2)).premultiply(rot);
           }
-          bricks.setMatrixAt(count, m);
-          bricks.setColorAt(count, c.setHSL(wall.h + (rng() - 0.5) * 0.08, wall.s + (rng() - 0.5) * 0.05, wall.l + (rng() - 0.5) * 0.08 - (row === 0 ? 0.03 : 0)));
-          count++;
+          bricks.setMatrixAt(bricks.count, m);
+          bricks.setColorAt(bricks.count, c.setHSL(wall.h + (rng() - 0.5) * 0.08, wall.s + (rng() - 0.5) * 0.05, wall.l + (rng() - 0.5) * 0.08 - (row === 0 ? 0.03 : 0)));
+          bricks.count++;
         }
       }
       if (throneWall) continue;
@@ -288,11 +296,14 @@ export class Dungeon {
       }
       gate.rotation.y = angle;
       this.group.add(gate);
+      if (south) this.southWall.push(gate);
     }
-    bricks.count = count;
-    bricks.castShadow = true;
-    bricks.receiveShadow = true;
-    this.group.add(bricks);
+    for (const bricks of [northBricks, southBricks]) {
+      bricks.castShadow = true;
+      bricks.receiveShadow = true;
+      this.group.add(bricks);
+    }
+    this.southWall.push(southBricks);
   }
 
   private buildPillars(): void {
