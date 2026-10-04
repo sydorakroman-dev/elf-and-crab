@@ -601,3 +601,45 @@ kbd {
   font: 600 14px/1 system-ui, sans-serif; cursor: pointer;
 }
 .trophies { font-size: 13px; color: #ffd36b; }
+
+/* Rune Seal: a carved stone tablet on the familiar's tablet. */
+.seal { position: fixed; inset: 0; z-index: 24; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(40, 10, 70, 0.35), rgba(5, 3, 10, 0.75)); }
+.seal-stone {
+  position: relative; width: min(560px, 100%); padding: 22px 22px 18px; border-radius: 22px; text-align: center; color: #efe6ff;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(199, 155, 255, 0.18), transparent 60%),
+    linear-gradient(160deg, #3a3446, #24202e 60%, #1b1824);
+  border: 3px solid #6b5a86;
+  box-shadow: inset 0 0 0 2px #1a1622, inset 0 0 40px rgba(0, 0, 0, 0.6), 0 0 50px rgba(160, 110, 255, 0.35), 0 14px 40px rgba(0, 0, 0, 0.6);
+}
+.seal-stone::before, .seal-stone::after { content: '✧'; position: absolute; top: 10px; font-size: 20px; color: #c79bff; text-shadow: 0 0 10px #a46bff; }
+.seal-stone::before { left: 16px; }
+.seal-stone::after { right: 16px; }
+.seal-title { font: 900 clamp(22px, 4vw, 30px)/1.1 'Cinzel', Georgia, serif; letter-spacing: 0.12em; color: #e3cdff; text-shadow: 0 0 14px rgba(180, 120, 255, 0.8); }
+.seal-sub { margin: 6px 0 12px; font-size: 13px; color: rgba(239, 230, 255, 0.7); }
+.seal-gems { display: flex; justify-content: center; gap: 10px; margin-bottom: 12px; }
+.gem { width: 18px; height: 18px; transform: rotate(45deg); border-radius: 3px; background: #2a2335; border: 2px solid #6b5a86; }
+.gem.lit { background: #c79bff; border-color: #f0e2ff; box-shadow: 0 0 12px #b07bff; }
+.seal-riddle {
+  display: flex; justify-content: center; align-items: center; gap: 0.35em; margin: 4px 0 18px;
+  font: 900 clamp(48px, 10vw, 76px)/1 'Cinzel', Georgia, serif; color: #ffe9a8;
+  text-shadow: 0 0 18px rgba(255, 200, 90, 0.75), 0 2px 0 #5a3b10;
+}
+.seal-riddle .op { color: #c79bff; text-shadow: 0 0 14px rgba(180, 120, 255, 0.9); font-size: 0.8em; }
+.seal-riddle .q { color: #fff; animation: seal-pulse 1.2s ease-in-out infinite; }
+@keyframes seal-pulse { 50% { opacity: 0.45; } }
+.seal-choices { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; }
+.rune {
+  width: clamp(70px, 16vw, 92px); height: clamp(70px, 16vw, 92px); border-radius: 50% 50% 46% 54% / 55% 48% 52% 45%;
+  border: 3px solid #8a7aa6; cursor: pointer; touch-action: manipulation;
+  background: radial-gradient(circle at 35% 30%, #6c6380, #3b3548 70%);
+  color: #f3e8ff; font: 900 clamp(30px, 6vw, 40px)/1 'Cinzel', Georgia, serif;
+  box-shadow: inset 0 -6px 12px rgba(0, 0, 0, 0.45), 0 0 16px rgba(160, 110, 255, 0.35);
+  text-shadow: 0 0 10px rgba(199, 155, 255, 0.9);
+  transition: transform 0.1s;
+}
+.rune:active { transform: scale(0.93); }
+.rune.used { opacity: 0.3; filter: grayscale(1); cursor: default; }
+.seal-msg { margin-top: 14px; min-height: 1.4em; font-size: 14px; color: #d9c6ff; }
+.seal.wrong .seal-stone { animation: seal-shake 0.4s; border-color: #b34a6a; }
+@keyframes seal-shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }

@@ -104,6 +104,10 @@ export type FamiliarCommand =
   | { type: 'spell'; id: SpellId }
   /** Practice room only: show this monster strolling about. */
   | { type: 'parade'; kind: string }
+  /** Rune Seal: the familiar picks an answer. */
+  | { type: 'answer'; value: number }
+  /** Practice room only: start a Rune Seal to try. */
+  | { type: 'riddle' }
   /** Pick (or switch) creature. */
   | { type: 'choose'; kind: FamiliarKind };
 
@@ -112,6 +116,8 @@ export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
   if (!isObject(v)) return null;
   if (v.type === 'spell' && (SPELL_IDS as unknown[]).includes(v.id)) return { type: 'spell', id: v.id as SpellId };
   if (v.type === 'choose' && (FAMILIAR_KINDS as unknown[]).includes(v.kind)) return { type: 'choose', kind: v.kind as FamiliarKind };
+  if (v.type === 'answer' && Number.isInteger(v.value) && (v.value as number) >= 0 && (v.value as number) <= 10) return { type: 'answer', value: v.value as number };
+  if (v.type === 'riddle') return { type: 'riddle' };
   if (v.type === 'parade' && typeof v.kind === 'string' && v.kind.length <= 24) return { type: 'parade', kind: v.kind }; // the hero checks it's a real monster
   if (v.type === 'move' && Number.isFinite(v.x) && Number.isFinite(v.z)) return { type: 'move', x: v.x as number, z: v.z as number };
   if (v.type === 'steer' && Number.isFinite(v.dx) && Number.isFinite(v.dz)) {

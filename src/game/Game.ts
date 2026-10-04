@@ -20,6 +20,7 @@ import { DIFFICULTIES, difficulty, scaledDamage } from './difficulty';
 import { DamageNumbers } from './numbers';
 import { AutoQuality } from '../ui/quality';
 import { reachRoom, recordWin } from './progress';
+import { SEAL_RIDDLES, makeRiddle, type Riddle } from './riddles';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { FamiliarCommand } from '../net/protocol';
 import { pickAimTarget } from './combat';
@@ -140,6 +141,9 @@ export class Game {
   private shake = 0;
   private hitStop = 0;
   private readonly shakeOffset = new THREE.Vector3();
+  /** Rune Seal on the exit door (familiar's riddles), and how many are solved. */
+  private riddle: Riddle | null = null;
+  private sealSolved = 0;
   /** The elf's mana and stamina. */
   private readonly resources = new Resources();
   /** Wind Walk: seconds of invisibility left, and where the elf vanished (enemies head there). */
@@ -295,6 +299,7 @@ export class Game {
     this.resources.reset();
     this.invisible = 0;
     this.ward = 0;
+    this.riddle = null;
     this.elf.setGhost(false);
     this.elf.setPose('none');
     this.score = 0;
@@ -632,6 +637,11 @@ export class Game {
 
   /** A familiar connected or left. They pick a creature next (a 'choose' command); leaving poofs it away. */
   private familiarChanged(connected: boolean): void {
+    if (!connected && this.riddle) {
+      // Nobody left to solve it: the runes fade.
+      this.riddle = null;
+      if (this.phase === 'cleared' && !this.practice) this.openDoor();
+    }
     if (!connected && this.companion.kind) {
       const kind = this.companion.kind;
       this.poof(kind);
@@ -642,6 +652,18 @@ export class Game {
   }
 
   private familiarCommand(cmd: FamiliarCommand): void {
+    if (cmd.type === 'answer') {
+      this.answerRiddle(cmd.value);
+      return;
+    }
+    if (cmd.type === 'riddle') {
+      // Practice room: try a seal any time (there's no door to open there).
+      if (this.practice && !this.riddle) {
+        this.riddle = makeRiddle();
+        this.sealSolved = 0;
+      }
+      return;
+    }
     if (cmd.type === 'parade') {
       // Practice room only: one monster appears a little way off and behaves as it does in its room.
       const kind = ENEMY_KIND_LIST.find((k) => k === cmd.kind);
@@ -703,6 +725,7 @@ export class Game {
       rw: this.waveInRoom,
       phase: this.phase,
       card: this.phase === 'transition' && this.doorSwitched ? this.room : -1,
+      ...(this.riddle ? { rid: { a: this.riddle.a, op: this.riddle.op, b: this.riddle.b, c: this.riddle.choices, n: this.sealSolved, t: SEAL_RIDDLES } } : {}),
       boss: this.bossState(),
       tels: this.telegraphTuples(),
       wave: this.wave,
@@ -954,6 +977,50 @@ export class Game {
     }
   }
 
+  /** Opens the exit door. */
+  private openDoor(): void {
+    this.dungeon.setExitOpen(true);
+    this.banner('Room cleared!');
+    this.hud.toast('↑ Head through the north door', 0xffe0a0);
+    this.sfx.door();
+    this.events.push({ e: 'door' });
+  }
+
+  /** Runes seal the door: the familiar must solve SEAL_RIDDLES riddles. */
+  private startSeal(): void {
+    this.riddle = makeRiddle();
+    this.sealSolved = 0;
+    this.dungeon.setExitOpen(false);
+    this.banner('🔮 The door is sealed!');
+    this.hud.toast('Your familiar must break the rune seal', 0xc79bff);
+    this.sfx.calm();
+  }
+
+  /** The familiar's answer to the current riddle. */
+  private answerRiddle(value: number): void {
+    const r = this.riddle;
+    if (!r) return;
+    if (value !== r.answer) {
+      this.events.push({ e: 'riddle', ok: 0 });
+      return;
+    }
+    this.sealSolved++;
+    if (this.sealSolved < SEAL_RIDDLES) {
+      this.riddle = makeRiddle();
+      this.events.push({ e: 'riddle', ok: 1 });
+      return;
+    }
+    // Seal broken: a reward, and the way on.
+    this.riddle = null;
+    this.events.push({ e: 'riddle', ok: 1, done: 1 });
+    this.heal(20);
+    const p = this.player.position;
+    this.effects.burst(p.x, 1.2, p.z, new THREE.Color(0xc79bff), 30, 6, 0.12);
+    this.hud.toast('🔮 Seal broken! +20 HP', 0xc79bff);
+    this.sfx.powerUp();
+    if (this.phase === 'cleared') this.openDoor();
+  }
+
   /** The hero pressed Start (Enter / the button): the first wave comes. */
   private beginFight(): void {
     if (this.state !== 'playing' || this.phase !== 'ready') return;
@@ -966,7 +1033,7 @@ export class Game {
 
   /** Waves within a room; when all three are done, the north door opens (or, in the last room, you win). */
   private updateWaves(dt: number): void {
-    this.hud.setWave(runLabel(this.room, this.waveInRoom, this.enemies.remaining, this.phase, this.enemies.boss?.bossName ?? null));
+    this.hud.setWave(this.riddle && !this.practice ? `🔮 Rune seal — your familiar is solving it (${this.sealSolved}/${SEAL_RIDDLES})` : runLabel(this.room, this.waveInRoom, this.enemies.remaining, this.phase, this.enemies.boss?.bossName ?? null));
     this.hud.setStartPrompt(this.phase === 'ready');
     if (this.phase === 'ready') return; // nothing comes until the hero starts
     if (this.phase === 'transition') {
@@ -990,11 +1057,9 @@ export class Game {
             return;
           }
           this.phase = 'cleared';
-          this.dungeon.setExitOpen(true);
-          this.banner('Room cleared!');
-          this.hud.toast('↑ Head through the north door', 0xffe0a0);
-          this.sfx.door();
-          this.events.push({ e: 'door' });
+          // With a familiar along, runes seal the door until it solves their riddles.
+          if (this.companion.present && this.net?.familiarConnected) this.startSeal();
+          else this.openDoor();
           return;
         }
         this.banner(`Wave ${this.waveInRoom} cleared`);

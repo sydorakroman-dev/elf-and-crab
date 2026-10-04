@@ -35,6 +35,12 @@ export class FamiliarHud {
   onStart?: () => void;
   onChoose?: (kind: FamiliarKind) => void;
   onSpell?: (id: SpellId) => void;
+  /** Rune Seal: an answer was picked; practice room: start a seal to try. */
+  onAnswer?: (value: number) => void;
+  onRiddle?: () => void;
+  private readonly seal: HTMLElement;
+  private readonly riddleTry: HTMLButtonElement;
+  private sealKey = '';
   /** Practice room: show this monster. */
   onParade?: (kind: EnemyKind) => void;
   private readonly paradeBtn: HTMLButtonElement;
@@ -82,6 +88,7 @@ export class FamiliarHud {
          <div class="left"><div class="hearts" data-f-hearts></div><div class="powers" data-f-powers></div></div>
          <div class="wave" data-f-wave></div>
          <div class="right">
+           <button type="button" class="role-badge parade-btn" data-f-riddle-try hidden title="Try a rune seal">🔮</button>
            <button type="button" class="role-badge parade-btn" data-f-parade hidden>👾 Monsters</button>
            <button type="button" class="role-badge" data-f-change title="Change creature">🐾 ${code}</button>
            <button type="button" class="role-badge fs-btn" data-f-fullscreen title="Full screen" aria-label="Full screen" hidden>${FS_ICON}</button>
@@ -144,6 +151,32 @@ export class FamiliarHud {
       }),
     );
     this.pickerClose.addEventListener('click', () => this.setBlocking(null));
+    // Rune Seal: a carved stone tablet with the riddle and four rune stones to choose from.
+    root.insertAdjacentHTML(
+      'beforeend',
+      `<div class="seal" data-seal hidden>
+         <div class="seal-stone">
+           <div class="seal-title">✦ Rune Seal ✦</div>
+           <div class="seal-sub">The door is bound by old magic. Solve the runes to break it.</div>
+           <div class="seal-gems" data-seal-gems></div>
+           <div class="seal-riddle" data-seal-riddle></div>
+           <div class="seal-choices" data-seal-choices></div>
+           <div class="seal-msg" data-seal-msg></div>
+         </div>
+       </div>`,
+    );
+    this.seal = root.querySelector('[data-seal]')!;
+    this.seal.querySelector('[data-seal-choices]')!.addEventListener('pointerdown', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-answer]');
+      if (!b || b.classList.contains('used')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.pendingAnswer = b;
+      this.onAnswer?.(Number(b.dataset.answer));
+    });
+    this.riddleTry = root.querySelector('[data-f-riddle-try]')!;
+    this.riddleTry.addEventListener('click', () => this.onRiddle?.());
+
     // Practice room: a picker of every monster, by room; the chosen one appears and strolls about.
     this.paradeBtn = root.querySelector('[data-f-parade]')!;
     const groups = ROOMS.map((room) => {
@@ -261,6 +294,40 @@ export class FamiliarHud {
     if (text !== null && this.status.textContent !== text) this.status.textContent = text;
   }
 
+  private pendingAnswer: HTMLElement | null = null;
+
+  /** Shows (or hides) the Rune Seal; redraws only when the riddle changes. */
+  private showSeal(r: Snapshot['rid']): void {
+    this.seal.hidden = !r;
+    if (!r) {
+      this.sealKey = '';
+      return;
+    }
+    const key = `${r.a}${r.op}${r.b}:${r.n}`;
+    if (key === this.sealKey) return;
+    const fresh = !this.sealKey;
+    this.sealKey = key;
+    this.seal.querySelector('[data-seal-gems]')!.innerHTML = Array.from({ length: r.t }, (_, i) => `<span class="gem${i < r.n ? ' lit' : ''}"></span>`).join('');
+    this.seal.querySelector('[data-seal-riddle]')!.innerHTML = `<span>${r.a}</span><span class="op">${r.op}</span><span>${r.b}</span><span class="op">=</span><span class="q">?</span>`;
+    this.seal.querySelector('[data-seal-choices]')!.innerHTML = r.c.map((v) => `<button type="button" class="rune" data-answer="${v}">${v}</button>`).join('');
+    this.seal.querySelector('[data-seal-msg]')!.textContent = fresh ? 'Tap the rune stone with the answer.' : 'The runes glow brighter…';
+    this.seal.classList.remove('wrong');
+  }
+
+  /** The hero judged an answer: shake on a wrong one, celebrate the last right one. */
+  riddleResult(ok: boolean, done: boolean): void {
+    const msg = this.seal.querySelector('[data-seal-msg]')!;
+    if (ok) {
+      if (done) msg.textContent = 'The seal breaks!';
+      return;
+    }
+    this.pendingAnswer?.classList.add('used');
+    msg.textContent = 'The runes resist… try another stone.';
+    this.seal.classList.remove('wrong');
+    void this.seal.offsetWidth; // restart the shake
+    this.seal.classList.add('wrong');
+  }
+
   update(s: Snapshot): void {
     this.hearts.innerHTML = hpBarHtml(s.health, s.maxHealth);
     const list = s.powers.map(([code, remaining]) => ({ type: POWER_CODES[code] as PowerUpType, remaining }));
@@ -269,7 +336,7 @@ export class FamiliarHud {
       this.powersKey = key;
       this.powers.innerHTML = powerChipsHtml(list);
     }
-    const w = s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.rw, s.remaining, s.phase, s.boss?.name ?? null);
+    const w = s.rid && !s.practice ? `🔮 Break the rune seal to open the door (${s.rid.n}/${s.rid.t})` : s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.rw, s.remaining, s.phase, s.boss?.name ?? null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
     this.bossBar.set(s.boss);
@@ -278,6 +345,8 @@ export class FamiliarHud {
     // Creature can be changed between runs or while paused (or before it's placed at all).
     this.canChange = s.state !== 'playing' || !s.fam || !!s.practice; // any time in the practice room
     if (this.paradeBtn.hidden === !!s.practice) this.paradeBtn.hidden = !s.practice;
+    if (this.riddleTry.hidden === !!s.practice) this.riddleTry.hidden = !s.practice;
+    this.showSeal(s.rid);
     this.changeBtn.classList.toggle('locked', !this.canChange);
 
     for (const [code, secs] of s.cds) {

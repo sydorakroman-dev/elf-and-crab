@@ -34,6 +34,13 @@ Aim assist is wider on touch.
 - **Performance:** models are compressed at build time and room art loads one room ahead (first load ~5 MB). If a
   device keeps dropping below ~40 fps the game lowers its resolution, then turns shadows off.
 
+## Rune Seals (the familiar's puzzles)
+
+When a room is cleared with a familiar connected, runes seal the exit door: the familiar solves **3 rune riddles** on
+the tablet — sums and differences like `7 + 2` or `9 − 4`, every number between 0 and 10 — by tapping the right one
+of four rune stones (a wrong stone just greys out). Breaking the seal opens the door and heals the elf +20 HP. Solo
+play and the final room have no seal. In the practice room, the 🔮 button starts one any time.
+
 ## Skills and spells
 
 The elf has **stamina** (5 charges, one back every 4 s) and **mana** (a 100-point bar, refilling 4 per second).

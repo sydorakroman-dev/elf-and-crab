@@ -79,7 +79,9 @@ export type GameEvent =
   | { e: 'slam'; x: number; z: number; r: number }
   /** A coloured ring (an orc shaman healing its friends). */
   | { e: 'ring'; x: number; z: number; r: number; c: number }
-  | { e: 'door' };
+  | { e: 'door' }
+  /** A Rune Seal answer: right (1) or wrong (0); done 1 when the seal breaks. */
+  | { e: 'riddle'; ok: number; done?: number };
 
 export interface Snapshot {
   /** Hero simulation time, seconds. */
@@ -100,6 +102,8 @@ export interface Snapshot {
   practice?: number;
   /** Room whose intro card is up (-1: none). */
   card: number;
+  /** Rune Seal on the exit door: the riddle to solve (a op b), the choices, solved so far / needed. */
+  rid?: { a: number; op: string; b: number; c: number[]; n: number; t: number };
   /** The current boss or mini-boss, while it lives. */
   boss: { hp: number; max: number; name: string } | null;
   /** Warning rings for attacks about to land. */

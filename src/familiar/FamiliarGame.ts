@@ -146,6 +146,8 @@ export class FamiliarGame {
     this.hud.onChoose = (kind) => this.session.send({ type: 'choose', kind });
     this.hud.onSpell = (id) => this.session.send({ type: 'spell', id });
     this.hud.onParade = (kind) => this.session.send({ type: 'parade', kind });
+    this.hud.onAnswer = (value) => this.session.send({ type: 'answer', value });
+    this.hud.onRiddle = () => this.session.send({ type: 'riddle' });
     bodies.crab.onStep = (s) => this.sfx.scuttle(s);
     bodies.wolf.onStep = (s) => this.sfx.scuttle(s * 0.6);
     bodies.capybara.onStep = (s) => this.sfx.footstep(s * 0.4);
@@ -270,6 +272,11 @@ export class FamiliarGame {
           this.sfx.land();
           break;
         }
+        case 'riddle':
+          this.hud.riddleResult(ev.ok === 1, ev.done === 1);
+          if (ev.ok) this.sfx.powerUp();
+          else this.sfx.hurt();
+          break;
         case 'ring':
           this.effects.ring(ev.x, ev.z, ev.c, ev.r);
           this.effects.burst(ev.x, 1.5, ev.z, new THREE.Color(ev.c), 16, 4, 0.1);
