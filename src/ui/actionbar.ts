@@ -110,6 +110,21 @@ export class ActionBar {
     }
   }
 
+  /** A little counter on an ability's slot (charges left; 0 hides it). */
+  setCharges(id: AbilityId, n: number): void {
+    const i = DEFAULT_SLOTS.indexOf(id);
+    if (i < 0) return;
+    const slot = this.slots[i];
+    let badge = slot.querySelector<HTMLElement>('.slot-charges');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'slot-charges';
+      slot.append(badge);
+    }
+    badge.textContent = n > 0 ? `×${n}` : '';
+    slot.classList.toggle('charged', n > 0);
+  }
+
   /** The ability in slot `i`, if any. */
   ability(i: number): AbilityId | null {
     return DEFAULT_SLOTS[i] ?? null;

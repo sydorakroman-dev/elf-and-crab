@@ -4,7 +4,7 @@
  * and rules, unit tested; Game applies the effects.
  */
 
-export type AbilityId = 'dash' | 'windwalk';
+export type AbilityId = 'dash' | 'windwalk' | 'doubleshot';
 
 export interface AbilityDef {
   name: string;
@@ -17,11 +17,12 @@ export interface AbilityDef {
 
 export const ABILITIES: Record<AbilityId, AbilityDef> = {
   dash: { name: 'Dash', icon: '💨', kind: 'skill', cost: 1, description: 'A quick dash; you can’t be hit while dashing.' },
+  doubleshot: { name: 'Double Shot', icon: '🏹', kind: 'skill', cost: 1, description: 'Your next 3 shots fire two arrows side by side.' },
   windwalk: { name: 'Wind Walk', icon: '🌬️', kind: 'skill', cost: 2, description: 'Turn invisible for 3 s: enemies lose track of you. Shooting breaks it.' },
 };
 
 /** What sits in each of the nine slots (spells from the magic book will fill the empty ones). */
-export const DEFAULT_SLOTS: (AbilityId | null)[] = ['dash', 'windwalk', null, null, null, null, null, null, null];
+export const DEFAULT_SLOTS: (AbilityId | null)[] = ['dash', 'windwalk', 'doubleshot', null, null, null, null, null, null];
 
 export const RESOURCES = {
   maxMana: 100,
@@ -33,6 +34,9 @@ export const RESOURCES = {
 };
 
 export const WIND_WALK_SECONDS = 3;
+/** Double Shot: how many shots it charges, and how far apart the two arrows fly (m). */
+export const DOUBLE_SHOTS = 3;
+export const DOUBLE_GAP = 0.7;
 
 /** The elf's mana and stamina. */
 export class Resources {

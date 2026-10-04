@@ -64,3 +64,11 @@ describe('key bindings', () => {
     expect(loadKeys(storage)).toEqual(DEFAULT_KEYS);
   });
 });
+
+describe('double shot', () => {
+  it('is a 1-stamina skill in slot 3', async () => {
+    const { DEFAULT_SLOTS } = await import('./abilities');
+    expect(ABILITIES.doubleshot).toMatchObject({ kind: 'skill', cost: 1 });
+    expect(DEFAULT_SLOTS[2]).toBe('doubleshot');
+  });
+});

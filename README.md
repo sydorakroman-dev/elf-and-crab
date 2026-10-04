@@ -51,7 +51,8 @@ the title / pause screen; saved in your browser); on touch screens, tap the slot
 | --- | --- | --- | --- |
 | 1 | 💨 **Dash** (also Space) | 1 stamina | a quick dash; you can't be hit while dashing |
 | 2 | 🌬️ **Wind Walk** | 2 stamina | invisible for 3 s: enemies lose track of you and head for where you vanished; shooting breaks it |
-| 3–9 | spells | mana | coming from the magic book |
+| 3 | 🏹 **Double Shot** | 1 stamina | the next 3 shots fire two arrows side by side |
+| 4–9 | spells | mana | coming from the magic book |
 
 ## The run
 

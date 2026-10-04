@@ -15,7 +15,7 @@ import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_
 import { BUBBLE_HITS, TONGUE_BOSS_FLINCH, WARD, FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, JET, POUNCE_DAMAGE, inJet, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
 import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
-import { Resources, WIND_WALK_SECONDS } from './abilities';
+import { DOUBLE_GAP, DOUBLE_SHOTS, Resources, WIND_WALK_SECONDS } from './abilities';
 import { DIFFICULTIES, difficulty, scaledDamage } from './difficulty';
 import { DamageNumbers } from './numbers';
 import { AutoQuality } from '../ui/quality';
@@ -144,6 +144,8 @@ export class Game {
   /** Rune Seal on the exit door (familiar's riddles), and how many are solved. */
   private riddle: Riddle | null = null;
   private sealSolved = 0;
+  /** Double Shot: charged shots left. */
+  private doubleShots = 0;
   /** The elf's mana and stamina. */
   private readonly resources = new Resources();
   /** Wind Walk: seconds of invisibility left, and where the elf vanished (enemies head there). */
@@ -298,6 +300,8 @@ export class Game {
     this.health = MAX_HEALTH;
     this.resources.reset();
     this.invisible = 0;
+    this.doubleShots = 0;
+    this.hud.actionBar.setCharges('doubleshot', 0);
     this.ward = 0;
     this.riddle = null;
     this.elf.setGhost(false);
@@ -433,8 +437,20 @@ export class Game {
     this.player.faceShot(dir);
     const count = this.powers.has('multishot') ? MULTISHOT_ARROWS : 1;
     const pierce = this.powers.has('pierce');
+    // Double Shot: each arrow gets a twin flying parallel beside it.
+    const twin = this.doubleShots > 0;
+    if (twin) {
+      this.doubleShots--;
+      this.hud.actionBar.setCharges('doubleshot', this.doubleShots);
+    }
     for (const d of spreadDirections(dir.x, dir.z, count, MULTISHOT_SPREAD)) {
-      this.arrows.fire(p.x + d.x * 0.6, p.z + d.z * 0.6, d, pierce);
+      if (!twin) {
+        this.arrows.fire(p.x + d.x * 0.6, p.z + d.z * 0.6, d, pierce);
+        continue;
+      }
+      const sx = d.z * (DOUBLE_GAP / 2); // sideways (perpendicular to the shot)
+      const sz = -d.x * (DOUBLE_GAP / 2);
+      for (const k of [-1, 1]) this.arrows.fire(p.x + d.x * 0.6 + sx * k, p.z + d.z * 0.6 + sz * k, d, pierce);
     }
     this.sfx.twang();
     this.events.push({ e: 'twang' });
@@ -963,6 +979,16 @@ export class Game {
     if (!running || !id) return;
     if (id === 'dash') {
       this.player.queueDash(); // paid for when it happens (canDash)
+      return;
+    }
+    if (id === 'doubleshot') {
+      if (!this.resources.spend('doubleshot')) return;
+      this.doubleShots = DOUBLE_SHOTS;
+      this.hud.actionBar.setCharges('doubleshot', this.doubleShots);
+      const p = this.player.position;
+      this.effects.burst(p.x, 1.3, p.z, new THREE.Color(0xffd36b), 16, 4, 0.1);
+      this.hud.toast(`🏹 Double Shot ×${DOUBLE_SHOTS}`, 0xffd36b);
+      this.sfx.powerUp();
       return;
     }
     if (id === 'windwalk') {

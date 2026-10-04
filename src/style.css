@@ -643,3 +643,7 @@ kbd {
 .seal-msg { margin-top: 14px; min-height: 1.4em; font-size: 14px; color: #d9c6ff; }
 .seal.wrong .seal-stone { animation: seal-shake 0.4s; border-color: #b34a6a; }
 @keyframes seal-shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
+.slot-charges { position: absolute; right: -6px; top: -8px; padding: 1px 5px; border-radius: 999px; background: #ffd36b; color: #2a1c08; font: 800 11px/1.3 system-ui, sans-serif; }
+.slot-charges:empty { display: none; }
+.slot.charged { border-color: #ffd36b; box-shadow: 0 0 12px rgba(255, 211, 107, 0.6); }
