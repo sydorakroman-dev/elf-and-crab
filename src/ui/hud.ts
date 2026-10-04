@@ -59,32 +59,64 @@ export class Hud {
          </div>
        </div>
        <div class="overlay">
-         <div class="card">
-           <img class="emblem" src="${import.meta.env.BASE_URL}icons/emblem.jpg" alt="" />
-           <h1 data-title>Elf &amp; Crab</h1>
-           <p data-message>Goblins, the undead, orcs and worse are pouring out of every gate. Fight from the woodland down through the dungeon to the Ash King, the dragon in his lair — alone, or with a friend as your familiar.</p>
-           <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
-           <div class="difficulty" data-difficulty>${DIFFICULTY_LIST.map((d) => `<button type="button" data-diff="${d}" title="${DIFFICULTIES[d].blurb}">${DIFFICULTIES[d].icon} ${DIFFICULTIES[d].label}</button>`).join('')}</div>
-           <button type="button" data-play>Begin the hunt</button>
-           <div class="continue" data-continue hidden><span>Start in</span><select data-start-room aria-label="Start in room"></select></div>
-           <p class="trophies" data-trophies hidden></p>
-           <p class="best" data-best hidden></p>
-           <button type="button" class="keys-btn" data-keys>⚙️ Keys</button>
-           <div class="invite" data-invite>
-             <canvas class="qr" data-qr width="112" height="112" hidden></canvas>
-             <div class="invite-text">
-               <div class="invite-title">🐾 Play together</div>
-               <div class="invite-sub">A friend joins as your familiar — crab, capybara, wolf, goldfish or iguana — on a tablet or phone:</div>
-               <div class="code" data-code>····</div>
-               <div class="invite-link" data-link></div>
-               <div class="invite-status" data-istatus>Connecting to the server…</div>
+         <div class="card menu" data-menu>
+           <header class="menu-head">
+             <img class="emblem" src="${import.meta.env.BASE_URL}icons/emblem.jpg" alt="" />
+             <div>
+               <h1 data-title>Elf &amp; Crab</h1>
+               <p class="tagline" data-message>Fight from the woodland down to the Ash King's lair — alone, or with a friend as your familiar.</p>
              </div>
-           </div>
-           <form class="join" data-join>
-             <span title="Type TEST to practise as the familiar on your own">Got a code?</span>
-             <input data-join-code maxlength="5" placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" />
-             <button type="submit" class="join-btn">Join as familiar</button>
-           </form>
+           </header>
+
+           <section class="panel play-panel">
+             <div class="setup" data-setup>
+               <div class="field">
+                 <span class="label">Difficulty</span>
+                 <div class="difficulty" data-difficulty>${DIFFICULTY_LIST.map((d) => `<button type="button" data-diff="${d}">${DIFFICULTIES[d].icon} ${DIFFICULTIES[d].label}</button>`).join('')}</div>
+                 <span class="hint" data-diff-hint></span>
+               </div>
+               <div class="field" data-continue hidden>
+                 <span class="label">Start in</span>
+                 <select data-start-room aria-label="Start in room"></select>
+               </div>
+             </div>
+             <button type="button" class="play-btn" data-play>▶ Begin the hunt</button>
+             <div class="stats">
+               <span class="best" data-best hidden></span>
+               <span class="trophies" data-trophies hidden></span>
+             </div>
+           </section>
+
+           <section class="panel coop-panel">
+             <h2>🐾 Play together <span class="sub">a friend helps as your familiar on a tablet or phone</span></h2>
+             <div class="coop-cols">
+               <div class="invite" data-invite>
+                 <canvas class="qr" data-qr width="112" height="112" hidden></canvas>
+                 <div class="invite-text">
+                   <span class="label">Invite — they scan or enter</span>
+                   <div class="code" data-code>····</div>
+                   <div class="invite-link" data-link></div>
+                   <div class="invite-status" data-istatus>Connecting to the server…</div>
+                 </div>
+               </div>
+               <form class="join" data-join>
+                 <span class="label">Join someone's game</span>
+                 <div class="join-row">
+                   <input data-join-code maxlength="5" placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" />
+                   <button type="submit" class="join-btn">Join</button>
+                 </div>
+                 <span class="hint">Type <b>TEST</b> to practise as a familiar</span>
+               </form>
+             </div>
+           </section>
+
+           <footer class="menu-foot">
+             <details class="howto">
+               <summary>❔ How to play</summary>
+               <p class="keys">${mode === 'touch' ? KEYS_TOUCH : KEYS_MOUSE}</p>
+             </details>
+             <button type="button" class="keys-btn" data-keys>⚙️ Keys</button>
+           </footer>
          </div>
        </div>`,
     );
@@ -134,8 +166,7 @@ export class Hud {
       e.preventDefault();
       onStart();
     });
-    // Clicking anywhere on the overlay plays — except inside the invite / join controls.
-    this.overlay.addEventListener('click', (e) => {
+        this.overlay.addEventListener('click', (e) => {
       const diff = (e.target as HTMLElement).closest<HTMLElement>('[data-diff]');
       if (diff) {
         // Difficulty can change between runs (not while one is paused).
@@ -149,8 +180,8 @@ export class Hud {
         this.actionBar.openPanel();
         return;
       }
-      if ((e.target as HTMLElement).closest('[data-invite], [data-join]')) return;
-      onPlay();
+      // Play: the button, or (when paused) a click outside the menu. Clicks inside the panels do nothing.
+      if ((e.target as HTMLElement).closest('[data-play]') || !(e.target as HTMLElement).closest('[data-menu]')) onPlay();
     });
     const joinForm = root.querySelector<HTMLFormElement>('[data-join]')!;
     const joinInput = root.querySelector<HTMLInputElement>('[data-join-code]')!;
@@ -191,6 +222,8 @@ export class Hud {
       b.classList.toggle('on', b.dataset.diff === difficulty());
       b.toggleAttribute('disabled', locked && b.dataset.diff !== difficulty());
     }
+    const hint = this.overlay.querySelector('[data-diff-hint]');
+    if (hint) hint.textContent = DIFFICULTIES[difficulty()].blurb;
   }
 
   /** `inGame`: a run is in progress (so un-pausing resumes it). */
