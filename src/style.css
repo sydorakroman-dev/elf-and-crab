@@ -145,7 +145,7 @@ canvas { display: block; }
 .overlay.landing {
   background:
     radial-gradient(ellipse at center, rgba(7, 6, 10, 0.55), rgba(7, 6, 10, 0.25) 70%),
-    var(--landing-art) 14% 100% / cover no-repeat,
+    var(--landing-art) 50% 70% / cover no-repeat,
     #07060a;
 }
 .card { max-width: 480px; text-align: center; }
