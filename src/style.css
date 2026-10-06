@@ -647,3 +647,22 @@ kbd {
 .slot-charges { position: absolute; right: -6px; top: -8px; padding: 1px 5px; border-radius: 999px; background: #ffd36b; color: #2a1c08; font: 800 11px/1.3 system-ui, sans-serif; }
 .slot-charges:empty { display: none; }
 .slot.charged { border-color: #ffd36b; box-shadow: 0 0 12px rgba(255, 211, 107, 0.6); }
+
+/* The level map, top right, revealed as you explore. */
+.minimap {
+  position: fixed;
+  top: calc(62px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  width: 168px;
+  height: 168px;
+  border-radius: 14px;
+  background: rgba(10, 8, 14, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  image-rendering: pixelated;
+  pointer-events: none;
+  z-index: 5;
+}
+@media (max-width: 700px), (max-height: 500px) {
+  .minimap { width: 112px; height: 112px; top: calc(52px + env(safe-area-inset-top, 0px)); }
+}

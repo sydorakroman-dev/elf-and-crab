@@ -96,6 +96,8 @@ export interface Snapshot {
   zones: ZoneTuple[];
   /** Room index (0-based), wave within the room, and where the run is (fighting / door open / walking through). */
   room: number;
+  /** The level's seed: the familiar's tablet generates the same level from it. */
+  lvl?: number;
   rw: number;
   phase: RunPhase;
   /** 1 in the practice room (code TEST). */

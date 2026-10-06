@@ -145,7 +145,7 @@ export class Fade {
     this.shown = card;
     this.preload(card + 1); // the next room's art, ready by the time its door opens
     const room = ROOMS[card];
-    const boss = room.waves.at(-1)?.boss;
+    const boss = room.boss;
     const img = this.card.querySelector<HTMLImageElement>('.rc-art')!;
     // Hidden until the new picture is decoded — otherwise the previous room's art shows for a moment.
     img.style.visibility = 'hidden';
@@ -155,7 +155,7 @@ export class Fade {
       if (this.shown === card) img.style.visibility = '';
     };
     img.decode().then(reveal, reveal);
-    this.card.querySelector('.rc-step')!.textContent = card === ROOMS.length - 1 ? `Room ${card + 1} of ${ROOMS.length} · the last one` : `Room ${card + 1} of ${ROOMS.length}`;
+    this.card.querySelector('.rc-step')!.textContent = card === ROOMS.length - 1 ? `Level ${card + 1} of ${ROOMS.length} · the last one` : `Level ${card + 1} of ${ROOMS.length}`;
     this.card.querySelector('.rc-name')!.textContent = room.name;
     this.card.querySelector('.rc-who')!.textContent = `${room.group} · Boss: ${boss ? enemyName(boss) : '—'}`;
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ActivePowers, MAX_STACK, POWER_UPS, pickPowerUp, randomSpawnPoint, spreadDirections } from './powerups';
 import { mulberry32 } from '../util/rng';
+import { insideArena } from './combat';
 
 describe('ActivePowers', () => {
   it('starts, counts down and expires', () => {
@@ -60,14 +61,14 @@ describe('pickPowerUp', () => {
 });
 
 describe('randomSpawnPoint', () => {
-  it('stays inside the arena, off obstacles and away from the player', () => {
+  it('stays on the floor near the player, off obstacles and not underfoot', () => {
     const rng = mulberry32(1);
     const obstacles = [{ x: 0, z: 0, radius: 2 }];
     const player = { x: 5, z: 5 };
     for (let i = 0; i < 200; i++) {
-      const p = randomSpawnPoint(rng, 28, obstacles, [player], 6);
-      expect(Math.abs(p.x)).toBeLessThanOrEqual(25);
-      expect(Math.abs(p.z)).toBeLessThanOrEqual(25);
+      const p = randomSpawnPoint(rng, player, obstacles, [player], 6);
+      expect(insideArena(p.x, p.z, 1.9)).toBe(true);
+      expect(Math.hypot(p.x - 5, p.z - 5)).toBeLessThanOrEqual(18.01);
       expect(Math.hypot(p.x, p.z)).toBeGreaterThanOrEqual(3.5);
       expect(Math.hypot(p.x - 5, p.z - 5)).toBeGreaterThanOrEqual(6);
     }

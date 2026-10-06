@@ -4,10 +4,9 @@ import { CASTERS, ELEMENTALS, Elemental, GOLEM, TREANT, VINE } from './elemental
 import type { Spit, Strike } from './enemies';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 
-const HALF = 24;
 function run(e: Elemental, target: THREE.Vector3, seconds: number, onStep?: (e: Elemental, spits: Spit[]) => void) {
   for (let i = 0; i < Math.round(seconds * 60); i++) {
-    const spits = e.update(1 / 60, target, [e], [], HALF);
+    const spits = e.update(1 / 60, target, [e], []);
     onStep?.(e, spits);
   }
 }

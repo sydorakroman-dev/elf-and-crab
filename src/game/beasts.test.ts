@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { BEAR, BEASTS, BOAR, Beast, SNAKE } from './beasts';
 import type { Enemy } from './enemies';
+import { setWalkMap } from './combat';
+import { WalkMap } from './walkmap';
 
-const HALF = 24;
+// A square room with its walls 24 m out.
+setWalkMap(WalkMap.fromShape('square', 24));
+
 function run(b: Beast, target: THREE.Vector3, seconds: number, onStep?: (b: Beast) => void, others: Enemy[] = [b]) {
   for (let i = 0; i < Math.round(seconds * 60); i++) {
-    b.update(1 / 60, target, others, [], HALF);
+    b.update(1 / 60, target, others, []);
     onStep?.(b);
   }
 }
@@ -90,7 +94,7 @@ describe('forest beasts', () => {
 
     const p = new Beast('bear', 0, 2);
     let shards = 0;
-    for (let i = 0; i < Math.round((BEAR.poundEvery + BEAR.poundWindup + 3) * 60); i++) shards += p.update(1 / 60, target, [p], [], HALF).length;
+    for (let i = 0; i < Math.round((BEAR.poundEvery + BEAR.poundWindup + 3) * 60); i++) shards += p.update(1 / 60, target, [p], []).length;
     expect(shards).toBeGreaterThanOrEqual(BEAR.shards);
   });
 

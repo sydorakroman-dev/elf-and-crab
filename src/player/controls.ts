@@ -23,7 +23,6 @@ const MOUSE_SENSITIVITY = 0.0025;
 const NO_KEYS = new Set<string>();
 
 export interface Arena {
-  half: number;
   wallHeight: number;
   obstacles: readonly Circle[];
 }
@@ -269,7 +268,7 @@ export class Player {
     pos.z += (this.velocity.z + this.knock.z) * dt;
     this.knock.multiplyScalar(Math.exp(-9 * dt));
     pushOutOfCircles(pos, RADIUS, this.arena.obstacles);
-    clampToArena(pos, this.arena.half, RADIUS);
+    clampToArena(pos, RADIUS);
 
     // Face the last shot briefly, otherwise the direction of travel.
     const groundSpeed = Math.hypot(this.velocity.x, this.velocity.z);
@@ -303,7 +302,7 @@ export class Player {
 
     // Don't let the walls block the view: pull in if the camera would end up behind a wall
     // (outside the arena and below the wall top). Ease back out afterwards.
-    const { half, wallHeight } = this.arena;
+    const { wallHeight } = this.arena;
     let allowed = this.distance;
     const steps = 20;
     for (let i = 1; i <= steps; i++) {
@@ -311,7 +310,7 @@ export class Player {
       const x = this.target.x + dx * d;
       const y = this.target.y + dy * d;
       const z = this.target.z + dz * d;
-      const outside = !insideArena(x, z, half, 0.5);
+      const outside = !insideArena(x, z, 0.5);
       if (outside && y < wallHeight + 0.5) {
         allowed = Math.max(2.5, (this.distance * (i - 1)) / steps);
         break;

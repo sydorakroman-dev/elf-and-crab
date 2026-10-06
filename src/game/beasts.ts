@@ -206,7 +206,7 @@ export class Beast implements Enemy {
     return [this.id, ENEMY_KIND_LIST.indexOf(this.kind), q(o.x), q(o.z), q(o.yaw), q(o.y), q(o.speed), q(o.act), o.mode, q(o.flash), o.stun, q(o.death), o.calm];
   }
 
-  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): Spit[] {
+  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[]): Spit[] {
     this.time += dt;
     this.strike = null;
     this.flash = Math.max(0, this.flash - dt * 5);
@@ -241,13 +241,13 @@ export class Beast implements Enemy {
       const away = Math.atan2(p.x - target.x, p.z - target.z);
       const dir = away * 0.4 + this.wander * 0.6;
       speed = this.def.speed * 0.45 * this.slow;
-      this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, obstacles, half);
+      this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, obstacles);
     } else {
-      speed = this.think(dt, target, others, obstacles, half);
+      speed = this.think(dt, target, others, obstacles);
     }
 
     pushOutOfCircles(p, this.radius, obstacles);
-    clampToArena(p, half, this.radius);
+    clampToArena(p, this.radius);
     p.speed = speed;
     p.stun = this.stunTimer > 0 ? 1 : 0;
     p.calm = this.calmTimer > 0 ? 1 : 0;
@@ -265,7 +265,7 @@ export class Beast implements Enemy {
   }
 
   /** The beast's brain: returns how fast it moved this step. */
-  private think(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): number {
+  private think(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[]): number {
     const p = this.pose;
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.timer -= dt;
@@ -295,7 +295,7 @@ export class Beast implements Enemy {
 
     switch (this.mode) {
       case 'chase': {
-        this.move(tx, tz, chase, dt, others, obstacles, half);
+        this.move(tx, tz, chase, dt, others, obstacles);
         face(tx, tz);
         p.act = 0;
         this.startSpecial(dist, tx, tz);
@@ -311,7 +311,7 @@ export class Beast implements Enemy {
       }
       case 'attack': {
         if (this.kind === 'snake') {
-          this.move(this.lockDir.x, this.lockDir.z, SNAKE.lungeDistance / SNAKE.lungeTime, dt, others, [], half);
+          this.move(this.lockDir.x, this.lockDir.z, SNAKE.lungeDistance / SNAKE.lungeTime, dt, others, []);
           if (this.timer <= 0) {
             // The fangs land just ahead of the head.
             this.strike = { x: p.x + this.lockDir.x * 0.9, z: p.z + this.lockDir.z * 0.9, r: 1.3, damage: SNAKE.damage, knock: 10 };
@@ -327,7 +327,7 @@ export class Beast implements Enemy {
           const before = { x: p.x, z: p.z };
           p.x += this.lockDir.x * speed * dt;
           p.z += this.lockDir.z * speed * dt;
-          const hitWall = clampToArena(p, half, this.radius);
+          const hitWall = clampToArena(p, this.radius);
           const hitRock = pushOutOfCircles(p, this.radius, obstacles.filter((o) => !o.low));
           if (!bear) this.cooldown = BOAR.cooldown;
           if (hitWall || hitRock || Math.hypot(p.x - before.x, p.z - before.z) < 0.01) {
@@ -349,7 +349,7 @@ export class Beast implements Enemy {
       case 'retreat': {
         // Back off away from the hero, then come again.
         const speed = DIREWOLF.retreatSpeed * this.slow;
-        this.move(-tx + this.side * tz * 0.6, -tz - this.side * tx * 0.6, speed, dt, others, obstacles, half);
+        this.move(-tx + this.side * tz * 0.6, -tz - this.side * tx * 0.6, speed, dt, others, obstacles);
         face(-tx, -tz);
         if (this.timer <= 0) this.setMode('chase', 0);
         return speed;
@@ -428,7 +428,7 @@ export class Beast implements Enemy {
   }
 
   /** Walks in direction (dx, dz), steering around obstacles and other enemies. */
-  private move(dx: number, dz: number, speed: number, dt: number, others: readonly Enemy[], obstacles: readonly Circle[], half: number): void {
-    steerMove(this.pose, dx, dz, speed, dt, this.radius, this, others, obstacles, half, this.side);
+  private move(dx: number, dz: number, speed: number, dt: number, others: readonly Enemy[], obstacles: readonly Circle[]): void {
+    steerMove(this.pose, dx, dz, speed, dt, this.radius, this, others, obstacles, this.side);
   }
 }

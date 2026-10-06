@@ -111,7 +111,7 @@ export class Companion {
   }
 
   /** Applies a move or spell command from the familiar's tablet (already validated as well-formed). */
-  command(c: FamiliarCommand, half: number): void {
+  command(c: FamiliarCommand): void {
     if (!this._kind) return;
     if (c.type === 'spell') {
       if (FAMILIARS[this._kind].spells.includes(c.id)) this.queued.push(c.id);
@@ -129,12 +129,12 @@ export class Companion {
     }
     if (c.type !== 'move') return;
     this.target.set(c.x, 0, c.z);
-    clampToArena(this.target, half, FAMILIARS[this._kind].radius);
+    clampToArena(this.target, FAMILIARS[this._kind].radius);
     this.hasTarget = true;
     this.lastTap = { x: this.target.x, z: this.target.z };
   }
 
-  update(dt: number, slimes: readonly Enemy[], obstacles: readonly Circle[], half: number): CompanionResult {
+  update(dt: number, slimes: readonly Enemy[], obstacles: readonly Circle[]): CompanionResult {
     const result: CompanionResult = { bitten: null, biteDamage: 0, cast: [], pounceHits: [], landed: false };
     const kind = this._kind;
     if (!kind) return result;
@@ -154,9 +154,9 @@ export class Companion {
     this.queued = [];
 
     if (this.leap) {
-      this.updateLeap(dt, slimes, def.radius, half, obstacles, result);
+      this.updateLeap(dt, slimes, def.radius, obstacles, result);
     } else {
-      this.walk(dt, def.speed, def.radius, obstacles, half);
+      this.walk(dt, def.speed, def.radius, obstacles);
     }
 
     // Bite whatever's within reach, even on the move (not mid-leap).
@@ -201,7 +201,7 @@ export class Companion {
     return result;
   }
 
-  private walk(dt: number, maxSpeed: number, radius: number, obstacles: readonly Circle[], half: number): void {
+  private walk(dt: number, maxSpeed: number, radius: number, obstacles: readonly Circle[]): void {
     let wantX = 0;
     let wantZ = 0;
     if (this.steer.x || this.steer.z) {
@@ -225,7 +225,7 @@ export class Companion {
     const fromZ = this.position.z;
     this.position.addScaledVector(this.velocity, dt);
     pushOutOfCircles(this.position, radius, obstacles);
-    clampToArena(this.position, half, radius);
+    clampToArena(this.position, radius);
     // Velocity is what actually happened: sliding along a wall it faces along the wall, not into it.
     if (dt > 0) this.velocity.set((this.position.x - fromX) / dt, 0, (this.position.z - fromZ) / dt);
   }
@@ -238,12 +238,12 @@ export class Companion {
     this.velocity.set(0, 0, 0);
   }
 
-  private updateLeap(dt: number, slimes: readonly Enemy[], radius: number, half: number, obstacles: readonly Circle[], result: CompanionResult): void {
+  private updateLeap(dt: number, slimes: readonly Enemy[], radius: number, obstacles: readonly Circle[], result: CompanionResult): void {
     const leap = this.leap!;
     const prev = { x: this.position.x, z: this.position.z };
     leap.t = Math.min(1, leap.t + dt / SPELLS.pounce.duration);
     this.position.lerpVectors(leap.from, leap.to, leap.t);
-    clampToArena(this.position, half, radius);
+    clampToArena(this.position, radius);
     this._height = Math.sin(leap.t * Math.PI) * LEAP_HEIGHT;
     // Everything along this step's stretch of the path gets hit once.
     for (const s of slimes) {

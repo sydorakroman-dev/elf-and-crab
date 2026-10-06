@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clampToArena, pushOutOfCircles, type Circle } from './combat';
+import { clampToArena, pushOutOfCircles, walkMap, type Circle } from './combat';
 import { BEASTS, Beast } from './beasts';
 import { ELEMENTALS, Elemental } from './elementals';
 import { MONSTERS, Monster } from './monsters';
@@ -97,7 +97,7 @@ export interface Enemy {
   /** Called when its contact hit the hero (e.g. the wolf backs off). */
   onHitTarget(): void;
   /** Moves / attacks; returns any bolts it fires this step. */
-  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): Spit[];
+  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[]): Spit[];
   tuple(): EnemyTuple;
 }
 
@@ -107,13 +107,6 @@ export interface Telegraph {
   z: number;
   r: number;
   p: number;
-}
-
-/** One wave of a room: who comes through the gates, and (last wave) the room's boss. */
-export interface RoomWave {
-  mix: Partial<Record<EnemyKind, number>>;
-  /** Appears at the north end when the wave starts; the rest are its escorts. */
-  boss?: EnemyKind;
 }
 
 /** An enemy kind's display name ("Cave Spider", "The Necromancer"). */
@@ -128,34 +121,59 @@ export function createEnemy(kind: EnemyKind, x: number, z: number): Enemy {
   return new Monster(kind as MonsterKind, x, z);
 }
 
-/** Spawns enemies wave by wave through the gates and updates them. */
+/** How close (m) the hero must come, in plain sight, to wake a sleeping pack. */
+export const WAKE_RANGE = 17;
+/** A pack also wakes when the hero is this close, seen or not (heard). */
+const HEAR_RANGE = 7;
+/** Sight lines and routes are rechecked this often (steps), staggered across enemies. */
+const THINK_EVERY = 6;
+
+interface Brain {
+  pack: number;
+  asleep: boolean;
+  /** Last check: can it see the hero? And the way round if not. */
+  sees: boolean;
+  waypoint: { x: number; z: number } | null;
+}
+
+/**
+ * The level's monsters: packs placed by the generator wait asleep until the hero comes close
+ * (or hits one), then hunt — straight at the hero when in sight, otherwise round the walls along
+ * the shortest way.
+ */
 export class Enemies {
   readonly group = new THREE.Group();
-  /** Every enemy currently in the room. */
+  /** Every enemy in the level. */
   readonly all: Enemy[] = [];
-  private queue: EnemyKind[] = [];
-  private spawnTimer = 0;
-  private packSize = 1;
-  private spawnInterval = 1.5;
-  private gates: THREE.Vector3[];
+  private readonly brains = new Map<Enemy, Brain>();
+  private nextPack = 1;
+  private field: Int32Array | null = null;
+  private fieldTile = -1;
+  private step = 0;
+  private readonly far = new THREE.Vector3();
 
-  constructor(gates: THREE.Vector3[]) {
-    this.gates = gates;
-  }
-
-  /** New room, new gates. */
-  setGates(gates: THREE.Vector3[]): void {
-    this.gates = gates;
-  }
-
-  /** Enemies still to beat this wave (alive + not yet spawned). */
+  /** Monsters still alive in the level. */
   get remaining(): number {
-    return this.queue.length + this.all.filter((s) => s.alive).length;
+    return this.all.filter((s) => s.alive).length;
   }
 
-  /** The current boss or mini-boss, while it's alive. */
+  /** Monsters awake and hunting. */
+  get hunting(): number {
+    return this.all.filter((s) => s.alive && !this.brains.get(s)?.asleep).length;
+  }
+
+  /** The mini-boss or boss, once it's awake (it gets a health bar then). */
   get boss(): Enemy | null {
-    return this.all.find((s) => s.bossName !== null && s.alive) ?? null;
+    return this.all.find((s) => s.bossName !== null && s.alive && !this.brains.get(s)?.asleep) ?? null;
+  }
+
+  /** Is the level's guardian (any boss) still alive, awake or not? */
+  get guardianAlive(): boolean {
+    return this.all.some((s) => s.bossName !== null && s.alive);
+  }
+
+  isAsleep(e: Enemy): boolean {
+    return !!this.brains.get(e)?.asleep;
   }
 
   /** Warning rings for every attack about to land. */
@@ -163,25 +181,49 @@ export class Enemies {
     return this.all.filter((s) => s.alive && s.telegraph).map((s) => s.telegraph!);
   }
 
-  /** Starts a wave; a boss appears at (bossX, bossZ) right away, its escorts trickle in later. */
-  startRoomWave(w: RoomWave, bossX: number, bossZ: number): Enemy | null {
-    this.queue = shuffle(Object.entries(w.mix).flatMap(([k, n]) => Array<EnemyKind>(n ?? 0).fill(k as EnemyKind)));
-    this.packSize = 2;
-    this.spawnInterval = w.boss ? 3 : 1.4;
-    this.spawnTimer = w.boss ? 4 : 0.3;
-    return w.boss ? this.add(createEnemy(w.boss, bossX, bossZ)) : null;
+  /** Places the level's packs, asleep: members stand round the pack's spot. */
+  spawnPacks(packs: readonly { x: number; z: number; kinds: readonly EnemyKind[]; boss: boolean }[], obstacles: readonly Circle[]): void {
+    for (const pack of packs) {
+      const id = this.nextPack++;
+      pack.kinds.forEach((kind, i) => {
+        // The boss stands in the middle; the rest in a loose ring.
+        const lead = pack.boss && i === 0;
+        const a = (i / pack.kinds.length) * Math.PI * 2 + id;
+        const d = lead ? 0 : pack.boss ? 5 : 1.5 + (i % 2) * 1.5;
+        const e = createEnemy(kind, pack.x + Math.cos(a) * d, pack.z + Math.sin(a) * d);
+        const pos = { x: e.x, z: e.z };
+        pushOutOfCircles(pos, e.radius, obstacles);
+        clampToArena(pos, e.radius);
+        e.setPosition(pos.x, pos.z);
+        this.add(e, id, true);
+      });
+    }
   }
 
-  /** The practice room's showcase: replaces everything with one monster of `kind`, behaving as usual. */
+  /** The practice room's showcase: replaces everything with one monster of `kind`, awake and behaving as usual. */
   showcase(kind: EnemyKind, x: number, z: number): Enemy {
     this.clear();
-    return this.add(createEnemy(kind, x, z));
+    return this.add(createEnemy(kind, x, z), 0, false);
   }
 
   clear(): void {
     for (const s of this.all) this.group.remove(s.group);
     this.all.length = 0;
-    this.queue = [];
+    this.brains.clear();
+    this.field = null;
+    this.fieldTile = -1;
+  }
+
+  /** Draws only the enemies within `range` m of `focus` (the level is big; fog hides the rest). */
+  cull(focus: { x: number; z: number }, range: number): void {
+    for (const s of this.all) s.group.visible = Math.abs(s.x - focus.x) < range && Math.abs(s.z - focus.z) < range;
+  }
+
+  /** Wakes `e` and its whole pack (it was hit, or saw the hero). */
+  wake(e: Enemy): void {
+    const b = this.brains.get(e);
+    if (!b?.asleep) return;
+    for (const ob of this.brains.values()) if (ob.pack === b.pack) ob.asleep = false;
   }
 
   /** Stuns every living enemy within `radius` of (x, z); returns those hit. */
@@ -198,64 +240,75 @@ export class Enemies {
     return hit;
   }
 
-  private add<T extends Enemy>(e: T): T {
+  private add<T extends Enemy>(e: T, pack: number, asleep: boolean): T {
     this.all.push(e);
     this.group.add(e.group);
+    this.brains.set(e, { pack, asleep, sees: false, waypoint: null });
     return e;
   }
 
-  /** Spawns reinforcements in a ring around (x, z) (a boss calling for help). */
-  private summon(kind: EnemyKind, x: number, z: number, count: number, obstacles: readonly Circle[], half: number): void {
+  /** Spawns reinforcements in a ring around (x, z) (a boss calling for help), awake. */
+  private summon(kind: EnemyKind, x: number, z: number, count: number, obstacles: readonly Circle[], pack: number): void {
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + Math.random();
       const e = createEnemy(kind, x + Math.cos(a) * 3.5, z + Math.sin(a) * 3.5);
       const pos = { x: e.x, z: e.z };
       pushOutOfCircles(pos, e.radius, obstacles);
-      clampToArena(pos, half, e.radius);
+      clampToArena(pos, e.radius);
       e.setPosition(pos.x, pos.z);
-      this.add(e);
+      this.add(e, pack, false);
     }
   }
 
-  /** Updates every enemy; returns bolts fired and area attacks landed this step. */
-  update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], half: number): { spits: Spit[]; strikes: Strike[] } {
-    this.spawnTimer -= dt;
-    if (this.queue.length && this.spawnTimer <= 0 && this.gates.length) {
-      // A pack pours out of one gate at a time.
-      this.spawnTimer = this.spawnInterval;
-      const gate = this.gates[Math.floor(Math.random() * this.gates.length)];
-      const alongX = Math.abs(gate.z) > Math.abs(gate.x);
-      for (let n = 0; n < this.packSize && this.queue.length; n++) {
-        const jitter = (Math.random() - 0.5) * 3.5;
-        const inward = n * 0.8; // stagger the pack so it doesn't spawn overlapping
-        const x = gate.x + (alongX ? jitter : -Math.sign(gate.x) * inward);
-        const z = gate.z + (alongX ? -Math.sign(gate.z) * inward : jitter);
-        this.add(createEnemy(this.queue.pop()!, x, z));
-      }
+  /**
+   * Updates every awake enemy; returns bolts fired and area attacks landed this step. `target` is
+   * where they think the hero is; `hero` where the hero really is (sleepers wake on seeing it).
+   */
+  update(dt: number, target: THREE.Vector3, obstacles: readonly Circle[], hero: THREE.Vector3 = target): { spits: Spit[]; strikes: Strike[] } {
+    const map = walkMap();
+    this.step++;
+    // The way to the hero round the walls, redone when the hero moves to another tile.
+    const tile = map.row(target.z) * map.cols + map.col(target.x);
+    if (tile !== this.fieldTile || !this.field) {
+      this.field = map.distanceField(target.x, target.z, this.field ?? undefined);
+      this.fieldTile = tile;
     }
     const spits: Spit[] = [];
     const strikes: Strike[] = [];
     for (const s of [...this.all]) {
-      spits.push(...s.update(dt, target, this.all, obstacles, half));
+      const b = this.brains.get(s)!;
+      if (b.asleep) {
+        if (!s.alive || (this.step + s.id) % THINK_EVERY) continue;
+        const d = Math.hypot(hero.x - s.x, hero.z - s.z);
+        if (s.hp < s.maxHp || d < HEAR_RANGE || (d < WAKE_RANGE && map.lineOfSight(s, hero))) this.wake(s); // hurt, heard or seen
+        continue;
+      }
+      if (s.alive && ((this.step + s.id) % THINK_EVERY === 0 || dt === 0)) {
+        b.sees = map.raycast(s.x, s.z, target.x, target.z, Math.min(0.6, s.radius * 0.7)) === null;
+        b.waypoint = b.sees ? null : map.nextWaypoint(this.field, s.x, s.z, s.radius);
+      }
+      let goal = target;
+      if (s.alive && !b.sees && b.waypoint) {
+        // Out of sight: head round the walls. The goal is set far along that way, so nothing
+        // attacks thin air on the way.
+        const dx = b.waypoint.x - s.x;
+        const dz = b.waypoint.z - s.z;
+        const len = Math.hypot(dx, dz) || 1;
+        goal = this.far.set(s.x + (dx / len) * 300, 0, s.z + (dz / len) * 300);
+      }
+      spits.push(...s.update(dt, goal, this.all, obstacles));
       if (s.strike) strikes.push(s.strike);
       if (s.summon) {
-        this.summon(s.summon.kind, s.x, s.z, s.summon.count, obstacles, half);
+        this.summon(s.summon.kind, s.x, s.z, s.summon.count, obstacles, b.pack);
         s.summon = null;
       }
     }
     for (let i = this.all.length - 1; i >= 0; i--) {
       if (!this.all[i].removed) continue;
       this.group.remove(this.all[i].group);
+      this.brains.delete(this.all[i]);
       this.all.splice(i, 1);
     }
     return { spits, strikes };
   }
-}
-
-function shuffle<T>(list: T[]): T[] {
-  for (let i = list.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [list[i], list[j]] = [list[j], list[i]];
-  }
-  return list;
 }

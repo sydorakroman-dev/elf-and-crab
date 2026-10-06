@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { Dungeon, WALL_HEIGHT } from '../world/dungeon';
+import { Dungeon } from '../world/dungeon';
+import { generateLevel, type Level } from '../world/levelgen';
 import { ROOMS, runLabel, type RunPhase } from '../world/rooms';
 import { TelegraphRings } from './telegraph';
 import { Player, type Arena, type InputMode } from '../player/controls';
@@ -23,9 +24,10 @@ import { reachRoom, recordWin } from './progress';
 import { SEAL_RIDDLES, makeRiddle, type Riddle } from './riddles';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { FamiliarCommand } from '../net/protocol';
-import { pickAimTarget } from './combat';
+import { pickAimTarget, walkMap } from './combat';
 import { fireAmbience } from './ambience';
 import { Hud } from '../ui/hud';
+import { Minimap } from '../ui/minimap';
 import { Sfx } from './audio';
 import { loadBest, recordRun } from './highscore';
 import { ActivePowers, POWER_UPS, pickPowerUp, randomSpawnPoint, spreadDirections, type PowerUpType } from './powerups';
@@ -37,7 +39,6 @@ const STEP = 1 / 60; // fixed simulation step
 const MAX_FRAME = 0.1; // clamp long frames (tab switches) so physics doesn't explode
 const MAX_HEALTH = HERO.maxHp;
 const FIRE_INTERVAL = 0.36;
-const WAVE_BREAK = 2.5;
 const AIM_ASSIST_ANGLE = 0.3; // radians
 const TOUCH_AIM_ASSIST_ANGLE = 0.65; // aiming with a thumb is much harder
 const AIM_ASSIST_RANGE = 32;
@@ -85,7 +86,10 @@ export class Game {
   private readonly shadowSize: number;
   private readonly telegraph = new TelegraphRings();
   private room = 0;
-  private waveInRoom = 0;
+  /** This run's current level (regenerated, with a new seed, every time you enter one). */
+  private level!: Level;
+  /** The guardian's health bar has been announced. */
+  private bossAnnounced = false;
   private phase: RunPhase = 'fight';
   private doorT = 0;
   private doorSwitched = false;
@@ -111,6 +115,7 @@ export class Game {
   private nextZoneId = 1;
   private readonly effects = new Effects();
   private readonly hud: Hud;
+  private readonly minimap: Minimap;
   private readonly touch: TouchControls | null = null;
   private readonly mode: InputMode;
   private readonly sfx = new Sfx();
@@ -129,9 +134,10 @@ export class Game {
   private health = MAX_HEALTH;
   private score = 0;
   private wave = 0;
-  private waveBreak = 0;
   private fireCooldown = 0;
   private invulnerable = 0;
+  /** Seconds since the elf last took a hit (resting heals). */
+  private sinceHurt = 0;
   /** Jade Ward: seconds left on the healing circle around the elf (and its mesh). */
   private ward = 0;
   private readonly wardRing: THREE.Group;
@@ -173,9 +179,10 @@ export class Game {
     this.elf = elf;
     this.mode = mode;
     this.shadowSize = mode === 'touch' ? 1024 : 2048;
-    this.dungeon = new Dungeon(this.scene, ROOMS[0], this.shadowSize);
-    this.arena = { half: this.dungeon.half, wallHeight: WALL_HEIGHT, obstacles: this.dungeon.obstacles };
-    this.enemies = new Enemies(this.dungeon.gates);
+    this.level = this.makeLevel(0);
+    this.dungeon = new Dungeon(this.scene, ROOMS[0], this.level, this.shadowSize);
+    this.arena = { wallHeight: this.dungeon.wallHeight, obstacles: this.dungeon.obstacles };
+    this.enemies = new Enemies();
     this.companion = new Companion(familiars);
     this.shieldBubble = new THREE.Mesh(
       new THREE.IcosahedronGeometry(1.25, 2),
@@ -201,6 +208,8 @@ export class Game {
       this.banner(`${ROOMS[this.room].name}`);
       this.player.activate();
     }, () => this.beginFight());
+    this.minimap = new Minimap(root);
+    this.minimap.setLevel(this.level.map);
     if (mode === 'touch') this.touch = new TouchControls(root, this.player);
     this.player.onActiveChange = (active) => {
       this.hud.setPaused(!active, this.state === 'playing');
@@ -273,7 +282,6 @@ export class Game {
   }
 
   private resetWorld(): void {
-    this.enemies.clear();
     this.arrows.clear();
     this.globs.clear();
     this.pickups.clear();
@@ -296,7 +304,7 @@ export class Game {
   /** Starts a run in room `start` (0: the Woodland; later rooms once reached — "continue"). */
   private newGame(start = 0): void {
     const room = Math.max(0, Math.min(ROOMS.length - 1, start));
-    if (this.room !== room || this.dungeon.room !== ROOMS[room]) this.loadRoom(room);
+    this.loadRoom(room); // a freshly generated level every run
     this.resetWorld();
     this.state = 'playing';
     this.health = MAX_HEALTH;
@@ -310,8 +318,6 @@ export class Game {
     this.elf.setPose('none');
     this.score = 0;
     this.wave = 0;
-    this.waveInRoom = 0;
-    this.waveBreak = 1.5;
     // Open on the Woodland's intro card.
     this.phase = 'transition';
     this.doorT = DOOR_FADE;
@@ -325,14 +331,24 @@ export class Game {
     this.hud.setScore(this.score);
   }
 
-  /** Swaps in room `index`: builds it, and points everything at its size, obstacles and gates. */
+  /** A new level `index` with a fresh seed (the practice room: one plain hall). */
+  private makeLevel(index: number): Level {
+    const theme = this.practice ? { ...ROOMS[index], layout: 'practice' as const } : ROOMS[index];
+    return generateLevel(theme, (Math.random() * 2 ** 32) >>> 0);
+  }
+
+  /** Swaps in level `index`: generates and builds it, points everything at its walls and obstacles, places its packs. */
   private loadRoom(index: number): void {
     this.dungeon.dispose(this.scene);
     this.room = index;
-    this.dungeon = new Dungeon(this.scene, ROOMS[index], this.shadowSize);
-    this.arena.half = this.dungeon.half;
+    this.level = this.makeLevel(index);
+    this.dungeon = new Dungeon(this.scene, ROOMS[index], this.level, this.shadowSize);
+    this.arena.wallHeight = this.dungeon.wallHeight;
     this.arena.obstacles = this.dungeon.obstacles;
-    this.enemies.setGates(this.dungeon.gates);
+    this.enemies.clear();
+    this.enemies.spawnPacks(this.level.packs, this.dungeon.obstacles);
+    this.bossAnnounced = false;
+    this.minimap?.setLevel(this.level.map);
   }
 
   private frame(timestamp: number): void {
@@ -350,6 +366,8 @@ export class Game {
     this.sfx.music.play(this.state === 'playing' || this.state === 'won' ? this.room : -1, !!this.enemies.boss && this.state === 'playing');
     this.sfx.music.update();
     if (!this.headless) {
+      // Walls and trees between the camera and the elf fade out.
+      this.dungeon.fadeBetween(this.camera.position, this.player.position, real);
       // Camera shake: a jitter that fades out (applied only for this render).
       this.shake = Math.max(0, this.shake - real * 2.2);
       this.shakeOffset.set((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
@@ -362,7 +380,7 @@ export class Game {
 
   private update(dt: number): void {
     this.time += dt;
-    this.dungeon.update(this.time, dt);
+    this.dungeon.update(this.time, dt, this.player.position);
     this.updateAmbience(dt);
     const running = this.state === 'playing' && (this.player.isActive || this.practice);
     this.steps++;
@@ -370,6 +388,8 @@ export class Game {
       this.net.sendSnapshot(this.snapshot(running));
     }
     this.hud.actionBar.setVisible(running && !this.headless);
+    this.minimap.setVisible(running && !this.headless && !this.practice);
+    if (running) this.updateMinimap(dt);
     if (!running) {
       // Paused / title / game over: keep the scene alive but frozen.
       this.player.update(0, false);
@@ -389,25 +409,28 @@ export class Game {
 
     this.shoot(dt);
     this.updateZones(dt);
-    const half = this.dungeon.half;
     // Wind Walk: enemies lose track and head for the spot where the elf vanished.
     const seen = this.invisible > 0 ? this.vanishSpot : this.player.position;
-    const { spits, strikes } = this.enemies.update(dt, seen, this.dungeon.obstacles, half);
+    // Nothing stirs before the hero starts, or while walking between levels.
+    const still = !this.practice && (this.phase === 'ready' || this.phase === 'transition');
+    const { spits, strikes } = still ? { spits: [], strikes: [] } : this.enemies.update(dt, seen, this.dungeon.obstacles);
     for (const spit of spits) {
       this.globs.fire(spit);
       this.sfx.spit();
       this.events.push({ e: 'spit' });
     }
     for (const strike of strikes) this.enemyStrike(strike);
+    if (this.steps % 6 === 0) this.enemies.cull(this.player.position, 50);
     this.showHealPulses();
     this.syncBoss();
     this.updateGlobs(dt);
 
-    for (const hit of this.arrows.update(dt, this.enemies.all, this.dungeon.obstacles, half)) {
+    for (const hit of this.arrows.update(dt, this.enemies.all, this.dungeon.obstacles)) {
       this.damage(hit.slime, hit.dirX, hit.dirZ);
     }
 
     this.updateFamiliar(dt);
+    this.rest(dt);
 
     this.checkContacts();
     this.updatePowerUps(dt);
@@ -460,7 +483,7 @@ export class Game {
 
   /** The familiar's creature: walking, biting, and whatever spells went off this step. */
   private updateFamiliar(dt: number): void {
-    const r = this.companion.update(dt, this.enemies.all, this.dungeon.obstacles, this.dungeon.half);
+    const r = this.companion.update(dt, this.enemies.all, this.dungeon.obstacles);
     const c = this.companion.position;
     const push = (s: Enemy, amount: number) => {
       const dx = s.x - c.x;
@@ -689,7 +712,7 @@ export class Game {
       if (!this.practice || !kind) return;
       const f = this.companion.present ? this.companion.position : this.player.position;
       const d = Math.hypot(f.x, f.z) || 1;
-      const at = { x: f.x - (f.x / d) * 9, z: f.z - (f.z / d) * 9 }; // toward the middle of the room
+      const at = walkMap().nearestFloor(f.x - (f.x / d) * 9, f.z - (f.z / d) * 9); // toward the middle of the room
       const e = this.enemies.showcase(kind, at.x, at.z);
       this.effects.ring(e.x, e.z, e.color, Math.max(1.5, e.radius * 1.5));
       this.effects.burst(e.x, 1, e.z, e.color, 24, 5, 0.12);
@@ -697,7 +720,7 @@ export class Game {
       return;
     }
     if (cmd.type !== 'choose') {
-      this.companion.command(cmd, this.dungeon.half);
+      this.companion.command(cmd);
       return;
     }
     // Creatures can be picked any time at first, but only swapped between runs / while paused.
@@ -735,13 +758,15 @@ export class Game {
       fam: c.kind
         ? { k: FAMILIAR_KINDS.indexOf(c.kind), x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed), y: q(c.height) }
         : null,
-      slimes: this.enemies.all.map((s) => s.tuple()),
+      // Only the monsters near either player (a level is big).
+      slimes: this.enemies.all.filter((s) => this.nearPlayers(s.x, s.z, 48)).map((s) => s.tuple()),
       arrows: this.arrows.snapshot(),
       globs: this.globs.snapshot(),
       pickups: this.pickups.snapshot(),
       zones: this.zoneTuples(),
       room: this.room,
-      rw: this.waveInRoom,
+      rw: 0,
+      lvl: this.level.seed,
       phase: this.phase,
       card: this.phase === 'transition' && this.doorSwitched ? this.room : -1,
       ...(this.riddle ? { rid: { a: this.riddle.a, op: this.riddle.op, b: this.riddle.b, c: this.riddle.choices, n: this.sealSolved, t: SEAL_RIDDLES, m: this.sealMisses } } : {}),
@@ -758,6 +783,39 @@ export class Game {
     };
     this.events = [];
     return snap;
+  }
+
+  /** Out of a fight for a few seconds (nobody hunting nearby), the elf gets health back. */
+  private rest(dt: number): void {
+    this.sinceHurt += dt;
+    if (this.sinceHurt < HEALING.restAfter || this.health >= MAX_HEALTH || this.health <= 0) return;
+    const p = this.player.position;
+    if (this.enemies.all.some((s) => s.alive && !this.enemies.isAsleep(s) && Math.hypot(s.x - p.x, s.z - p.z) < 24)) return;
+    const before = Math.floor(this.health);
+    this.health = Math.min(MAX_HEALTH, this.health + HEALING.rest * dt);
+    if (Math.floor(this.health) !== before) this.hud.setHealth(this.health);
+  }
+
+  private updateMinimap(dt: number): void {
+    const p = this.player.position;
+    const c = this.companion;
+    const e = this.level.exit;
+    const bossHall = this.level.halls.find((h) => h.kind === 'boss');
+    this.minimap.update(dt, {
+      hero: { x: p.x, z: p.z, facing: this.player.motion.facing },
+      familiar: c.present ? c.position : null,
+      exit: e ? { ...e, open: this.dungeon.exitTarget === 1 } : null,
+      chests: this.level.chests,
+      boss: bossHall && this.enemies.guardianAlive ? bossHall : null,
+    });
+  }
+
+  /** Is (x, z) within `range` m of the elf or the familiar? */
+  private nearPlayers(x: number, z: number, range: number): boolean {
+    const p = this.player.position;
+    if (Math.hypot(x - p.x, z - p.z) < range) return true;
+    const c = this.companion;
+    return c.present && Math.hypot(x - c.position.x, z - c.position.z) < range;
   }
 
   /** Big banner on the hero's screen, mirrored on the familiar's. */
@@ -822,11 +880,11 @@ export class Game {
     if (!this.powers.has('shield')) this.shieldHits = 0;
 
     this.nextPickup -= dt;
-    if (this.nextPickup <= 0 && (this.wave > 0 || this.practice)) {
+    if (this.nextPickup <= 0 && (this.phase === 'fight' || this.practice)) {
       // The practice room drops them much more often, to try them out.
       this.nextPickup = this.practice ? 3 + Math.random() * 2 : PICKUP_INTERVAL_MIN + Math.random() * (PICKUP_INTERVAL_MAX - PICKUP_INTERVAL_MIN);
       if (this.pickups.count < MAX_PICKUPS + (this.practice ? 1 : 0)) {
-        const at = randomSpawnPoint(Math.random, this.dungeon.half, this.dungeon.obstacles, [p], 7);
+        const at = randomSpawnPoint(Math.random, p, this.dungeon.obstacles, [p], 7);
         this.pickups.spawn(pickPowerUp(Math.random, this.health, MAX_HEALTH), at.x, at.z);
       }
     }
@@ -876,7 +934,7 @@ export class Game {
     const p = this.player.position;
     const canBeHit = this.invulnerable === 0 && !this.player.dashing;
     const target = canBeHit ? { x: p.x, z: p.z, radius: PLAYER_RADIUS } : null;
-    for (const hit of this.globs.update(dt, this.time, target, this.dungeon.obstacles, this.dungeon.half)) {
+    for (const hit of this.globs.update(dt, this.time, target, this.dungeon.obstacles)) {
       this.effects.burst(hit.x, 1, hit.z, new THREE.Color(PROJECTILES[hit.kind].color), 10, 4, 0.12);
       this.events.push({ e: 'glob', x: q(hit.x), z: q(hit.z), k: PROJECTILE_KINDS.indexOf(hit.kind) });
       if (hit.kind === 'fire') this.igniteGround(hit);
@@ -933,6 +991,7 @@ export class Game {
 
   private hurtPlayer(amount: number, dirX: number, dirZ: number, knock = 16): void {
     const p = this.player.position;
+    this.sinceHurt = 0;
     if (this.powers.has('shield')) {
       // The shield takes the hit instead (a Bubble Shield holds for a second one).
       this.shieldHits--;
@@ -1009,8 +1068,8 @@ export class Game {
   /** Opens the exit door. */
   private openDoor(): void {
     this.dungeon.setExitOpen(true);
-    this.banner('Room cleared!');
-    this.hud.toast('↑ Head through the north door', 0xffe0a0);
+    this.banner('The way is open!');
+    this.hud.toast('↑ The exit door is open, north of the guardian’s hall', 0xffe0a0);
     this.sfx.door();
     this.events.push({ e: 'door' });
   }
@@ -1054,21 +1113,21 @@ export class Game {
     if (this.phase === 'cleared') this.openDoor();
   }
 
-  /** The hero pressed Start (Enter / the button): the first wave comes. */
+  /** The hero pressed Start (Enter / the button): the hunt begins. */
   private beginFight(): void {
     if (this.state !== 'playing' || this.phase !== 'ready') return;
     this.phase = 'fight';
-    this.waveBreak = 0.8;
+    this.wave = this.room + 1;
     this.hud.setStartPrompt(false);
-    this.banner('⚔️ Here they come!');
+    this.banner('⚔️ Find the way north!');
     this.sfx.wave();
   }
 
-  /** Waves within a room; when all three are done, the north door opens (or, in the last room, you win). */
+  /** The level: hunt down its guardian; then the exit opens (or, in the lair, you win). */
   private updateWaves(dt: number): void {
-    this.hud.setWave(this.riddle && !this.practice ? `🔮 Rune seal — your familiar is solving it (${this.sealSolved}/${SEAL_RIDDLES})` : runLabel(this.room, this.waveInRoom, this.enemies.remaining, this.phase, this.enemies.boss?.bossName ?? null));
+    this.hud.setWave(this.riddle && !this.practice ? `🔮 Rune seal — your familiar is solving it (${this.sealSolved}/${SEAL_RIDDLES})` : runLabel(this.room, this.enemies.remaining, this.phase, this.enemies.boss?.bossName ?? null));
     this.hud.setStartPrompt(this.phase === 'ready');
-    if (this.phase === 'ready') return; // nothing comes until the hero starts
+    if (this.phase === 'ready') return; // nothing stirs until the hero starts
     if (this.phase === 'transition') {
       this.updateDoor(dt);
       return;
@@ -1078,48 +1137,27 @@ export class Game {
       if (this.dungeon.inExit(p.x, p.z)) this.enterDoor();
       return;
     }
-    if (this.enemies.remaining > 0) return;
-    if (this.waveBreak <= 0) {
-      // Wave cleared: breather, and a heart back.
-      this.waveBreak = WAVE_BREAK;
-      if (this.waveInRoom > 0) {
-        this.heal(HEALING.waveClear);
-        if (this.waveInRoom >= ROOMS[this.room].waves.length) {
-          if (!ROOMS[this.room].hasExit) {
-            this.victory();
-            return;
-          }
-          this.phase = 'cleared';
-          // With a familiar along, runes seal the door until it solves their riddles.
-          if (this.companion.present && this.net?.familiarConnected) this.startSeal();
-          else this.openDoor();
-          return;
-        }
-        this.banner(`Wave ${this.waveInRoom} cleared`);
-      }
-      return;
-    }
-    this.waveBreak -= dt;
-    if (this.waveBreak <= 0) this.startNextWave();
-  }
-
-  private startNextWave(): void {
-    this.waveInRoom++;
-    this.wave++;
-    const room = ROOMS[this.room];
-    const w = room.waves[Math.min(this.waveInRoom, room.waves.length) - 1];
-    const at = { x: 0, z: -this.dungeon.half + 8 };
-    const boss = this.enemies.startRoomWave(w, at.x, at.z);
-    if (boss) {
-      const color = boss.color.getHex();
-      this.effects.ring(at.x, at.z, color, 5);
-      this.effects.burst(at.x, 2, at.z, boss.color, 50, 9, 0.2);
+    if (this.practice) return;
+    // The guardian wakes: its name across the screen and its health bar.
+    const boss = this.enemies.boss;
+    if (boss && !this.bossAnnounced) {
+      this.bossAnnounced = true;
+      this.effects.ring(boss.x, boss.z, boss.color.getHex(), 5);
+      this.effects.burst(boss.x, 2, boss.z, boss.color, 50, 9, 0.2);
       this.banner(`⚔️ ${boss.bossName}!`);
       this.sfx.burst();
-    } else {
-      this.banner(`Wave ${this.waveInRoom}/${room.waves.length}`);
     }
-    this.sfx.wave();
+    if (this.enemies.guardianAlive) return;
+    // Guardian down: a breather, and the way on.
+    this.heal(HEALING.waveClear);
+    if (!ROOMS[this.room].hasExit) {
+      this.victory();
+      return;
+    }
+    this.phase = 'cleared';
+    // With a familiar along, runes seal the door until it solves their riddles.
+    if (this.companion.present && this.net?.familiarConnected) this.startSeal();
+    else this.openDoor();
   }
 
   private heal(amount: number): void {
@@ -1143,7 +1181,7 @@ export class Game {
       this.doorSwitched = true;
       this.loadRoom(this.room + 1);
       this.hud.setProgress(reachRoom(this.room));
-      this.enemies.clear();
+      this.wave = this.room + 1;
       this.arrows.clear();
       this.globs.clear();
       this.pickups.clear();
@@ -1153,9 +1191,7 @@ export class Game {
       const e = this.dungeon.entry;
       this.player.spawn(e.x, e.z, 0);
       if (this.companion.kind) this.companion.appear(this.companion.kind, e.x + 2.5, e.z + 0.5);
-      this.heal(MAX_HEALTH); // a fresh start in every room
-      this.waveInRoom = 0;
-      this.waveBreak = 2.2;
+      this.heal(MAX_HEALTH); // a fresh start in every level
       this.nextPickup = 8;
       this.cardSkip = false;
       this.hud.fade.set(true, this.room);
@@ -1164,7 +1200,7 @@ export class Game {
       // A new run waits in the first room until the hero presses Start; later rooms go straight in.
       this.phase = this.wave === 0 ? 'ready' : 'fight';
       this.hud.fade.set(false);
-      this.banner(`Room ${this.room + 1} · ${ROOMS[this.room].name}`);
+      this.banner(`Level ${this.room + 1} · ${ROOMS[this.room].name}`);
     }
   }
 

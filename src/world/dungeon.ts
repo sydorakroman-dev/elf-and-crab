@@ -1,139 +1,181 @@
 import * as THREE from 'three';
-import { insideArena, setArenaShape, type ArenaShape, type Circle } from '../game/combat';
+import { setWalkMap, type Circle } from '../game/combat';
+import { TILE, type WalkMap } from '../game/walkmap';
 import { glowTexture } from '../util/glow';
 import { mulberry32 } from '../util/rng';
+import type { Level, Prop } from './levelgen';
 import type { RoomDef } from './rooms';
 
-export const WALL_HEIGHT = 7;
-const TILE = 2;
 export const GATE_HALF_WIDTH = 2.2;
 const GATE_HEIGHT = 4;
 const PILLAR_RADIUS = 1.3;
-const WALL_DEPTH = 1.4;
-
-/** Walls by direction. North is the exit (−Z), south the entry (+Z). */
-type Side = 'north' | 'west' | 'south' | 'east';
-const SIDES: Side[] = ['north', 'west', 'south', 'east'];
-
-/** Wall segments per floor plan (a "circle" is a 24-sided wall, which reads as round). */
-const WALL_SIDES: Record<ArenaShape, number> = { square: 4, octagon: 8, circle: 24 };
-
-/** Distance from the centre to the wall's inner face in direction `angle` (0 = north). */
-function wallDistance(shape: ArenaShape, half: number, angle: number): number {
-  if (shape === 'circle') return half;
-  const step = (Math.PI * 2) / WALL_SIDES[shape];
-  let d = ((angle % step) + step) % step;
-  d = Math.min(d, step - d);
-  return half / Math.cos(d);
-}
-
-/** Torch spots around the wall (angles; 0 = north), clear of the gates and corners. */
-function torchAngles(shape: ArenaShape): number[] {
-  const out: number[] = [];
-  for (let k = 0; k < 4; k++) {
-    const a = (k * Math.PI) / 2;
-    if (shape === 'square') out.push(a - 0.4636, a + 0.4636); // halfway along each wall
-    else if (shape === 'octagon') out.push(a + Math.PI / 4 - 0.17, a + Math.PI / 4 + 0.17); // the diagonal walls
-    else out.push(a + Math.PI / 8, a + (3 * Math.PI) / 8);
-  }
-  return out;
-}
+/** Walls are drawn (and faded) in square chunks of this many tiles. */
+const CHUNK = 8;
+/** Point lights shared out to the flames nearest the camera's focus. */
+const LIGHT_POOL = 8;
+/** The sun / moon's shadow covers this far around the focus (m). */
+const SHADOW_REACH = 34;
 
 interface Flame {
-  light: THREE.PointLight;
   sprite: THREE.Sprite;
-  base: number;
+  x: number;
+  y: number;
+  z: number;
+  /** Light it gives when it has one of the pooled lights. */
+  intensity: number;
+  distance: number;
+  color: number;
   seed: number;
+  flicker: number;
+}
+
+/** A chunk of wall (and the woods / rock behind it), faded as one when it hides what you follow. */
+interface WallChunk {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  mats: THREE.Material[];
+  opacity: number;
+}
+
+interface Fadeable {
+  obj: THREE.Object3D;
+  mats: THREE.Material[];
+  opacity: number;
 }
 
 /**
- * One room of the dungeon, built from a RoomDef: tiled floor, brick walls with a gate on each side,
- * pillars, a centrepiece (brazier, puddles, lava pit, crystals or a throne), torches and lights.
- * Enemies come in through the west, east and north gates; the elf enters by the south gate and
- * leaves by the north door once it opens. Static geometry is instanced; dispose() frees it all.
+ * One level of the dungeon, drawn from its generated Level and its theme (RoomDef): tiled floor,
+ * walls (brick, or hedges and woods outdoors) round the halls and corridors, the props (trees,
+ * pillars, crystals, braziers, lava…), the exit door, torches and lights. The sun / moon's shadow
+ * and a small pool of point lights follow the camera's focus, so a big level stays fast.
+ * dispose() frees it all.
  */
 export class Dungeon {
   readonly group = new THREE.Group();
   readonly room: RoomDef;
-  readonly half: number;
+  readonly level: Level;
+  readonly map: WalkMap;
+  readonly wallHeight: number;
   readonly obstacles: Circle[] = [];
-  /** Tall things (pillars, trees, crystal clusters) a close camera may need to see through. */
+  /** Tall things (pillars, trees, crystal clusters) a camera may need to see through. */
   readonly occluders: THREE.Object3D[] = [];
-  /** The walls (and gate) on the south side, between a south-facing camera and the room. */
-  readonly southWall: THREE.Object3D[] = [];
-  /** Just inside each enemy gate — where enemies enter. */
-  readonly gates: THREE.Vector3[] = [];
-  /** Where the elf arrives (inside the south gate). */
+  /** Where the elf arrives (looking north). */
   readonly entry = new THREE.Vector3();
-  /** Centre of the exit doorway on the floor (north wall). */
-  readonly exit = new THREE.Vector3();
+  /** Centre of the exit doorway on the floor (null in the final lair). */
+  readonly exit: THREE.Vector3 | null;
   /** Fire positions and loudness, for positional ambience. */
   readonly fireSources: { position: THREE.Vector3; strength: number }[] = [];
+  /** 0 closed → 1 open (the door animates toward it). */
+  exitTarget = 0;
   private readonly flames: Flame[] = [];
+  private readonly lights: THREE.PointLight[] = [];
+  private lightTimer = 0;
+  private readonly moon: THREE.DirectionalLight;
   private readonly glowing: THREE.MeshStandardMaterial[] = [];
+  private readonly chunks: WallChunk[] = [];
+  private fadeables: Fadeable[] = [];
   private exitBars: THREE.Group | null = null;
   private exitPortal: THREE.Mesh | null = null;
   private exitLight: THREE.PointLight | null = null;
-  private exitOpen = 0; // 0 closed → 1 open (animated)
-  private exitTarget = 0;
+  private exitOpen = 0;
   private readonly fireflies: { sprite: THREE.Sprite; base: THREE.Vector3; seed: number }[] = [];
-  /** Embers rising through the dragon's lair. */
   private readonly embers: { sprite: THREE.Sprite; x: number; z: number; speed: number; seed: number }[] = [];
-  /** The Flooded Hall: its water sheet, ripples, and things bobbing on the water. */
   private waterSheet: THREE.Mesh | null = null;
   private readonly ripples: { mesh: THREE.Mesh; age: number; life: number }[] = [];
   private readonly glints: { sprite: THREE.Sprite; seed: number }[] = [];
   private readonly bobbers: { obj: THREE.Object3D; base: number; seed: number; amp: number }[] = [];
+  private readonly focus = new THREE.Vector3();
+  /** Things only drawn near the focus (fog hides them further off anyway): [object, range m]. */
+  private readonly nearOnly: [THREE.Object3D, number][] = [];
+  private cullTimer = 0;
+  /** Floor tiles next to a wall: [floor col, floor row, wall dc, wall dr]. */
+  private readonly edges: [number, number, number, number][] = [];
 
-  constructor(scene: THREE.Scene, room: RoomDef, shadowMapSize = 2048) {
+  constructor(scene: THREE.Scene, room: RoomDef, level: Level, shadowMapSize = 2048) {
     this.room = room;
-    this.half = room.half;
-    setArenaShape(room.shape); // every arena check (movement, arrows, bolts, camera) follows this room's shape
-    const rng = mulberry32(room.half * 7919 + room.pillars.length);
+    this.level = level;
+    this.map = level.map;
+    this.wallHeight = room.wallHeight;
+    setWalkMap(level.map); // every walkability check (movement, arrows, bolts, camera) follows this level
+    const rng = mulberry32(level.seed ^ 0x5eed);
     scene.background = new THREE.Color(room.fog);
-    scene.fog = room.outdoor ? new THREE.Fog(room.fog, 45, 120) : new THREE.Fog(room.fog, 30, 80);
+    scene.fog = room.outdoor ? new THREE.Fog(room.fog, 45, 110) : new THREE.Fog(room.fog, 28, 78);
+    this.entry.set(level.start.x, 0, level.start.z);
+    this.exit = level.exit ? new THREE.Vector3(level.exit.x, 0, level.exit.z + 0.6) : null;
+    this.findEdges();
 
     this.buildFloor(rng);
     this.buildWalls(rng);
-    this.buildPillars();
+    this.buildExit();
+    for (const p of level.props) this.buildProp(p, rng);
     this.buildFeature(rng);
     this.buildRubble(rng);
-    this.buildLights(shadowMapSize);
-
-    const h = this.half;
-    // Far enough in that the camera behind the elf can sit up over the south wall.
-    this.entry.set(0, 0, h - 12);
-    this.exit.set(0, 0, -h + 0.6);
-    if (!room.solidWest) this.gates.push(new THREE.Vector3(-(h - 1.5), 0, 0));
-    this.gates.push(new THREE.Vector3(h - 1.5, 0, 0));
-    if (room.hasExit) this.gates.push(new THREE.Vector3(0, 0, -(h - 1.5)));
+    this.moon = this.buildLights(shadowMapSize, rng);
+    this.fadeables = this.occluders.map((obj) => ({ obj, mats: ownMaterials(obj), opacity: 1 }));
+    this.focus.copy(this.entry);
+    this.update(0, 0, this.entry);
     scene.add(this.group);
   }
 
   /** Is (x, z) in the open exit doorway? */
   inExit(x: number, z: number): boolean {
-    return this.room.hasExit && this.exitTarget === 1 && z < -this.half + 2 && Math.abs(x) < GATE_HALF_WIDTH;
+    const e = this.level.exit;
+    return !!e && this.exitTarget === 1 && Math.abs(x - e.x) < GATE_HALF_WIDTH && z < e.z + 1.6;
   }
 
   setExitOpen(open: boolean): void {
     this.exitTarget = open ? 1 : 0;
   }
 
-  /** Torch flicker, glowing things, the exit door. */
-  update(time: number, dt = 1 / 60): void {
+  /** Torch flicker, the lights and shadow following `focus`, glowing things, water, the exit door. */
+  update(time: number, dt: number, focus: THREE.Vector3): void {
+    this.focus.copy(focus);
     for (const f of this.flames) {
-      const flicker =
-        0.82 + Math.sin(time * 11 + f.seed) * 0.08 + Math.sin(time * 23.7 + f.seed * 3) * 0.06 + Math.sin(time * 5.3 + f.seed * 7) * 0.06;
-      f.light.intensity = f.base * flicker;
-      f.sprite.scale.setScalar(f.sprite.userData.size * (0.9 + flicker * 0.15));
+      f.flicker = 0.82 + Math.sin(time * 11 + f.seed) * 0.08 + Math.sin(time * 23.7 + f.seed * 3) * 0.06 + Math.sin(time * 5.3 + f.seed * 7) * 0.06;
+      f.sprite.scale.setScalar(f.sprite.userData.size * (0.9 + f.flicker * 0.15));
     }
+    // Hand the point lights to the flames nearest the focus (re-sorted a few times a second).
+    this.lightTimer -= dt;
+    if (this.lightTimer <= 0 || dt === 0) {
+      this.lightTimer = 0.25;
+      const near = this.flames
+        .map((f) => ({ f, d: (f.x - focus.x) ** 2 + (f.z - focus.z) ** 2 }))
+        .filter((n) => n.d < 45 * 45)
+        .sort((a, b) => a.d - b.d)
+        .slice(0, LIGHT_POOL);
+      this.lights.forEach((l, i) => {
+        const n = near[i];
+        l.userData.flame = n?.f ?? null;
+        if (!n) {
+          l.intensity = 0;
+          return;
+        }
+        l.position.set(n.f.x, n.f.y + 0.3, n.f.z);
+        l.color.setHex(n.f.color);
+        l.distance = n.f.distance;
+      });
+    }
+    for (const l of this.lights) {
+      const f = l.userData.flame as Flame | null;
+      if (f) l.intensity = f.intensity * f.flicker;
+    }
+    this.cullTimer -= dt;
+    if (this.cullTimer <= 0 || dt === 0) {
+      this.cullTimer = 0.2;
+      for (const [obj, range] of this.nearOnly) obj.visible = Math.abs(obj.position.x - focus.x) < range && Math.abs(obj.position.z - focus.z) < range;
+    }
+    // The shadow-casting sun / moon keeps the focus in the middle of its shadow.
+    this.moon.position.set(focus.x + 12, 40, focus.z + 18);
+    this.moon.target.position.set(focus.x, 0, focus.z);
+
     for (const [i, m] of this.glowing.entries()) m.emissiveIntensity = (m.userData.base as number) * (0.85 + Math.sin(time * 1.7 + i) * 0.15);
     for (const f of this.fireflies) {
       const t = time * 0.6 + f.seed;
       f.sprite.position.set(f.base.x + Math.sin(t * 1.3) * 1.5, f.base.y + Math.sin(t * 2.1) * 0.5, f.base.z + Math.cos(t * 0.9) * 1.5);
       f.sprite.material.opacity = 0.35 + 0.65 * Math.max(0, Math.sin(t * 3 + f.seed * 5));
     }
-
     if (this.waterSheet) this.waterSheet.position.y = 0.22 + Math.sin(time * 0.8) * 0.015;
     for (const g of this.glints) g.sprite.material.opacity = Math.max(0, Math.sin(time * 1.3 + g.seed * 3)) ** 3 * 0.8;
     for (const b of this.bobbers) {
@@ -143,17 +185,11 @@ export class Dungeon {
     for (const r of this.ripples) {
       r.age += dt;
       if (r.age >= r.life) {
+        // Ripples pop up around wherever we're looking.
         r.age = 0;
-        const lim = this.half - 3;
-        for (let i = 0; i < 10; i++) {
-          const x = (Math.random() * 2 - 1) * lim;
-          const z = (Math.random() * 2 - 1) * lim;
-          if (insideArena(x, z, this.half, 3, this.room.shape)) {
-            r.mesh.position.x = x;
-            r.mesh.position.z = z;
-            break;
-          }
-        }
+        const p = this.map.randomFloor(Math.random, 1, focus, 0, 26);
+        r.mesh.position.x = p.x;
+        r.mesh.position.z = p.z;
       }
       const k = r.age / r.life;
       r.mesh.scale.setScalar(0.3 + k * 2.2);
@@ -173,7 +209,35 @@ export class Dungeon {
     }
   }
 
-  /** Removes the room from the scene and frees its GPU resources. */
+  /**
+   * Fades walls and tall props standing between the camera and `focus` (what it follows), so the
+   * hero / creature never vanishes behind them.
+   */
+  fadeBetween(camera: THREE.Vector3, focus: THREE.Vector3, dt: number): void {
+    const fy = focus.y + 1;
+    // Only the part of the sight line below the wall tops can be blocked.
+    const rise = camera.y - fy;
+    const tTop = rise > 0.01 ? Math.min(1, (this.wallHeight + 0.5 - fy) / rise) : 1;
+    const ex = focus.x + (camera.x - focus.x) * tTop;
+    const ez = focus.z + (camera.z - focus.z) * tTop;
+    for (const c of this.chunks) {
+      const hit = segmentHitsBox(focus.x, focus.z, ex, ez, c.minX - 1, c.maxX + 1, c.minZ - 1, c.maxZ + 1);
+      fade(c, hit ? 0.28 : 1, dt);
+    }
+    const lx = camera.x - focus.x;
+    const lz = camera.z - focus.z;
+    const len2 = lx * lx + lz * lz || 1;
+    for (const item of this.fadeables) {
+      const p = item.obj.position;
+      const t = ((p.x - focus.x) * lx + (p.z - focus.z) * lz) / len2;
+      const cx = focus.x + lx * Math.max(0, Math.min(1, t));
+      const cz = focus.z + lz * Math.max(0, Math.min(1, t));
+      const near = Math.hypot(p.x - cx, p.z - cz) < 3 && t > -0.05 && t < 0.6;
+      fade(item, near || Math.hypot(p.x - focus.x, p.z - focus.z) < 2.5 ? 0.22 : 1, dt);
+    }
+  }
+
+  /** Removes the level from the scene and frees its GPU resources. */
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
     const seen = new Set<unknown>();
@@ -193,179 +257,188 @@ export class Dungeon {
     });
   }
 
+  // ── Building ──────────────────────────────────────────────────────────────────────────────────
+
+  private findEdges(): void {
+    const m = this.map;
+    for (let r = 0; r < m.rows; r++)
+      for (let c = 0; c < m.cols; c++) {
+        if (!m.isFloor(c, r)) continue;
+        for (const [dc, dr] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) if (!m.isFloor(c + dc, r + dr)) this.edges.push([c, r, dc, dr]);
+      }
+  }
+
+  /** How many tiles from wall tile (c, r) to the nearest floor (1 = right next to it), up to 3. */
+  private depth(c: number, r: number): number {
+    for (let d = 1; d <= 3; d++)
+      for (let dr = -d; dr <= d; dr++)
+        for (let dc = -d; dc <= d; dc++) if (Math.max(Math.abs(dr), Math.abs(dc)) === d && this.map.isFloor(c + dc, r + dr)) return d;
+    return 99;
+  }
+
   private buildFloor(rng: () => number): void {
-    const h = this.half;
-    const n = (h * 2) / TILE;
+    const m = this.map;
     const { floor } = this.room;
+    let count = 0;
+    for (const t of m.tiles) if (t) count++;
     const tiles = new THREE.InstancedMesh(
       new THREE.BoxGeometry(TILE - 0.07, 0.3, TILE - 0.07),
       new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, flatShading: true }),
-      n * n,
+      count,
     );
-    const m = new THREE.Matrix4();
+    const mat = new THREE.Matrix4();
     const c = new THREE.Color();
     let i = 0;
-    for (let ix = 0; ix < n; ix++) {
-      for (let iz = 0; iz < n; iz++) {
-        const x = -h + TILE / 2 + ix * TILE;
-        const z = -h + TILE / 2 + iz * TILE;
-        if (!insideArena(x, z, h, -TILE, this.room.shape)) continue; // round / eight-sided rooms
-        // Grass is lumpier than flagstones.
-        const bump = this.room.outdoor ? 0.1 : 0.04;
-        m.makeRotationY((rng() - 0.5) * 0.03).setPosition(x, -0.15 + (rng() - 0.5) * bump, z);
-        tiles.setMatrixAt(i, m);
+    const bump = this.room.outdoor ? 0.1 : 0.04; // grass is lumpier than flagstones
+    for (let r = 0; r < m.rows; r++)
+      for (let col = 0; col < m.cols; col++) {
+        if (!m.isFloor(col, r)) continue;
+        const p = m.centre(col, r);
+        mat.makeRotationY((rng() - 0.5) * 0.03).setPosition(p.x, -0.15 + (rng() - 0.5) * bump, p.z);
+        tiles.setMatrixAt(i, mat);
         tiles.setColorAt(i, c.setHSL(floor.h + (rng() - 0.5) * 0.05, floor.s + (rng() - 0.5) * 0.06, floor.l + (rng() - 0.5) * 0.07));
         i++;
       }
-    }
-    tiles.count = i;
     tiles.receiveShadow = true;
-    // Dark grout showing between the tiles, in the room's own shape.
-    const sides = WALL_SIDES[this.room.shape];
-    const groutR = (h + 3) / Math.cos(Math.PI / sides);
-    const grout = new THREE.Mesh(
-      new THREE.CylinderGeometry(groutR, groutR, 0.2, sides),
+    tiles.computeBoundingSphere();
+    // Dark ground under everything (the grout between tiles, and beyond the walls).
+    const size = m.cols * TILE + 80;
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({ color: this.room.outdoor ? 0x22381a : 0x0e0c10, roughness: 1 }),
     );
-    grout.rotation.y = Math.PI / sides;
-    grout.position.y = -0.25;
-    this.group.add(tiles, grout);
+    ground.position.set(m.originX + (m.cols * TILE) / 2, -0.3, m.originZ + (m.rows * TILE) / 2);
+    this.group.add(tiles, ground);
   }
 
+  /**
+   * The walls: stacked blocks on every wall tile touching the floor, rock caps (or, outdoors, a
+   * wood of trees) a couple of tiles deeper, all in chunks that can fade out separately.
+   */
   private buildWalls(rng: () => number): void {
-    const h = this.half;
-    const brickW = 2;
-    const brickH = 1;
-    const sides = WALL_SIDES[this.room.shape];
-    // Half the length of each wall segment's outer face (a little extra closes the corners).
-    const span = (h + WALL_DEPTH) * Math.tan(Math.PI / sides) + (sides > 4 ? 0.5 : 0);
-    const rows = WALL_HEIGHT / brickH;
-    const perRow = Math.ceil((span * 2) / brickW) + 1;
+    const m = this.map;
     const { wall } = this.room;
-    // Two brick meshes: the walls on the south (camera) side get their own, so a view from the
-    // south can make them see-through when they'd hide something.
-    const brickGeo = new THREE.BoxGeometry(brickW - 0.06, brickH - 0.06, WALL_DEPTH);
-    const brickMesh = () => {
-      const mesh = new THREE.InstancedMesh(brickGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true }), sides * rows * perRow);
-      mesh.count = 0; // filled below
-      return mesh;
-    };
-    const northBricks = brickMesh();
-    const southBricks = brickMesh();
-    const m = new THREE.Matrix4();
-    const rot = new THREE.Matrix4();
+    const outdoor = !!this.room.outdoor;
+    const H = this.wallHeight;
+    const rows = Math.ceil(H);
+    const blockGeo = new THREE.BoxGeometry(TILE - 0.06, 1 - 0.06, TILE - 0.06);
+    const capGeo = new THREE.BoxGeometry(TILE, 0.5, TILE);
+    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 1, 6).translate(0, 0.5, 0);
+    const canopyGeo = new THREE.IcosahedronGeometry(1, 0);
+    const mat4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const v = new THREE.Vector3();
+    const s = new THREE.Vector3();
     const c = new THREE.Color();
-    const voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    for (let cr = 0; cr < m.rows; cr += CHUNK)
+      for (let cc = 0; cc < m.cols; cc += CHUNK) {
+        const blocks: THREE.Matrix4[] = [];
+        const blockColors: THREE.Color[] = [];
+        const caps: THREE.Matrix4[] = [];
+        const trunks: THREE.Matrix4[] = [];
+        const canopies: THREE.Matrix4[] = [];
+        const canopyColors: THREE.Color[] = [];
+        for (let r = cr; r < Math.min(cr + CHUNK, m.rows); r++)
+          for (let col = cc; col < Math.min(cc + CHUNK, m.cols); col++) {
+            if (m.isFloor(col, r)) continue;
+            const d = this.depth(col, r);
+            const p = m.centre(col, r);
+            if (d === 1) {
+              for (let row = 0; row < rows; row++) {
+                const h = Math.min(1, H - row);
+                if (outdoor) {
+                  // Leafy, uneven blocks for a hedge.
+                  const k = 1 + rng() * 0.25;
+                  q.setFromEuler(e.set((rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3));
+                  mat4.compose(v.set(p.x + (rng() - 0.5) * 0.3, row + h / 2, p.z + (rng() - 0.5) * 0.3), q, s.set(k, h * k, k));
+                } else {
+                  mat4.compose(v.set(p.x, row + h / 2, p.z), q.identity(), s.set(1, h, 1));
+                }
+                blocks.push(mat4.clone());
+                blockColors.push(new THREE.Color().setHSL(wall.h + (rng() - 0.5) * 0.08, wall.s + (rng() - 0.5) * 0.05, wall.l + (rng() - 0.5) * 0.08 - (row === 0 ? 0.03 : 0)));
+              }
+            } else if (d <= 3) {
+              if (outdoor) {
+                // The wood beyond the hedge: trees on every other tile.
+                if ((col + r) % 2 === 0 || rng() < 0.3) {
+                  const height = 3 + rng() * 2.5;
+                  const jx = p.x + (rng() - 0.5) * 1.2;
+                  const jz = p.z + (rng() - 0.5) * 1.2;
+                  trunks.push(new THREE.Matrix4().compose(v.set(jx, 0, jz), q.identity(), s.set(1, height, 1)));
+                  for (let i = 0; i < 2; i++) {
+                    const k = 1.9 - i * 0.5 + rng() * 0.3;
+                    q.setFromEuler(e.set(rng() * 3, rng() * 3, rng() * 3));
+                    canopies.push(new THREE.Matrix4().compose(v.set(jx + (rng() - 0.5) * 0.6, height + 0.6 + i * 1.2, jz + (rng() - 0.5) * 0.6), q, s.set(k, k, k)));
+                    canopyColors.push(new THREE.Color().setHSL(0.27 + (rng() - 0.5) * 0.05, 0.45, 0.28 + rng() * 0.08));
+                  }
+                }
+              } else {
+                const jitter = (rng() - 0.5) * 0.4;
+                caps.push(new THREE.Matrix4().compose(v.set(p.x, H - 0.25 + jitter, p.z), q.identity(), s.set(1, 1, 1)));
+              }
+            }
+          }
+        if (!blocks.length && !caps.length && !trunks.length) continue;
+        const chunk = new THREE.Group();
+        const mats: THREE.Material[] = [];
+        const add = (geo: THREE.BufferGeometry, list: THREE.Matrix4[], material: THREE.MeshStandardMaterial, colors?: THREE.Color[]) => {
+          if (!list.length) return;
+          const mesh = new THREE.InstancedMesh(geo, material, list.length);
+          list.forEach((mm, i) => {
+            mesh.setMatrixAt(i, mm);
+            if (colors) mesh.setColorAt(i, colors[i]);
+          });
+          mesh.castShadow = mesh.receiveShadow = true;
+          mesh.computeBoundingSphere();
+          chunk.add(mesh);
+          mats.push(material);
+        };
+        add(blockGeo, blocks, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true }), blockColors);
+        add(capGeo, caps, new THREE.MeshStandardMaterial({ color: c.setHSL(wall.h, wall.s * 0.7, wall.l * 0.6).getHex(), roughness: 1, flatShading: true }));
+        add(trunkGeo, trunks, new THREE.MeshStandardMaterial({ color: 0x6a4024, roughness: 0.9, flatShading: true }));
+        add(canopyGeo, canopies, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true }), canopyColors);
+        this.group.add(chunk);
+        const x0 = m.originX + cc * TILE;
+        const z0 = m.originZ + cr * TILE;
+        this.chunks.push({ minX: x0, maxX: x0 + CHUNK * TILE, minZ: z0, maxZ: z0 + CHUNK * TILE, mats, opacity: 1 });
+      }
+  }
+
+  /** The exit door: a stone frame and portcullis set in the north wall, a glowing portal behind. */
+  private buildExit(): void {
+    const e = this.level.exit;
+    if (!e) return;
     const trimMat = new THREE.MeshStandardMaterial({ color: this.room.stone, roughness: 0.9, flatShading: true });
     const ironMat = this.room.outdoor
       ? new THREE.MeshStandardMaterial({ color: 0x5a3c22, roughness: 0.9, flatShading: true }) // wooden gate
       : new THREE.MeshStandardMaterial({ color: 0x26221f, metalness: 0.6, roughness: 0.5, flatShading: true });
-    const hedge = this.room.outdoor;
-
-    for (let k = 0; k < sides; k++) {
-      const angle = (k * Math.PI * 2) / sides;
-      const south = Math.cos(angle) < -0.01; // this segment's wall faces the room from the south
-      const bricks = south ? southBricks : northBricks;
-      rot.makeRotationY(angle);
-      // Gates are on the four walls facing north, west, south and east.
-      const gateIndex = (k * 4) % sides === 0 ? (k * 4) / sides : -1;
-      const side = gateIndex >= 0 ? SIDES[gateIndex] : null;
-      const throneWall = !side || (side === 'north' && !this.room.hasExit) || (side === 'west' && !!this.room.solidWest);
-      for (let row = 0; row < rows; row++) {
-        const offset = row % 2 ? brickW / 2 : 0;
-        for (let b = 0; b < perRow; b++) {
-          const x = -span + offset + b * brickW;
-          if (x - brickW / 2 > span) continue;
-          // Leave an opening for the gate (the throne wall is solid).
-          if (!throneWall && row < GATE_HEIGHT && Math.abs(x) - brickW / 2 < GATE_HALF_WIDTH) continue;
-          if (hedge) {
-            // Leafy, uneven blocks for a hedge.
-            const s = 1 + rng() * 0.25;
-            m.makeRotationFromEuler(new THREE.Euler((rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3));
-            m.scale(new THREE.Vector3(s, s, 1 + rng() * 0.3));
-            m.setPosition(x, row * brickH + brickH / 2, -(h + WALL_DEPTH / 2 - (rng() - 0.5) * 0.3));
-            m.premultiply(rot);
-          } else {
-            m.makeTranslation(x, row * brickH + brickH / 2, -(h + WALL_DEPTH / 2)).premultiply(rot);
-          }
-          bricks.setMatrixAt(bricks.count, m);
-          bricks.setColorAt(bricks.count, c.setHSL(wall.h + (rng() - 0.5) * 0.08, wall.s + (rng() - 0.5) * 0.05, wall.l + (rng() - 0.5) * 0.08 - (row === 0 ? 0.03 : 0)));
-          bricks.count++;
-        }
-      }
-      if (throneWall) continue;
-
-      // Gate: dark void behind the opening, with a stone frame.
-      const gate = new THREE.Group();
-      const voidPlane = new THREE.Mesh(new THREE.PlaneGeometry(GATE_HALF_WIDTH * 2, GATE_HEIGHT), voidMat);
-      voidPlane.position.set(0, GATE_HEIGHT / 2, -(h + WALL_DEPTH));
-      const lintel = new THREE.Mesh(new THREE.BoxGeometry(GATE_HALF_WIDTH * 2 + 1.6, 0.8, WALL_DEPTH + 0.3), trimMat);
-      lintel.position.set(0, GATE_HEIGHT + 0.4, -(h + WALL_DEPTH / 2));
-      const postGeo = new THREE.BoxGeometry(0.8, GATE_HEIGHT, WALL_DEPTH + 0.3);
-      const postL = new THREE.Mesh(postGeo, trimMat);
-      postL.position.set(-GATE_HALF_WIDTH - 0.4, GATE_HEIGHT / 2, -(h + WALL_DEPTH / 2));
-      const postR = postL.clone();
-      postR.position.x = GATE_HALF_WIDTH + 0.4;
-      for (const o of [lintel, postL, postR]) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-      }
-      gate.add(voidPlane, lintel, postL, postR);
-
-      // The entry (closed behind you) and the exit (opens when the room is clear) have portcullises.
-      if (side === 'south' || side === 'north') {
-        const bars = portcullis(ironMat);
-        bars.position.z = -(h + 0.15);
-        gate.add(bars);
-        if (side === 'north') {
-          this.exitBars = bars;
-          // A glowing portal behind the door, revealed as it opens.
-          const portal = new THREE.Mesh(
-            new THREE.PlaneGeometry(GATE_HALF_WIDTH * 2, GATE_HEIGHT),
-            new THREE.MeshBasicMaterial({ color: 0xfff1c0, map: glowTexture(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
-          );
-          portal.position.set(0, GATE_HEIGHT / 2, -(h + WALL_DEPTH - 0.05));
-          this.exitPortal = portal;
-          const light = new THREE.PointLight(0xffe0a0, 0, 16, 1.5);
-          light.position.set(0, 2.2, -(h - 1));
-          this.exitLight = light;
-          gate.add(portal, light);
-        }
-      }
-      gate.rotation.y = angle;
-      this.group.add(gate);
-      if (south) this.southWall.push(gate);
-    }
-    for (const bricks of [northBricks, southBricks]) {
-      bricks.castShadow = true;
-      bricks.receiveShadow = true;
-      this.group.add(bricks);
-    }
-    this.southWall.push(southBricks);
-  }
-
-  private buildPillars(): void {
-    const stone = new THREE.MeshStandardMaterial({ color: this.room.stone, roughness: 0.9, flatShading: true });
-    const shaftGeo = new THREE.CylinderGeometry(PILLAR_RADIUS - 0.2, PILLAR_RADIUS - 0.1, WALL_HEIGHT - 1.2, 8);
-    const blockGeo = new THREE.BoxGeometry(PILLAR_RADIUS * 2.1, 0.6, PILLAR_RADIUS * 2.1);
-    for (const [x, z] of this.room.pillars) {
-      const pillar = new THREE.Group();
-      const shaft = new THREE.Mesh(shaftGeo, stone);
-      shaft.position.y = WALL_HEIGHT / 2;
-      const base = new THREE.Mesh(blockGeo, stone);
-      base.position.y = 0.3;
-      const cap = new THREE.Mesh(blockGeo, stone);
-      cap.position.y = WALL_HEIGHT - 0.3;
-      for (const o of [shaft, base, cap]) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-      }
-      pillar.add(shaft, base, cap);
-      pillar.position.set(x, 0, z);
-      this.group.add(pillar);
-      this.occluders.push(pillar);
-      this.obstacles.push({ x, z, radius: PILLAR_RADIUS });
-    }
+    const gate = new THREE.Group();
+    gate.position.set(e.x, 0, e.z);
+    const voidPlane = new THREE.Mesh(new THREE.PlaneGeometry(GATE_HALF_WIDTH * 2, GATE_HEIGHT), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    voidPlane.position.set(0, GATE_HEIGHT / 2, 0.04);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(GATE_HALF_WIDTH * 2 + 1.6, 0.8, 0.9), trimMat);
+    lintel.position.set(0, GATE_HEIGHT + 0.4, 0.4);
+    const postGeo = new THREE.BoxGeometry(0.8, GATE_HEIGHT, 0.9);
+    const postL = new THREE.Mesh(postGeo, trimMat);
+    postL.position.set(-GATE_HALF_WIDTH - 0.4, GATE_HEIGHT / 2, 0.4);
+    const postR = postL.clone();
+    postR.position.x = GATE_HALF_WIDTH + 0.4;
+    for (const o of [lintel, postL, postR]) o.castShadow = o.receiveShadow = true;
+    const bars = portcullis(ironMat);
+    bars.position.z = 0.35;
+    this.exitBars = bars;
+    const portal = new THREE.Mesh(
+      new THREE.PlaneGeometry(GATE_HALF_WIDTH * 2, GATE_HEIGHT),
+      new THREE.MeshBasicMaterial({ color: 0xfff1c0, map: glowTexture(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
+    portal.position.set(0, GATE_HEIGHT / 2, 0.08);
+    this.exitPortal = portal;
+    const light = new THREE.PointLight(0xffe0a0, 0, 16, 1.5);
+    light.position.set(0, 2.2, 2);
+    this.exitLight = light;
+    gate.add(voidPlane, lintel, postL, postR, bars, portal, light);
+    this.group.add(gate);
   }
 
   private glow(color: number, emissive: number, intensity: number, extra: Partial<THREE.MeshStandardMaterialParameters> = {}): THREE.MeshStandardMaterial {
@@ -375,337 +448,124 @@ export class Dungeon {
     return m;
   }
 
-  /** A random floor spot at least `margin` inside the walls (whatever the room's shape). */
-  private spot(rng: () => number, margin: number): [number, number] {
-    const lim = this.half - margin;
-    let x = 0;
-    let z = 0;
-    for (let i = 0; i < 30; i++) {
-      x = (rng() * 2 - 1) * lim;
-      z = (rng() * 2 - 1) * lim;
-      if (insideArena(x, z, this.half, margin, this.room.shape)) break;
-    }
-    return [x, z];
+  private shared = new Map<string, THREE.BufferGeometry | THREE.Material>();
+  /** One geometry / material per key, shared by every prop that uses it. */
+  private once<T extends THREE.BufferGeometry | THREE.Material>(key: string, make: () => T): T {
+    let v = this.shared.get(key);
+    if (!v) this.shared.set(key, (v = make()));
+    return v as T;
   }
 
-  private buildFeature(rng: () => number): void {
+  private buildProp(p: Prop, rng: () => number): void {
     const room = this.room;
-    switch (room.feature) {
-      case 'woodland': {
-        // Low-poly trees (trunk + stacked canopy), like the card art.
-        const bark = new THREE.MeshStandardMaterial({ color: 0x7a4a26, flatShading: true, roughness: 0.9 });
-        const leafColors = [0x4f8f3a, 0x5fa044, 0x3f7a32];
-        for (const [x, z] of room.trees ?? []) {
-          const tree = new THREE.Group();
-          const height = 3 + rng() * 1.5;
-          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, height, 7).translate(0, height / 2, 0), bark);
-          tree.add(trunk);
-          const leaf = new THREE.MeshStandardMaterial({ color: leafColors[Math.floor(rng() * leafColors.length)], flatShading: true, roughness: 0.85 });
-          for (let i = 0; i < 3; i++) {
-            const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(1.9 - i * 0.4, 0), leaf);
-            blob.position.set((rng() - 0.5) * 0.8, height + 0.6 + i * 1.1, (rng() - 0.5) * 0.8);
-            blob.rotation.set(rng() * 3, rng() * 3, rng() * 3);
-            tree.add(blob);
-          }
-          tree.traverse((o) => (o.castShadow = o.receiveShadow = true));
-          tree.position.set(x, 0, z);
-          tree.rotation.y = rng() * Math.PI * 2;
-          this.group.add(tree);
-          this.occluders.push(tree);
-          this.obstacles.push({ x, z, radius: 0.9 });
+    const obj = new THREE.Group();
+    obj.position.set(p.x, 0, p.z);
+    let blocks: Circle | null = { x: p.x, z: p.z, radius: p.r };
+    let tall = true;
+    switch (p.kind) {
+      case 'tree': {
+        // Low-poly tree: trunk and a stacked canopy, like the card art.
+        const bark = this.once('bark', () => new THREE.MeshStandardMaterial({ color: 0x7a4a26, flatShading: true, roughness: 0.9 }));
+        const leaves = [0x4f8f3a, 0x5fa044, 0x3f7a32].map((col) => this.once(`leaf${col}`, () => new THREE.MeshStandardMaterial({ color: col, flatShading: true, roughness: 0.85 })));
+        const height = 3 + rng() * 1.5;
+        const trunk = new THREE.Mesh(this.once('trunk', () => new THREE.CylinderGeometry(0.35, 0.55, 1, 7).translate(0, 0.5, 0)), bark);
+        trunk.scale.y = height;
+        obj.add(trunk);
+        const leaf = leaves[Math.floor(rng() * leaves.length)];
+        for (let i = 0; i < 3; i++) {
+          const blob = new THREE.Mesh(this.once('blob', () => new THREE.IcosahedronGeometry(1, 0)), leaf);
+          blob.scale.setScalar(1.9 - i * 0.4);
+          blob.position.set((rng() - 0.5) * 0.8, height + 0.6 + i * 1.1, (rng() - 0.5) * 0.8);
+          blob.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+          obj.add(blob);
         }
-        // Undergrowth: grass tufts, mushrooms and flowers (decoration only).
-        const tufts = new THREE.InstancedMesh(
-          new THREE.ConeGeometry(0.12, 0.5, 3).translate(0, 0.25, 0),
-          new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }),
-          220,
-        );
-        const m = new THREE.Matrix4();
-        const c = new THREE.Color();
-        for (let i = 0; i < tufts.count; i++) {
-          const [x, z] = this.spot(rng, 1);
-          m.compose(new THREE.Vector3(x, 0, z), new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * 0.5, rng() * 3, (rng() - 0.5) * 0.5)), new THREE.Vector3(1, 0.6 + rng(), 1));
-          tufts.setMatrixAt(i, m);
-          tufts.setColorAt(i, c.setHSL(0.26 + rng() * 0.06, 0.5, 0.25 + rng() * 0.12));
+        obj.rotation.y = rng() * Math.PI * 2;
+        break;
+      }
+      case 'pillar': {
+        const stone = this.once('stone', () => new THREE.MeshStandardMaterial({ color: room.stone, roughness: 0.9, flatShading: true }));
+        const H = this.wallHeight;
+        const shaft = new THREE.Mesh(this.once('shaft', () => new THREE.CylinderGeometry(PILLAR_RADIUS - 0.2, PILLAR_RADIUS - 0.1, H - 1.2, 8)), stone);
+        shaft.position.y = H / 2;
+        const blockGeo = this.once('pblock', () => new THREE.BoxGeometry(PILLAR_RADIUS * 2.1, 0.6, PILLAR_RADIUS * 2.1));
+        const base = new THREE.Mesh(blockGeo, stone);
+        base.position.y = 0.3;
+        const cap = new THREE.Mesh(blockGeo, stone);
+        cap.position.y = H - 0.3;
+        obj.add(shaft, base, cap);
+        break;
+      }
+      case 'crystal': {
+        const colors = [0x8fe8ff, 0xc89bff, 0x9ffff0];
+        const color = colors[Math.floor(rng() * colors.length)];
+        const mat = this.once(`crystal${color}`, () => this.glow(color, color, 0.7, { roughness: 0.2, metalness: 0.1 }));
+        for (let i = 0; i < 4; i++) {
+          const shard = new THREE.Mesh(this.once('shard', () => new THREE.OctahedronGeometry(0.6, 0)), mat);
+          const a = (i / 4) * Math.PI * 2 + rng();
+          shard.position.set(Math.cos(a) * 0.5, 1 + rng(), Math.sin(a) * 0.5);
+          shard.scale.set(0.8, 2.2 + rng() * 1.5, 0.8);
+          shard.rotation.set((rng() - 0.5) * 0.6, rng() * Math.PI, (rng() - 0.5) * 0.6);
+          obj.add(shard);
         }
-        this.group.add(tufts);
-        const capMat = new THREE.MeshStandardMaterial({ color: 0xd8483a, flatShading: true });
-        const stemMat = new THREE.MeshStandardMaterial({ color: 0xf2e6cc, flatShading: true });
-        const petal = [0xffd34d, 0xffffff, 0xd98cff].map((col) => new THREE.MeshStandardMaterial({ color: col, flatShading: true }));
-        for (let i = 0; i < 26; i++) {
-          const [x, z] = this.spot(rng, 2);
-          const bit = new THREE.Group();
-          if (i % 2 === 0) {
-            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.3, 5).translate(0, 0.15, 0), stemMat);
-            const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
-            cap.position.y = 0.28;
-            bit.add(stem, cap);
-          } else {
-            const flower = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), petal[i % 3]);
-            flower.position.y = 0.3;
-            bit.add(flower);
-          }
-          bit.position.set(x, 0, z);
-          this.group.add(bit);
-        }
-        // Fireflies drifting about.
-        const glowMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xf4ff9a, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
-        for (let i = 0; i < 28; i++) {
-          const sprite = new THREE.Sprite(glowMat.clone());
-          sprite.scale.setScalar(0.35);
-          const [fx, fz] = this.spot(rng, 3);
-          const base = new THREE.Vector3(fx, 0.8 + rng() * 2.5, fz);
-          this.fireflies.push({ sprite, base, seed: rng() * 10 });
-          this.group.add(sprite);
-        }
+        // Crystals glow: a soft light (one of the pooled ones when close).
+        this.flame(p.x, 2.5, p.z, 0, 14, 20, 0xb08aff, color, 0);
         break;
       }
       case 'brazier': {
-        const iron = new THREE.MeshStandardMaterial({ color: 0x2a2626, roughness: 0.6, metalness: 0.5, flatShading: true, side: THREE.DoubleSide });
-        const bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.7, 0.7, 10, 1, true), iron);
+        tall = false;
+        const iron = this.once('iron', () => new THREE.MeshStandardMaterial({ color: 0x2a2626, roughness: 0.6, metalness: 0.5, flatShading: true, side: THREE.DoubleSide }));
+        const bowl = new THREE.Mesh(this.once('bowl', () => new THREE.CylinderGeometry(1.2, 0.7, 0.7, 10, 1, true)), iron);
         bowl.position.y = 1.35;
-        const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.5, 1.1, 8), iron);
+        const stand = new THREE.Mesh(this.once('stand', () => new THREE.CylinderGeometry(0.25, 0.5, 1.1, 8)), iron);
         stand.position.y = 0.55;
-        const coals = new THREE.Mesh(new THREE.CircleGeometry(1.1, 10).rotateX(-Math.PI / 2), this.glow(0x3a1206, 0xff4a10, 1.2));
+        const coals = new THREE.Mesh(this.once('coals', () => new THREE.CircleGeometry(1.1, 10).rotateX(-Math.PI / 2)), this.once('coalsMat', () => this.glow(0x3a1206, 0xff4a10, 1.2)));
         coals.position.y = 1.5;
-        bowl.castShadow = stand.castShadow = true;
-        this.group.add(bowl, stand, coals);
-        this.obstacles.push({ x: 0, z: 0, radius: 1.3 });
-        this.addFlame(0, 2.1, 0, 3.2, 30, 30, room.torchLight, room.torchFlame, 2);
+        obj.add(bowl, stand, coals);
+        this.flame(p.x, 2.1, p.z, 3.2, 30, 30, room.torchLight, room.torchFlame, 2);
         break;
       }
-      case 'puddles': {
-        // Flooded: a sheet of water over the whole floor (everyone wades ankle-deep), deeper dark
-        // pools, ripples, waterfalls pouring down the walls into foaming basins, and floating debris.
-        const h = this.half;
-        const sides = WALL_SIDES[room.shape];
-        const r = h / Math.cos(Math.PI / sides);
-        const sheetMat = new THREE.MeshStandardMaterial({ color: 0x2a9cc4, emissive: 0x0b4a66, emissiveIntensity: 0.55, roughness: 0.04, metalness: 0.25, transparent: true, opacity: 0.8, depthWrite: false });
-        const sheet = new THREE.Mesh(new THREE.CircleGeometry(r, sides).rotateX(-Math.PI / 2).rotateY(Math.PI / sides), sheetMat);
-        sheet.position.y = 0.22;
-        sheet.receiveShadow = true;
-        sheet.renderOrder = 1;
-        this.group.add(sheet);
-        this.waterSheet = sheet;
-        // Deeper water: darker patches under the sheet.
-        const deep = new THREE.MeshStandardMaterial({ color: 0x0b2836, roughness: 0.1, metalness: 0.3 });
-        for (let i = 0; i < 12; i++) {
-          const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2), deep);
-          const [px, pz] = this.spot(rng, 4);
-          pool.position.set(px, 0.03, pz);
-          pool.scale.set(2 + rng() * 3.5, 1, 1.5 + rng() * 2.5);
-          pool.rotation.y = rng() * Math.PI;
-          this.group.add(pool);
-        }
-        // Ripples spreading over the surface (animated in update()).
-        const rippleGeo = new THREE.RingGeometry(0.85, 1, 32).rotateX(-Math.PI / 2);
-        for (let i = 0; i < 26; i++) {
-          const ring = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({ color: 0xcff4ff, transparent: true, opacity: 0, depthWrite: false }));
-          ring.position.y = 0.24;
-          ring.renderOrder = 2;
-          this.group.add(ring);
-          this.ripples.push({ mesh: ring, age: rng() * 2.5, life: 1.8 + rng() * 1.2 });
-        }
-        // Light glinting on the surface.
-        const glintMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xdff8ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
-        for (let i = 0; i < 40; i++) {
-          const glint = new THREE.Sprite(glintMat.clone());
-          const [gx, gz] = this.spot(rng, 2);
-          glint.position.set(gx, 0.3, gz);
-          glint.scale.set(0.9, 0.25, 1);
-          this.group.add(glint);
-          this.glints.push({ sprite: glint, seed: rng() * 10 });
-        }
-        // Waterfalls on the diagonal walls, foaming where they land.
-        const fallMat = new THREE.MeshStandardMaterial({ color: 0x9fdcf5, emissive: 0x2a6f8f, emissiveIntensity: 0.5, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false });
-        const foamMat = new THREE.MeshBasicMaterial({ color: 0xf2fbff, transparent: true, opacity: 0.8, depthWrite: false });
-        for (const a of [Math.PI / 4, -Math.PI / 4, (3 * Math.PI) / 4, (-3 * Math.PI) / 4]) {
-          const nx = -Math.sin(a);
-          const nz = -Math.cos(a);
-          const d = wallDistance(room.shape, h, a) - 0.4;
-          for (let k = 0; k < 3; k++) {
-            const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.3 - k * 0.3, WALL_HEIGHT), fallMat);
-            strip.position.set(nx * (d - k * 0.06) + Math.cos(a) * (k - 1) * 1.0, WALL_HEIGHT / 2, nz * (d - k * 0.06) - Math.sin(a) * (k - 1) * 1.0);
-            strip.rotation.y = a;
-            this.group.add(strip);
-          }
-          for (let k = 0; k < 6; k++) {
-            const foam = new THREE.Mesh(new THREE.SphereGeometry(0.35 + rng() * 0.3, 8, 6), foamMat);
-            foam.position.set(nx * (d - 0.9) + (rng() - 0.5) * 2.4, 0.2, nz * (d - 0.9) + (rng() - 0.5) * 2.4);
-            foam.scale.y = 0.45;
-            this.group.add(foam);
-            this.bobbers.push({ obj: foam, base: 0.2, seed: rng() * 10, amp: 0.06 });
-          }
-        }
-        // Floating debris: barrels, planks and crates, bobbing.
-        const wood = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.85, flatShading: true });
-        const band = new THREE.MeshStandardMaterial({ color: 0x3a3532, metalness: 0.5, roughness: 0.5, flatShading: true });
-        for (let i = 0; i < 9; i++) {
-          const [x, z] = this.spot(rng, 5);
-          const bit = new THREE.Group();
-          if (i % 3 === 0) {
-            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 10), wood);
-            barrel.rotation.z = Math.PI / 2;
-            const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.04, 4, 14), band);
-            hoop.rotation.y = Math.PI / 2;
-            bit.add(barrel, hoop);
-          } else if (i % 3 === 1) {
-            bit.add(new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.4), wood));
-          } else {
-            bit.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.8), wood));
-          }
-          bit.position.set(x, 0.26, z);
-          bit.rotation.y = rng() * Math.PI;
-          bit.traverse((o) => (o.castShadow = true));
-          this.group.add(bit);
-          this.bobbers.push({ obj: bit, base: 0.26, seed: rng() * 10, amp: 0.05 });
-        }
-        break;
-      }
-      case 'lava': {
-        // A glowing pit in the middle: blocks walking (arrows fly over it).
-        const lava = new THREE.Mesh(new THREE.CircleGeometry(3.2, 24).rotateX(-Math.PI / 2), this.glow(0x4a1004, 0xff5010, 1.6));
+      case 'lavapit':
+      case 'pool': {
+        // A glowing pool of lava: blocks walking (arrows fly over it).
+        tall = false;
+        const big = p.kind === 'lavapit';
+        const R = big ? 3.2 : 2.9;
+        const lava = new THREE.Mesh(this.once(`lava${R}`, () => new THREE.CircleGeometry(R, 24).rotateX(-Math.PI / 2)), this.once('lavaMat', () => this.glow(0x4a1004, 0xff5010, 1.6)));
         lava.position.y = 0.03;
-        const rim = new THREE.Mesh(new THREE.TorusGeometry(3.35, 0.35, 5, 24).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2a1a16, flatShading: true }));
+        const rim = new THREE.Mesh(
+          this.once(`rim${R}`, () => new THREE.TorusGeometry(R + 0.15, 0.35, 5, 24).rotateX(Math.PI / 2)),
+          this.once('rimMat', () => new THREE.MeshStandardMaterial({ color: 0x2a1a16, flatShading: true })),
+        );
         rim.position.y = 0.1;
-        rim.castShadow = rim.receiveShadow = true;
-        this.group.add(lava, rim);
-        this.obstacles.push({ x: 0, z: 0, radius: 3.6, low: true });
-        this.addFlame(0, 1.2, 0, 4.5, 34, 30, 0xff5a20, 0xff6a20, 2);
-        // Cracks of lava in the floor.
-        for (let i = 0; i < 10; i++) {
-          const crack = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 2 + rng() * 4).rotateX(-Math.PI / 2), this.glow(0x3a0a02, 0xff4a10, 1.2));
-          const [cx, cz] = this.spot(rng, 5);
-          crack.position.set(cx, 0.02, cz);
-          crack.rotation.y = rng() * Math.PI;
-          this.group.add(crack);
-        }
+        obj.add(lava, rim);
+        blocks = { x: p.x, z: p.z, radius: p.r, low: true };
+        this.flame(p.x, 1.1, p.z, big ? 4.5 : 3.5, big ? 34 : 22, big ? 30 : 22, 0xff5a20, 0xff6a20, big ? 2 : 1.5);
         break;
       }
-      case 'crystals': {
-        const colors = [0x8fe8ff, 0xc89bff, 0x9ffff0];
-        for (const [x, z] of room.crystals ?? []) {
-          const cluster = new THREE.Group();
-          const color = colors[Math.floor(rng() * colors.length)];
-          const mat = this.glow(color, color, 0.7, { roughness: 0.2, metalness: 0.1 });
-          for (let i = 0; i < 4; i++) {
-            const shard = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), mat);
-            const a = (i / 4) * Math.PI * 2 + rng();
-            shard.position.set(Math.cos(a) * 0.5, 1 + rng(), Math.sin(a) * 0.5);
-            shard.scale.set(0.8, 2.2 + rng() * 1.5, 0.8);
-            shard.rotation.set((rng() - 0.5) * 0.6, rng() * Math.PI, (rng() - 0.5) * 0.6);
-            shard.castShadow = true;
-            cluster.add(shard);
-          }
-          cluster.position.set(x, 0, z);
-          this.group.add(cluster);
-          this.occluders.push(cluster);
-          this.obstacles.push({ x, z, radius: 1.4 });
+      case 'spire': {
+        // Obsidian spires: tall jagged black shards veined with lava.
+        const obsidian = this.once('obsidian', () => new THREE.MeshStandardMaterial({ color: 0x1f1719, roughness: 0.35, metalness: 0.2, flatShading: true }));
+        const vein = this.once('vein', () => this.glow(0x3a0a02, 0xff5a10, 1.4));
+        for (let i = 0; i < 3; i++) {
+          const height = 9 + rng() * 6 - i * 3;
+          const shard = new THREE.Mesh(new THREE.ConeGeometry(1.4 - i * 0.35, height, 5).translate(0, height / 2, 0), obsidian);
+          shard.position.set((rng() - 0.5) * 1.2 * i, 0, (rng() - 0.5) * 1.2 * i);
+          shard.rotation.set((rng() - 0.5) * 0.15, rng() * Math.PI, (rng() - 0.5) * 0.15);
+          const crack = new THREE.Mesh(new THREE.BoxGeometry(0.12, height * 0.7, 0.12).translate(0, height * 0.35, 0), vein);
+          crack.position.copy(shard.position).add(new THREE.Vector3(0.7 - i * 0.2, 0.3, 0.55));
+          crack.rotation.copy(shard.rotation);
+          obj.add(shard, crack);
         }
-        // Two soft crystal lights to make the cave glow.
-        for (const [x, z] of [[-10, 0], [10, 0]]) {
-          const light = new THREE.PointLight(0xb08aff, 22, 26, 1.6);
-          light.position.set(x, 3, z);
-          this.group.add(light);
-        }
-        break;
-      }
-      case 'dragonlair': {
-        const h = this.half;
-        // Obsidian spires: tall jagged black shards veined with lava; they block like pillars.
-        const obsidian = new THREE.MeshStandardMaterial({ color: 0x1f1719, roughness: 0.35, metalness: 0.2, flatShading: true });
-        const vein = this.glow(0x3a0a02, 0xff5a10, 1.4);
-        for (const [x, z] of room.spires ?? []) {
-          const spire = new THREE.Group();
-          for (let i = 0; i < 3; i++) {
-            const height = 9 + rng() * 6 - i * 3;
-            const shard = new THREE.Mesh(new THREE.ConeGeometry(1.4 - i * 0.35, height, 5).translate(0, height / 2, 0), obsidian);
-            shard.position.set((rng() - 0.5) * 1.2 * i, 0, (rng() - 0.5) * 1.2 * i);
-            shard.rotation.set((rng() - 0.5) * 0.15, rng() * Math.PI, (rng() - 0.5) * 0.15);
-            shard.castShadow = shard.receiveShadow = true;
-            const crack = new THREE.Mesh(new THREE.BoxGeometry(0.12, height * 0.7, 0.12).translate(0, height * 0.35, 0), vein);
-            crack.position.copy(shard.position).add(new THREE.Vector3(0.7 - i * 0.2, 0.3, 0.55));
-            crack.rotation.copy(shard.rotation);
-            spire.add(shard, crack);
-          }
-          spire.position.set(x, 0, z);
-          this.group.add(spire);
-          this.occluders.push(spire);
-          this.obstacles.push({ x, z, radius: 1.6 });
-        }
-        // Lava pools with dark rims; walking is blocked, arrows fly over.
-        for (const [x, z] of room.pools ?? []) {
-          const lava = new THREE.Mesh(new THREE.CircleGeometry(2.9, 24).rotateX(-Math.PI / 2), this.glow(0x4a1004, 0xff5010, 1.7));
-          lava.position.set(x, 0.03, z);
-          const rim = new THREE.Mesh(new THREE.TorusGeometry(3.05, 0.4, 5, 24).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x241414, flatShading: true }));
-          rim.position.set(x, 0.12, z);
-          rim.castShadow = rim.receiveShadow = true;
-          this.group.add(lava, rim);
-          this.obstacles.push({ x, z, radius: 3.3, low: true });
-          this.addFlame(x, 1, z, 3.5, 22, 22, 0xff5a20, 0xff6a20, 1.5);
-        }
-        // Lavafalls pouring down the walls into glowing basins.
-        const fall = this.glow(0x7a1a04, 0xff4a0a, 1.15, { side: THREE.DoubleSide });
-        for (const a of [Math.PI * 0.2, -Math.PI * 0.2, Math.PI * 0.45, -Math.PI * 0.45, Math.PI * 0.8, -Math.PI * 0.8]) {
-          const nx = -Math.sin(a);
-          const nz = -Math.cos(a);
-          const d = h - 0.4;
-          for (let k = 0; k < 3; k++) {
-            const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.1 - k * 0.25, WALL_HEIGHT + 2), fall);
-            strip.position.set(nx * (d - k * 0.05) + Math.cos(a) * (k - 1) * 0.9, (WALL_HEIGHT + 2) / 2, nz * (d - k * 0.05) - Math.sin(a) * (k - 1) * 0.9);
-            strip.rotation.y = a;
-            this.group.add(strip);
-          }
-          const basin = new THREE.Mesh(new THREE.CircleGeometry(2.2, 18).rotateX(-Math.PI / 2), this.glow(0x4a1004, 0xff5010, 1.5));
-          basin.position.set(nx * (d - 1.6), 0.03, nz * (d - 1.6));
-          this.group.add(basin);
-          this.addFlame(nx * (d - 1.5), 2.5, nz * (d - 1.5), 3, 20, 24, 0xff5a20, 0xff7a30, 1);
-        }
-        // A great rune circle in the middle of the floor.
-        const rune = this.glow(0x2a0a04, 0xff7a2a, 1.1);
-        for (const r of [7, 8.2]) {
-          const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.12, 4, 64).rotateX(Math.PI / 2), rune);
-          ring.position.y = 0.04;
-          this.group.add(ring);
-        }
-        for (let i = 0; i < 8; i++) {
-          const a = (i / 8) * Math.PI * 2;
-          const mark = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), rune);
-          mark.scale.set(1, 0.08, 1.8);
-          mark.position.set(Math.sin(a) * 7.6, 0.05, Math.cos(a) * 7.6);
-          mark.rotation.y = a;
-          this.group.add(mark);
-        }
-        // Cracks of lava across the floor, and embers rising everywhere.
-        for (let i = 0; i < 22; i++) {
-          const crack = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 2.5 + rng() * 5).rotateX(-Math.PI / 2), this.glow(0x3a0a02, 0xff4a10, 1.2));
-          const [cx, cz] = this.spot(rng, 4);
-          crack.position.set(cx, 0.02, cz);
-          crack.rotation.y = rng() * Math.PI;
-          this.group.add(crack);
-        }
-        const emberMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffa040, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
-        for (let i = 0; i < 70; i++) {
-          const sprite = new THREE.Sprite(emberMat.clone());
-          sprite.scale.setScalar(0.25 + rng() * 0.3);
-          const [ex, ez] = this.spot(rng, 2);
-          this.embers.push({ sprite, x: ex, z: ez, speed: 0.6 + rng() * 1.2, seed: rng() * 10 });
-          this.group.add(sprite);
-        }
-        this.addFlame(0, 3, 0, 4, 26, 40, 0xff6a30, 0xff7a30, 2);
         break;
       }
       case 'throne': {
-        const h = this.half;
-        const stone = new THREE.MeshStandardMaterial({ color: room.stone, roughness: 0.85, flatShading: true });
-        const gold = new THREE.MeshStandardMaterial({ color: 0xd8a83a, metalness: 0.7, roughness: 0.35, flatShading: true });
-        const velvet = new THREE.MeshStandardMaterial({ color: 0x7a1424, roughness: 0.9, flatShading: true });
-        const throne = new THREE.Group();
-        const steps = [new THREE.BoxGeometry(7, 0.4, 4), new THREE.BoxGeometry(5.5, 0.4, 3)];
-        steps.forEach((g, i) => {
-          const s = new THREE.Mesh(g, stone);
-          s.position.set(0, 0.2 + i * 0.4, -i * 0.3);
-          throne.add(s);
+        const stone = this.once('stone', () => new THREE.MeshStandardMaterial({ color: room.stone, roughness: 0.85, flatShading: true }));
+        const gold = this.once('gold', () => new THREE.MeshStandardMaterial({ color: 0xd8a83a, metalness: 0.7, roughness: 0.35, flatShading: true }));
+        const velvet = this.once('velvet', () => new THREE.MeshStandardMaterial({ color: 0x7a1424, roughness: 0.9, flatShading: true }));
+        [new THREE.BoxGeometry(7, 0.4, 4), new THREE.BoxGeometry(5.5, 0.4, 3)].forEach((g, i) => {
+          const st = new THREE.Mesh(g, stone);
+          st.position.set(0, 0.2 + i * 0.4, -i * 0.3);
+          obj.add(st);
         });
         const seat = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.5, 2), velvet);
         seat.position.set(0, 1.3, -0.4);
@@ -716,122 +576,400 @@ export class Dungeon {
         for (const sx of [-1, 1]) {
           const arm = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.8, 2), gold);
           arm.position.set(sx * 1.3, 1.8, -0.4);
-          throne.add(arm);
+          obj.add(arm);
         }
         const crown = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.9, 5), gold);
         crown.position.set(0, 5.75, -1.3);
-        throne.add(seat, back, backVelvet, crown);
-        throne.traverse((o) => (o.castShadow = o.receiveShadow = true));
-        if (room.hasExit) {
-          // Against the west wall, facing into the room (the north wall has the exit door).
-          throne.position.set(-h + 2.5, 0, 0);
-          throne.rotation.y = Math.PI / 2;
-          this.obstacles.push({ x: -h + 2.3, z: 0, radius: 3 });
-        } else {
-          throne.position.set(0, 0, -h + 2.5);
-          this.obstacles.push({ x: 0, z: -h + 2.3, radius: 3 });
+        obj.add(seat, back, backVelvet, crown);
+        obj.rotation.y = p.angle ?? 0;
+        // A long red carpet running out in front of the throne.
+        const dir = new THREE.Vector3(Math.sin(obj.rotation.y), 0, Math.cos(obj.rotation.y));
+        const carpet = new THREE.Mesh(new THREE.PlaneGeometry(4, 22).rotateX(-Math.PI / 2), velvet);
+        const trim = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 22.6).rotateX(-Math.PI / 2), gold);
+        for (const [mesh, y] of [[carpet, 0.03], [trim, 0.02]] as const) {
+          mesh.position.set(p.x + dir.x * 13, y, p.z + dir.z * 13);
+          mesh.rotation.y = obj.rotation.y;
+          mesh.receiveShadow = true;
+          this.group.add(mesh);
         }
-        this.group.add(throne);
-        // A long red carpet from the entry to the throne.
-        const carpet = new THREE.Mesh(new THREE.PlaneGeometry(4, h * 2 - 6).rotateX(-Math.PI / 2), velvet);
-        carpet.position.set(0, 0.03, 1);
-        carpet.receiveShadow = true;
-        const trim = new THREE.Mesh(new THREE.PlaneGeometry(4.6, h * 2 - 5.4).rotateX(-Math.PI / 2), gold);
-        trim.position.set(0, 0.02, 1);
-        this.group.add(trim, carpet);
+        tall = false;
+        break;
+      }
+    }
+    obj.traverse((o) => (o.castShadow = o.receiveShadow = true));
+    this.group.add(obj);
+    this.nearOnly.push([obj, 58]);
+    if (tall) this.occluders.push(obj);
+    if (blocks) this.obstacles.push(blocks);
+  }
+
+  /** Scattered floor dressing and the level's special touches (water, lava, fireflies…). */
+  private buildFeature(rng: () => number): void {
+    const room = this.room;
+    const m = this.map;
+    const spot = (margin: number) => m.randomFloor(rng, margin);
+    switch (room.feature) {
+      case 'woodland': {
+        // Undergrowth: grass tufts, mushrooms and flowers (decoration only).
+        const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.12, 0.5, 3).translate(0, 0.25, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }), 900);
+        const mat = new THREE.Matrix4();
+        const c = new THREE.Color();
+        for (let i = 0; i < tufts.count; i++) {
+          const p = spot(0.6);
+          mat.compose(new THREE.Vector3(p.x, 0, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler((rng() - 0.5) * 0.5, rng() * 3, (rng() - 0.5) * 0.5)), new THREE.Vector3(1, 0.6 + rng(), 1));
+          tufts.setMatrixAt(i, mat);
+          tufts.setColorAt(i, c.setHSL(0.26 + rng() * 0.06, 0.5, 0.25 + rng() * 0.12));
+        }
+        tufts.computeBoundingSphere();
+        this.group.add(tufts);
+        const capMat = new THREE.MeshStandardMaterial({ color: 0xd8483a, flatShading: true });
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0xf2e6cc, flatShading: true });
+        const petal = [0xffd34d, 0xffffff, 0xd98cff].map((col) => new THREE.MeshStandardMaterial({ color: col, flatShading: true }));
+        const stemGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.3, 5).translate(0, 0.15, 0);
+        const capGeo = new THREE.SphereGeometry(0.22, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+        const flowerGeo = new THREE.OctahedronGeometry(0.12, 0);
+        for (let i = 0; i < 90; i++) {
+          const p = spot(1.5);
+          const bit = new THREE.Group();
+          if (i % 2 === 0) {
+            const cap = new THREE.Mesh(capGeo, capMat);
+            cap.position.y = 0.28;
+            bit.add(new THREE.Mesh(stemGeo, stemMat), cap);
+          } else {
+            const flower = new THREE.Mesh(flowerGeo, petal[i % 3]);
+            flower.position.y = 0.3;
+            bit.add(flower);
+          }
+          bit.position.set(p.x, 0, p.z);
+          this.decor(bit);
+        }
+        // Fireflies drifting about.
+        const glowMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xf4ff9a, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+        for (let i = 0; i < 70; i++) {
+          const sprite = new THREE.Sprite(glowMat.clone());
+          sprite.scale.setScalar(0.35);
+          const p = spot(2);
+          this.fireflies.push({ sprite, base: new THREE.Vector3(p.x, 0.8 + rng() * 2.5, p.z), seed: rng() * 10 });
+          this.group.add(sprite);
+        }
+        break;
+      }
+      case 'puddles': {
+        // Flooded: a sheet of water over the whole floor (everyone wades ankle-deep), deeper dark
+        // pools, ripples, waterfalls pouring down the walls into foaming water, and floating debris.
+        const size = m.cols * TILE;
+        const sheetMat = new THREE.MeshStandardMaterial({ color: 0x2a9cc4, emissive: 0x0b4a66, emissiveIntensity: 0.55, roughness: 0.04, metalness: 0.25, transparent: true, opacity: 0.8, depthWrite: false });
+        const sheet = new THREE.Mesh(new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2), sheetMat);
+        sheet.position.set(m.originX + size / 2, 0.22, m.originZ + size / 2);
+        sheet.receiveShadow = true;
+        sheet.renderOrder = 1;
+        this.group.add(sheet);
+        this.waterSheet = sheet;
+        const deep = new THREE.MeshStandardMaterial({ color: 0x0b2836, roughness: 0.1, metalness: 0.3 });
+        const poolGeo = new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2);
+        for (let i = 0; i < 24; i++) {
+          const pool = new THREE.Mesh(poolGeo, deep);
+          const p = spot(4);
+          pool.position.set(p.x, 0.03, p.z);
+          pool.scale.set(2 + rng() * 3.5, 1, 1.5 + rng() * 2.5);
+          pool.rotation.y = rng() * Math.PI;
+          this.decor(pool);
+        }
+        const rippleGeo = new THREE.RingGeometry(0.85, 1, 32).rotateX(-Math.PI / 2);
+        for (let i = 0; i < 26; i++) {
+          const ring = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({ color: 0xcff4ff, transparent: true, opacity: 0, depthWrite: false }));
+          ring.position.y = 0.24;
+          ring.renderOrder = 2;
+          this.group.add(ring);
+          this.ripples.push({ mesh: ring, age: rng() * 2.5, life: 1.8 + rng() * 1.2 });
+        }
+        const glintMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xdff8ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+        for (let i = 0; i < 50; i++) {
+          const glint = new THREE.Sprite(glintMat.clone());
+          const p = spot(1);
+          glint.position.set(p.x, 0.3, p.z);
+          glint.scale.set(0.9, 0.25, 1);
+          this.decor(glint);
+          this.glints.push({ sprite: glint, seed: rng() * 10 });
+        }
+        // Waterfalls down north walls (facing the camera), foaming where they land.
+        const fallMat = new THREE.MeshStandardMaterial({ color: 0x9fdcf5, emissive: 0x2a6f8f, emissiveIntensity: 0.5, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false });
+        const foamMat = new THREE.MeshBasicMaterial({ color: 0xf2fbff, transparent: true, opacity: 0.8, depthWrite: false });
+        for (const [x, z] of this.wallSpots(rng, 0, -1, 12, 18)) {
+          const fallGroup = new THREE.Group();
+          fallGroup.position.set(x, 0, z);
+          for (let k = 0; k < 3; k++) {
+            const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.3 - k * 0.3, this.wallHeight), fallMat);
+            strip.position.set((k - 1) * 1.0, this.wallHeight / 2, 0.4 + k * 0.06);
+            fallGroup.add(strip);
+          }
+          for (let k = 0; k < 4; k++) {
+            const foam = new THREE.Mesh(new THREE.SphereGeometry(0.35 + rng() * 0.3, 8, 6), foamMat);
+            foam.position.set((rng() - 0.5) * 2.4, 0.2, 0.9 + rng() * 1.2);
+            foam.scale.y = 0.45;
+            fallGroup.add(foam);
+            this.bobbers.push({ obj: foam, base: 0.2, seed: rng() * 10, amp: 0.06 });
+          }
+          this.decor(fallGroup);
+        }
+        // Floating debris: barrels, planks and crates, bobbing.
+        const wood = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.85, flatShading: true });
+        const band = new THREE.MeshStandardMaterial({ color: 0x3a3532, metalness: 0.5, roughness: 0.5, flatShading: true });
+        for (let i = 0; i < 18; i++) {
+          const p = spot(3);
+          const bit = new THREE.Group();
+          if (i % 3 === 0) {
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 10), wood);
+            barrel.rotation.z = Math.PI / 2;
+            const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.04, 4, 14), band);
+            hoop.rotation.y = Math.PI / 2;
+            bit.add(barrel, hoop);
+          } else if (i % 3 === 1) bit.add(new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.4), wood));
+          else bit.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.8), wood));
+          bit.position.set(p.x, 0.26, p.z);
+          bit.rotation.y = rng() * Math.PI;
+          bit.traverse((o) => (o.castShadow = true));
+          this.decor(bit);
+          this.bobbers.push({ obj: bit, base: 0.26, seed: rng() * 10, amp: 0.05 });
+        }
+        break;
+      }
+      case 'lava': {
+        const crackGeo = new THREE.PlaneGeometry(0.18, 1).rotateX(-Math.PI / 2);
+        const crackMat = this.glow(0x3a0a02, 0xff4a10, 1.2);
+        for (let i = 0; i < 60; i++) {
+          const crack = new THREE.Mesh(crackGeo, crackMat);
+          const p = spot(3);
+          crack.position.set(p.x, 0.02, p.z);
+          crack.scale.z = 2 + rng() * 4;
+          crack.rotation.y = rng() * Math.PI;
+          this.decor(crack);
+        }
+        break;
+      }
+      case 'dragonlair': {
+        const lair = this.level.halls.find((h) => h.kind === 'boss')!;
+        // Lavafalls pouring down the lair's walls into glowing basins.
+        const fall = this.glow(0x7a1a04, 0xff4a0a, 1.15, { side: THREE.DoubleSide });
+        for (const a of [Math.PI * 0.2, -Math.PI * 0.2, Math.PI * 0.45, -Math.PI * 0.45, Math.PI * 0.8, -Math.PI * 0.8]) {
+          const nx = -Math.sin(a);
+          const nz = -Math.cos(a);
+          const d = lair.r - 0.6;
+          for (let k = 0; k < 3; k++) {
+            const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.1 - k * 0.25, this.wallHeight + 2), fall);
+            strip.position.set(lair.x + nx * (d - k * 0.05) + Math.cos(a) * (k - 1) * 0.9, (this.wallHeight + 2) / 2, lair.z + nz * (d - k * 0.05) - Math.sin(a) * (k - 1) * 0.9);
+            strip.rotation.y = a;
+            this.group.add(strip);
+          }
+          const basin = new THREE.Mesh(new THREE.CircleGeometry(2.2, 18).rotateX(-Math.PI / 2), this.glow(0x4a1004, 0xff5010, 1.5));
+          basin.position.set(lair.x + nx * (d - 1.6), 0.03, lair.z + nz * (d - 1.6));
+          this.group.add(basin);
+          this.flame(lair.x + nx * (d - 1.5), 2.5, lair.z + nz * (d - 1.5), 3, 20, 24, 0xff5a20, 0xff7a30, 1);
+        }
+        // A great rune circle in the middle of the floor.
+        const rune = this.glow(0x2a0a04, 0xff7a2a, 1.1);
+        for (const r of [7, 8.2]) {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.12, 4, 64).rotateX(Math.PI / 2), rune);
+          ring.position.set(lair.x, 0.04, lair.z);
+          this.group.add(ring);
+        }
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          const mark = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), rune);
+          mark.scale.set(1, 0.08, 1.8);
+          mark.position.set(lair.x + Math.sin(a) * 7.6, 0.05, lair.z + Math.cos(a) * 7.6);
+          mark.rotation.y = a;
+          this.group.add(mark);
+        }
+        const crackGeo = new THREE.PlaneGeometry(0.22, 1).rotateX(-Math.PI / 2);
+        const crackMat = this.glow(0x3a0a02, 0xff4a10, 1.2);
+        for (let i = 0; i < 50; i++) {
+          const crack = new THREE.Mesh(crackGeo, crackMat);
+          const p = spot(3);
+          crack.position.set(p.x, 0.02, p.z);
+          crack.scale.z = 2.5 + rng() * 5;
+          crack.rotation.y = rng() * Math.PI;
+          this.decor(crack);
+        }
+        const emberMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffa040, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+        for (let i = 0; i < 90; i++) {
+          const sprite = new THREE.Sprite(emberMat.clone());
+          sprite.scale.setScalar(0.25 + rng() * 0.3);
+          const a = rng() * Math.PI * 2;
+          const d = Math.sqrt(rng()) * (lair.r - 2);
+          this.embers.push({ sprite, x: lair.x + Math.cos(a) * d, z: lair.z + Math.sin(a) * d, speed: 0.6 + rng() * 1.2, seed: rng() * 10 });
+          this.group.add(sprite);
+        }
+        this.flame(lair.x, 3, lair.z, 4, 26, 40, 0xff6a30, 0xff7a30, 2);
         break;
       }
     }
   }
 
+  /**
+   * Spots along walls facing (dx, dz) from the floor (e.g. 0, −1: the wall to the north of a
+   * floor tile), at least `spacing` m apart, up to `max`. Returns the wall face's centre.
+   */
+  private wallSpots(rng: () => number, dx: number, dz: number, max: number, spacing: number): [number, number][] {
+    const out: [number, number][] = [];
+    const list = this.edges.filter(([, , dc, dr]) => dc === dx && dr === dz);
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    for (const [c, r] of list) {
+      if (out.length >= max) break;
+      const p = this.map.centre(c, r);
+      const x = p.x + (dx * TILE) / 2;
+      const z = p.z + (dz * TILE) / 2;
+      if (this.level.exit && Math.hypot(x - this.level.exit.x, z - this.level.exit.z) < 5) continue;
+      if (out.some(([ox, oz]) => Math.hypot(ox - x, oz - z) < spacing)) continue;
+      out.push([x, z]);
+    }
+    return out;
+  }
+
   private buildRubble(rng: () => number): void {
-    const h = this.half;
-    const rocks = new THREE.InstancedMesh(
-      new THREE.IcosahedronGeometry(1, 0),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }),
-      90,
-    );
-    const m = new THREE.Matrix4();
+    const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), 400);
+    const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const e = new THREE.Euler();
     const c = new THREE.Color();
-    const pillars = this.room.pillars;
+    const { wall } = this.room;
     for (let i = 0; i < rocks.count; i++) {
-      // Hug the walls and pillar bases, where rubble would collect.
-      let x: number;
-      let z: number;
-      if (i < 60 || pillars.length === 0) {
-        const a = rng() * Math.PI * 2;
-        const d = wallDistance(this.room.shape, h, a) - 0.3 - rng() * 1.2;
-        x = -Math.sin(a) * d;
-        z = -Math.cos(a) * d;
-        // Keep the gates clear.
-        if (Math.abs(x) < GATE_HALF_WIDTH + 1 || Math.abs(z) < GATE_HALF_WIDTH + 1) x = z = 1e3;
-      } else {
-        const p = pillars[i % pillars.length];
-        const a = rng() * Math.PI * 2;
-        const r = PILLAR_RADIUS + 0.3 + rng() * 0.6;
-        x = p[0] + Math.cos(a) * r;
-        z = p[1] + Math.sin(a) * r;
-      }
+      // Hug the walls, where rubble would collect.
+      const [col, r, dc, dr] = this.edges[Math.floor(rng() * this.edges.length)];
+      const p = this.map.centre(col, r);
+      const along = (rng() - 0.5) * TILE;
+      const x = p.x + dc * (0.6 - rng() * 0.6) + (dr ? along : 0);
+      const z = p.z + dr * (0.6 - rng() * 0.6) + (dc ? along : 0);
       const s = 0.1 + rng() * rng() * 0.45;
       q.setFromEuler(e.set(rng() * 3, rng() * 3, rng() * 3));
-      m.compose(new THREE.Vector3(x, s * 0.3, z), q, new THREE.Vector3(s, s * 0.7, s));
-      rocks.setMatrixAt(i, m);
-      const { wall } = this.room;
+      m4.compose(new THREE.Vector3(x, s * 0.3, z), q, new THREE.Vector3(s, s * 0.7, s));
+      rocks.setMatrixAt(i, m4);
       rocks.setColorAt(i, c.setHSL(wall.h, wall.s * 0.6, 0.18 + rng() * 0.1));
     }
     rocks.castShadow = rocks.receiveShadow = true;
+    rocks.computeBoundingSphere();
     this.group.add(rocks);
   }
 
-  private addFlame(x: number, y: number, z: number, size: number, intensity: number, distance: number, light: number, flame: number, strength: number): void {
-    const pl = new THREE.PointLight(light, intensity, distance, 1.6);
-    pl.position.set(x, y + 0.3, z);
-    const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: glowTexture(), color: flame, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }),
-    );
+  /** Small floor dressing: drawn only near the focus. */
+  private decor(obj: THREE.Object3D): void {
+    this.group.add(obj);
+    this.nearOnly.push([obj, 40]);
+  }
+
+  /** A flame sprite (size 0: none) that gets one of the pooled lights when it's near the focus. */
+  private flame(x: number, y: number, z: number, size: number, intensity: number, distance: number, light: number, flame: number, strength: number): void {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: flame, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
     sprite.position.set(x, y, z);
     sprite.userData.size = size;
     sprite.scale.setScalar(size);
-    this.group.add(pl, sprite);
-    this.flames.push({ light: pl, sprite, base: intensity, seed: this.flames.length * 1.7 });
-    this.fireSources.push({ position: sprite.position, strength });
+    sprite.visible = size > 0;
+    this.group.add(sprite);
+    if (size > 0) this.nearOnly.push([sprite, 60]);
+    this.flames.push({ sprite, x, y, z, intensity, distance, color: light, seed: this.flames.length * 1.7, flicker: 1 });
+    if (strength > 0) this.fireSources.push({ position: sprite.position, strength });
   }
 
-  private buildLights(shadowMapSize: number): void {
-    const h = this.half;
+  private buildLights(shadowMapSize: number, rng: () => number): THREE.DirectionalLight {
     const room = this.room;
-    // Light falling from high above (the only shadow caster), plus faint fill.
+    // Light falling from high above (the only shadow caster; it follows the focus), plus fill.
     const moon = new THREE.DirectionalLight(room.moon, room.moonIntensity);
-    moon.position.set(12, 40, 18);
     moon.castShadow = true;
     moon.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     const sc = moon.shadow.camera;
-    sc.left = sc.bottom = -h - 4;
-    sc.right = sc.top = h + 4;
+    sc.left = sc.bottom = -SHADOW_REACH;
+    sc.right = sc.top = SHADOW_REACH;
     sc.near = 1;
     sc.far = 100;
     moon.shadow.bias = -0.0005;
     moon.shadow.normalBias = 0.04;
-    // Indoors gets a stronger fill so the dungeon reads clearly.
-    this.group.add(moon, new THREE.HemisphereLight(room.hemiSky, room.hemiGround, room.outdoor ? 0.9 : 1.5));
+    this.group.add(moon, moon.target, new THREE.HemisphereLight(room.hemiSky, room.hemiGround, room.outdoor ? 0.9 : 1.5));
+    for (let i = 0; i < LIGHT_POOL; i++) {
+      const l = new THREE.PointLight(0xffffff, 0, 20, 1.6);
+      l.userData.flame = null;
+      this.lights.push(l);
+      this.group.add(l);
+    }
 
-    if (room.outdoor) return; // daylight: no torches
+    if (room.outdoor) return moon; // daylight: no torches
     const bracketMat = new THREE.MeshStandardMaterial({ color: 0x2a2626, metalness: 0.5, roughness: 0.6 });
     const bracketGeo = new THREE.BoxGeometry(0.25, 0.7, 0.5);
-    // Eight torches round the walls, clear of the gates.
-    for (const a of torchAngles(room.shape)) {
-      const nx = -Math.sin(a);
-      const nz = -Math.cos(a);
-      const d = wallDistance(room.shape, h, a) - 0.3;
+    // Torches along the walls, every dozen metres or so, on walls of every side.
+    const spots: [number, number, number, number][] = [];
+    for (const [dx, dz] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) for (const [x, z] of this.wallSpots(rng, dx, dz, 40, 13)) spots.push([x, z, dx, dz]);
+    for (const [x, z, dx, dz] of spots) {
+      if (spots.some(([ox, oz]) => ox !== x && oz !== z && Math.hypot(ox - x, oz - z) < 6)) {
+        if (rng() < 0.5) continue; // thin out torches crowding a corner
+      }
       const bracket = new THREE.Mesh(bracketGeo, bracketMat);
-      bracket.position.set(nx * d, 3.2, nz * d);
-      bracket.rotation.y = a;
+      bracket.position.set(x - dx * 0.15, Math.min(3.2, this.wallHeight - 1.6), z - dz * 0.15);
+      bracket.rotation.y = Math.atan2(dx, dz);
       this.group.add(bracket);
-      this.addFlame(nx * (d - 0.2), 3.75, nz * (d - 0.2), 1.3, 20, 26, room.torchLight, room.torchFlame, 1);
+      this.flame(x - dx * 0.4, bracket.position.y + 0.55, z - dz * 0.4, 1.3, 20, 24, room.torchLight, room.torchFlame, 1);
+    }
+    return moon;
+  }
+}
+
+/** The materials an object owns, made fadeable (cloned so other objects don't fade with it). */
+function ownMaterials(obj: THREE.Object3D): THREE.Material[] {
+  const mats: THREE.Material[] = [];
+  const clones = new Map<THREE.Material, THREE.Material>();
+  obj.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const own = list.map((m) => {
+      let c = clones.get(m);
+      if (!c) {
+        c = m.clone();
+        clones.set(m, c);
+        mats.push(c);
+      }
+      return c;
+    });
+    mesh.material = Array.isArray(mesh.material) ? own : own[0];
+  });
+  return mats;
+}
+
+/** Eases a fadeable's opacity toward `target`; it only turns transparent while faded. */
+function fade(item: { mats: THREE.Material[]; opacity: number }, target: number, dt: number): void {
+  if (Math.abs(item.opacity - target) < 0.005) return;
+  const was = item.opacity < 0.995;
+  item.opacity += (target - item.opacity) * (1 - Math.exp(-10 * dt));
+  if (Math.abs(item.opacity - target) < 0.01) item.opacity = target;
+  const now = item.opacity < 0.995;
+  for (const m of item.mats) {
+    m.opacity = item.opacity;
+    if (was !== now) {
+      m.transparent = now;
+      m.depthWrite = !now;
+      m.needsUpdate = true;
     }
   }
+}
+
+/** Does the 2D segment (ax, az)→(bx, bz) cross the box? (Slab test.) */
+function segmentHitsBox(ax: number, az: number, bx: number, bz: number, minX: number, maxX: number, minZ: number, maxZ: number): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  for (const [a, d, lo, hi] of [[ax, bx - ax, minX, maxX], [az, bz - az, minZ, maxZ]]) {
+    if (Math.abs(d) < 1e-9) {
+      if (a < lo || a > hi) return false;
+      continue;
+    }
+    let u = (lo - a) / d;
+    let w = (hi - a) / d;
+    if (u > w) [u, w] = [w, u];
+    t0 = Math.max(t0, u);
+    t1 = Math.min(t1, w);
+    if (t0 > t1) return false;
+  }
+  return true;
 }
 
 /** Iron portcullis bars filling a gate opening. */

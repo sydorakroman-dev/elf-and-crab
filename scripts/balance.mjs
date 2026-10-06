@@ -1,8 +1,9 @@
 // Difficulty simulator: runs the real game loop headlessly (no rendering) with two bot players
-// and reports which wave they die on. Needs `npm run dev` running and Google Chrome installed.
+// and reports which level they die on († died, … ran out of time). Needs `npm run dev` running and Google Chrome installed.
 //   npm run balance            # 6 runs per bot
 //   npm run balance -- 10      # 10 runs per bot
-// Bots: "stand" never moves (a weak player); "kite" strafes, backs off, dashes out of melee and
+// Bots walk the level toward its guardian (then the exit) along the shortest way. In a fight,
+// "stand" stands still (a weak player); "kite" strafes, backs off, dashes out of melee and
 // through incoming globs (a decent one).
 // Both aim perfectly at the nearest enemy, so real players will take hits earlier.
 import { chromium } from 'playwright-core';
@@ -22,31 +23,28 @@ const results = await page.evaluate(({ TRIALS }) => {
     p.active = true;
     g.nextPickup = 1e9; // bots ignore power-ups; keep the comparison clean
     p.mouseDown = true;
-    const maxSteps = 60 * 600; // 10 minutes of game time
+    const maxSteps = 60 * 900; // 15 minutes of game time
     const firstHitWave = { v: null };
     let lastHealth = g.health;
     let step = 0;
+    let field = null;
+    let fieldFor = '';
     for (; step < maxSteps && g.state === 'playing'; step++) {
       const pos = p.position;
-      const alive = g.enemies.all.filter((s) => s.alive);
+      const map = g.dungeon.map;
       p.keys.clear();
-      if (g.phase === 'cleared') {
-        // Room cleared: walk to the north door — around anything in the middle of the room.
-        const ex = g.dungeon.exit;
-        const wp = Math.abs(pos.x) < 4.5 && pos.z > -4 ? { x: 6, z: pos.z - 4 } : ex;
-        p.yaw = Math.atan2(-(wp.x - pos.x), -(wp.z - pos.z));
-        p.keys.add('KeyW');
-      }
-      if (alive.length) {
-        alive.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
-        const t = alive[0];
+      // Fight whatever is awake, close and in sight; otherwise head for the guardian, then the exit.
+      const foes = g.enemies.all
+        .filter((s) => s.alive && !s.hidden && !g.enemies.isAsleep(s) && Math.hypot(s.x - pos.x, s.z - pos.z) < 28 && map.lineOfSight(pos, s))
+        .sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
+      if (foes.length) {
+        const t = foes[0];
         p.yaw = Math.atan2(-(t.x - pos.x), -(t.z - pos.z));
         if (style === 'kite') {
           const d = Math.hypot(t.x - pos.x, t.z - pos.z);
           p.keys.add('KeyA');
           if (d < 7) p.keys.add('KeyS');
           if (d < 3) p.keys.add('Space');
-          // Dash through globs that are about to hit.
           for (const gl of g.globs.globs) {
             if (!gl.active) continue;
             const gx = pos.x - gl.mesh.position.x;
@@ -54,16 +52,29 @@ const results = await page.evaluate(({ TRIALS }) => {
             const gd = Math.hypot(gx, gz);
             if (gd < 4 && (gx * gl.dirX + gz * gl.dirZ) / gd > 0.8) p.dashQueued = true;
           }
-          // Steer back toward the middle when near a wall.
-          if (Math.max(Math.abs(pos.x), Math.abs(pos.z)) > 22) p.keys.add('KeyW');
         }
+      } else {
+        const bossPack = g.level.packs.find((k) => k.boss);
+        const boss = g.enemies.all.find((s) => s.bossName && s.alive);
+        const goal = g.phase === 'cleared' && g.level.exit ? { x: g.level.exit.x, z: g.level.exit.z + 0.5 } : boss ? { x: boss.x, z: boss.z } : bossPack;
+        const key = `${g.room}:${map.col(goal.x)}:${map.row(goal.z)}`;
+        if (key !== fieldFor) {
+          field = map.distanceField(goal.x, goal.z);
+          fieldFor = key;
+        }
+        const w = map.nextWaypoint(field, pos.x, pos.z, 0.5) ?? goal;
+        p.yaw = Math.atan2(-(w.x - pos.x), -(w.z - pos.z));
+        // Rest up before taking on the guardian (health comes back out of a fight).
+        const nearGuardian = boss && Math.hypot(boss.x - pos.x, boss.z - pos.z) < 34;
+        if (!(nearGuardian && g.health < 95)) p.keys.add('KeyW');
       }
       if (g.phase === 'ready') g.beginFight(); // press Start
+      if (g.phase === 'transition') g.cardSkip = true;
       g.update(1 / 60);
-      if (g.health < lastHealth && firstHitWave.v === null) firstHitWave.v = g.wave;
+      if (g.health < lastHealth && firstHitWave.v === null) firstHitWave.v = g.room + 1;
       lastHealth = g.health;
     }
-    return { style, diedOnWave: g.state === 'over' ? g.wave : null, reachedWave: g.wave, room: g.room + 1, won: g.state === 'won', firstHitWave: firstHitWave.v, minutes: +(step / 3600).toFixed(1), score: g.score };
+    return { style, room: g.room + 1, won: g.state === 'won', died: g.state === 'over', firstHit: firstHitWave.v, minutes: +(step / 3600).toFixed(1), score: g.score, hunting: g.enemies.hunting, near: g.enemies.all.filter((s) => s.alive && Math.hypot(s.x - p.position.x, s.z - p.position.z) < 15).map((s) => s.kind).join(' ') };
   };
   const out = [];
   for (const style of ['stand', 'kite']) for (let i = 0; i < TRIALS; i++) out.push(run(style));
@@ -72,7 +83,8 @@ const results = await page.evaluate(({ TRIALS }) => {
 for (const style of ['stand', 'kite']) {
   const r = results.filter((x) => x.style === style);
   const avg = (k) => (r.reduce((s, x) => s + (x[k] ?? 0), 0) / r.length).toFixed(1);
-  console.log(`${style.padEnd(5)} ended in room-wave: ${r.map((x) => (x.won ? 'WON' : `${x.room}-${x.reachedWave - (x.room - 1) * 3}`)).join(', ')} | first hit on wave: ${r.map((x) => x.firstHitWave ?? '-').join(', ')} | avg minutes ${avg('minutes')}`);
+  console.log(`${style.padEnd(5)} ended on level: ${r.map((x) => (x.won ? 'WON' : `${x.room}${x.died ? '†' : '…'}`)).join(', ')} | first hit on level: ${r.map((x) => x.firstHit ?? '-').join(', ')} | avg minutes ${avg('minutes')}`);
 }
+console.log(JSON.stringify(results.map((r) => [r.style, r.room, r.hunting, r.near])));
 if (errors.length) console.log(errors.join('\n'));
 await browser.close();

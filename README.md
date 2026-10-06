@@ -1,7 +1,7 @@
 # Elf & Crab
 
-A small third-person WebGL arena game built with [Three.js](https://threejs.org), Vite and TypeScript.
-An elf archer fights through a forest and five dungeon rooms of cave dwellers, undead, orcs, goblins and elementals — solo, or with a friend
+A third-person WebGL dungeon crawler built with [Three.js](https://threejs.org), Vite and TypeScript.
+An elf archer fights through a forest and five dungeon levels of cave dwellers, undead, orcs, goblins and elementals — solo, or with a friend
 playing her crab familiar on a tablet.
 
 **Play:** https://elf-and-crab.onrender.com (also mirrored at https://sydorakroman-dev.github.io/elf-and-crab/)
@@ -26,20 +26,20 @@ Aim assist is wider on touch.
 
 - **Difficulty:** 🌱 Easy (monsters 65% HP, 55% damage, half score), ⚔️ Normal, 🔥 Hard (135% HP, 130% damage,
   1.5× score) — picked on the title screen and remembered.
-- **Continue:** the furthest room you've reached is remembered; the title screen then lets you **start in** any room up
+- **Continue:** the furthest level you've reached is remembered; the title screen then lets you **start in** any level up
   to it. Beating the Ash King on a difficulty earns a trophy shown on the title screen.
-- **Music:** every room has its own theme (composed in code, like the sound effects), switching to a heavier version
+- **Music:** every level has its own theme (composed in code, like the sound effects), switching to a heavier version
   during boss fights. **M** mutes everything.
 - **Feedback:** damage numbers over every hit, camera shake on heavy hits and slams, a brief freeze on big blows.
-- **Performance:** models are compressed at build time and room art loads one room ahead (first load ~5 MB). If a
+- **Performance:** models are compressed at build time and level art loads one level ahead (first load ~5 MB). If a
   device keeps dropping below ~40 fps the game lowers its resolution, then turns shadows off.
 
 ## Rune Seals (the familiar's puzzles)
 
-When a room is cleared with a familiar connected, runes seal the exit door: the familiar solves **3 rune riddles** on
-the tablet — sums and differences like `7 + 2` or `9 − 4`, every number between 0 and 10 — by tapping the right one
-of four rune stones (a wrong stone just greys out). Breaking the seal opens the door and heals the elf +20 HP. Solo
-play and the final room have no seal. In the practice room, the 🔮 button starts one any time.
+When a level's guardian falls with a familiar connected, runes seal the exit door: the familiar solves **3 rune riddles** on
+the tablet — sums and differences like `7 + 8` or `9 − 4`, single digits 1–9, never 0, answers up to 15 — by tapping the right
+one of four rune stones (a wrong stone swaps in a new riddle). Breaking the seal opens the door and heals the elf +20 HP. Solo
+play and the final level have no seal. In the practice room, the 🔮 button starts one any time.
 
 ## Skills and spells
 
@@ -56,26 +56,37 @@ the title / pause screen; saved in your browser); on touch screens, tap the slot
 
 ## The run
 
-The run waits in the Woodland until you're ready — press **Enter** (or tap **Start**) and the first wave comes; handy
-while a friend joins as your familiar. Seven rooms, three waves each (the last room has just one: its boss); every room's last wave brings its boss. Clear a room and its north door opens — walk
-through to the next one (your familiar comes along, and you're healed to full). Every room opens with an intro
-card — its foes' illustration (`public/art/`), name and boss — and a random one shows while the game loads. The last room ends with **the
+Seven **levels**, each **generated afresh every run** (`src/world/levelgen.ts`, seeded — your familiar's tablet
+builds the same level from the seed): about 160 × 160 m, three times the old rooms. Dungeon levels are **halls
+joined by corridors** (square, round and eight-sided halls, loops, dead-end side rooms); the Woodland and the
+Flooded Hall are **open ground** — glades and flooded caverns joined by wide trails.
+
+You arrive in the south. **Packs** of 3–6 monsters wait asleep around the level and wake when you come into view
+(or hit one); awake, they hunt you round the walls along the shortest way. The level's **guardian** (a mini-boss and
+its escort) holds the big hall in the north; beat it and the **exit door** behind it opens — walk through to the next
+level (your familiar comes along, and you're healed to full). Other packs can be left behind. Out of a fight for a
+few seconds, the elf's health comes back. A **map** in the top right fills in as you explore. Walls and trees between
+the camera and the elf turn see-through.
+
+The run waits in the Woodland until you're ready — press **Enter** (or tap **Start**) and the monsters stir; handy
+while a friend joins as your familiar. Every level opens with an intro card — its foes' illustration
+(`public/art/`), name and guardian — and a random one shows while the game loads. The last level ends with **the
 Ash King**, a volcanic dragon; beat him to win.
 
-| Room | Who lives there | Boss |
+| Level | Who lives there | Guardian |
 | --- | --- | --- |
-| 1 · The Woodland — a round, sunny clearing, trees, hedges | forest beasts, thorn vines, a treant | 🐻 The Crystal Bear |
-| 2 · The Crystal Cave — eight-sided, glowing crystal clusters | underworld dwellers | 🪱 The Giant Cave Worm |
-| 3 · The Crypt — square, torches, a brazier, four pillars | the undead | 💀 The Necromancer |
-| 4 · The Throne Room — square, a colonnade and a throne | orcs | 🪓 The Orc Chieftain |
-| 5 · The Flooded Hall — eight-sided, pillars, ankle-deep water with ripples, waterfalls and floating debris | goblins, water elementals | ⚙️ The Scrap Boss |
-| 6 · The Lava Chamber — round, a lava pit (arrows fly over it) | fire and wind elementals, rock golems | 🔥 The Inferno |
-| 7 · The Ash King's Lair — a vast round hall: obsidian spires, lava pools and lavafalls, a rune circle | — (one wave: the dragon alone) | 🐉 **The Ash King** (final boss) |
+| 1 · The Woodland — open woods and glades, hedges | forest beasts, thorn vines, a treant | 🐻 The Crystal Bear |
+| 2 · The Crystal Cave — halls and corridors, glowing crystal clusters | underworld dwellers | 🪱 The Giant Cave Worm |
+| 3 · The Crypt — halls and corridors, torches, braziers, pillars | the undead | 💀 The Necromancer |
+| 4 · The Throne Room — square halls, colonnades, the throne in the guardian's hall | orcs | 🪓 The Orc Chieftain |
+| 5 · The Flooded Hall — open flooded caverns: ankle-deep water, ripples, waterfalls, floating debris | goblins, water elementals | ⚙️ The Scrap Boss |
+| 6 · The Lava Chamber — halls with lava pits (arrows fly over them) | fire and wind elementals, rock golems | 🔥 The Inferno |
+| 7 · The Ash King's Lair — a long approach to a vast round hall: obsidian spires, lava pools, lavafalls, a rune circle | — (the dragon alone) | 🐉 **The Ash King** (final boss) |
 
 ## Enemies
 
-Full tables with every number: [`docs/enemies.csv`](docs/enemies.csv) and [`docs/waves.csv`](docs/waves.csv),
-generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 10. Each room's group is tougher than
+Full tables with every number: [`docs/enemies.csv`](docs/enemies.csv) and [`docs/levels.csv`](docs/levels.csv),
+generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 10. Each level's group is tougher than
 the last.
 
 **Woodland — forest beasts and living plants** (all melee)
@@ -144,7 +155,7 @@ the last.
 | Rock Golem | elite | 255 | 30 | slow; heavy punch with huge knockback |
 | **The Inferno** | final boss | 1380 | 30 / 15 / 22 | flame ring around itself, 5-fireball fans, meteors at your spot (all leave fire); calls fire elementals |
 
-**The Ash King's Lair — the final boss**, alone in a single wave (he calls in fire elementals himself)
+**The Ash King's Lair — the final boss**, alone in his hall (he calls in fire elementals himself)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
@@ -152,7 +163,7 @@ the last.
 
 The models (`public/models/`) are static, part-named meshes; `src/game/monsterVisual.ts`, `beastVisual.ts` and
 `elementalVisual.ts` rig them in code. Health and damage live in `src/game/balance.ts` and the `BEASTS`
-(`beasts.ts`), `ELEMENTALS` (`elementals.ts`) and `MONSTERS` (`monsters.ts`) tables; each room's waves in
+(`beasts.ts`), `ELEMENTALS` (`elementals.ts`) and `MONSTERS` (`monsters.ts`) tables; each level's monster mix, pack size and guardian in
 `src/world/rooms.ts`.
 
 ## Playing together (asymmetric co-op)
@@ -219,7 +230,7 @@ npm test         # unit tests (Vitest)
 npm run build    # production build: dist/ (game) + server/dist/ (server)
 npm start        # run the built server: serves the game and /ws on $PORT (default 8787)
 npm run deploy   # build and publish to GitHub Pages (gh-pages branch)
-npm run stats    # regenerate docs/enemies.csv and docs/waves.csv from the code
+npm run stats    # regenerate docs/enemies.csv and docs/levels.csv from the code
 npm run balance  # difficulty simulator: bots play headlessly (needs `npm run dev` + Chrome)
 ```
 

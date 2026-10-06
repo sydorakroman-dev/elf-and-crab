@@ -183,7 +183,7 @@ export class Globs {
    * Moves projectiles. `player` is null while it can't be hit (dashing / invulnerable), in which
    * case they fly straight through. Returns where projectiles burst this step.
    */
-  update(dt: number, time: number, player: (Point & { radius: number }) | null, obstacles: readonly Circle[], half: number): GlobImpact[] {
+  update(dt: number, time: number, player: (Point & { radius: number }) | null, obstacles: readonly Circle[]): GlobImpact[] {
     const impacts: GlobImpact[] = [];
     for (const g of this.globs) {
       if (!g.active) continue;
@@ -210,7 +210,7 @@ export class Globs {
           hitPlayer = false;
         }
       }
-      const outside = !insideArena(bx, bz, half, radius);
+      const outside = !insideArena(bx, bz, radius);
 
       if (bestT !== Infinity || outside || g.life <= 0) {
         const t = bestT === Infinity ? 1 : bestT;

@@ -181,7 +181,7 @@ export class FamiliarHud {
     // Practice room: a picker of every monster, by room; the chosen one appears and strolls about.
     this.paradeBtn = root.querySelector('[data-f-parade]')!;
     const groups = ROOMS.map((room) => {
-      const kinds = [...new Set(room.waves.flatMap((w) => [...(Object.keys(w.mix) as EnemyKind[]), ...(w.boss ? [w.boss] : [])]))];
+      const kinds = [...new Set([...(Object.keys(room.pool) as EnemyKind[]), ...(room.boss ? [room.boss] : [])])];
       const buttons = kinds.map((k) => `<button type="button" data-kind="${k}">${enemyName(k)}</button>`).join('');
       return `<section><h3>${room.name}</h3><div class="parade-list">${buttons}</div></section>`;
     }).join('');
@@ -338,7 +338,7 @@ export class FamiliarHud {
       this.powersKey = key;
       this.powers.innerHTML = powerChipsHtml(list);
     }
-    const w = s.rid && !s.practice ? `🔮 Break the rune seal to open the door (${s.rid.n}/${s.rid.t})` : s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.rw, s.remaining, s.phase, s.boss?.name ?? null);
+    const w = s.rid && !s.practice ? `🔮 Break the rune seal to open the door (${s.rid.n}/${s.rid.t})` : s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.remaining, s.phase, s.boss?.name ?? null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
     this.bossBar.set(s.boss);

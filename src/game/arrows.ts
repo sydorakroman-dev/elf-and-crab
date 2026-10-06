@@ -114,7 +114,7 @@ export class Arrows {
   }
 
   /** Moves arrows and returns the slimes they hit this step. */
-  update(dt: number, slimes: readonly Enemy[], obstacles: readonly Circle[], half: number): ArrowHit[] {
+  update(dt: number, slimes: readonly Enemy[], obstacles: readonly Circle[]): ArrowHit[] {
     const hits: ArrowHit[] = [];
     for (const a of this.arrows) {
       if (!a.active) continue;
@@ -152,7 +152,7 @@ export class Arrows {
           solid = true;
         }
       }
-      const wallT = arenaExit(p.x, p.z, bx, bz, half);
+      const wallT = arenaExit(p.x, p.z, bx, bz);
       if (wallT !== null && wallT < bestT) {
         bestT = wallT;
         hitSlime = null;

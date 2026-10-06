@@ -440,7 +440,7 @@ export class Monster implements Enemy {
     this.timer = time;
   }
 
-  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): Spit[] {
+  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[]): Spit[] {
     this.time += dt;
     this.strike = null;
     this.healPulse = null;
@@ -480,13 +480,13 @@ export class Monster implements Enemy {
       const away = Math.atan2(p.x - target.x, p.z - target.z);
       const dir = away * 0.4 + this.wander * 0.6;
       speed = this.def.speed * 0.45 * this.slow;
-      this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, walls, half);
+      this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, walls);
     } else {
-      [speed, spits] = this.think(dt, target, others, walls, half);
+      [speed, spits] = this.think(dt, target, others, walls);
     }
 
     if (!this.def.phasing) pushOutOfCircles(p, this.radius, obstacles);
-    clampToArena(p, half, this.radius);
+    clampToArena(p, this.radius);
     p.speed = speed;
     p.stun = this.stunTimer > 0 ? 1 : 0;
     p.calm = this.calmTimer > 0 ? 1 : 0;
@@ -541,7 +541,7 @@ export class Monster implements Enemy {
     }
   }
 
-  private think(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): [number, Spit[]] {
+  private think(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[]): [number, Spit[]] {
     const p = this.pose;
     for (let i = 0; i < this.cooldowns.length; i++) this.cooldowns[i] = Math.max(0, this.cooldowns[i] - dt);
     this.gap = Math.max(0, this.gap - dt);
@@ -569,7 +569,7 @@ export class Monster implements Enemy {
         const before = { x: p.x, z: p.z };
         p.x += this.lockDir.x * l.speed * dt;
         p.z += this.lockDir.z * l.speed * dt;
-        const hitWall = clampToArena(p, half, this.radius);
+        const hitWall = clampToArena(p, this.radius);
         const hitRock = pushOutOfCircles(p, this.radius, obstacles.filter((o) => !o.low));
         if (hitWall || hitRock || Math.hypot(p.x - before.x, p.z - before.z) < 0.01 || this.timer <= 0) this.setMode('recover', 0.5);
         return [l.speed, []];
@@ -621,7 +621,7 @@ export class Monster implements Enemy {
       }
       case 'retreat': {
         const speed = this.def.speed * 1.1 * this.slow;
-        this.move(-tx + this.side * tz * 0.6, -tz - this.side * tx * 0.6, speed, dt, others, obstacles, half);
+        this.move(-tx + this.side * tz * 0.6, -tz - this.side * tx * 0.6, speed, dt, others, obstacles);
         face(-tx, -tz);
         if (this.timer <= 0) this.setMode('chase', 0);
         return [speed, []];
@@ -659,10 +659,10 @@ export class Monster implements Enemy {
       const mx = intent === 0 ? tz * this.side : tx * intent + tz * this.side * 0.3;
       const mz = intent === 0 ? -tx * this.side : tz * intent - tx * this.side * 0.3;
       const s = intent === 0 ? speed * 0.5 : speed;
-      this.move(mx, mz, s, dt, others, obstacles, half);
+      this.move(mx, mz, s, dt, others, obstacles);
       return [s, []];
     }
-    this.move(tx, tz, speed, dt, others, obstacles, half);
+    this.move(tx, tz, speed, dt, others, obstacles);
     return [speed, []];
   }
 
@@ -708,7 +708,7 @@ export class Monster implements Enemy {
     }
   }
 
-  private move(dx: number, dz: number, speed: number, dt: number, others: readonly Enemy[], obstacles: readonly Circle[], half: number): void {
-    steerMove(this.pose, dx, dz, speed, dt, this.radius, this, others, obstacles, half, this.side);
+  private move(dx: number, dz: number, speed: number, dt: number, others: readonly Enemy[], obstacles: readonly Circle[]): void {
+    steerMove(this.pose, dx, dz, speed, dt, this.radius, this, others, obstacles, this.side);
   }
 }

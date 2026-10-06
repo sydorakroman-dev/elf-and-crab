@@ -186,7 +186,7 @@ export class Elemental implements Enemy {
     if (this.mode === 'windup') this.setMode('chase', 0);
   }
 
-  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): Spit[] {
+  update(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[]): Spit[] {
     this.time += dt;
     this.strike = null;
     this.flash = Math.max(0, this.flash - dt * 5);
@@ -220,13 +220,13 @@ export class Elemental implements Enemy {
       const away = Math.atan2(p.x - target.x, p.z - target.z);
       const dir = away * 0.4 + this.wander * 0.6;
       speed = this.def.speed * 0.45 * this.slow;
-      this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, obstacles, half);
+      this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, obstacles);
     } else {
-      [speed, spits] = this.think(dt, target, others, obstacles, half);
+      [speed, spits] = this.think(dt, target, others, obstacles);
     }
 
     pushOutOfCircles(p, this.radius, obstacles);
-    clampToArena(p, half, this.radius);
+    clampToArena(p, this.radius);
     p.speed = speed;
     p.stun = this.stunTimer > 0 ? 1 : 0;
     p.calm = this.calmTimer > 0 ? 1 : 0;
@@ -254,7 +254,7 @@ export class Elemental implements Enemy {
     }
   }
 
-  private think(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[], half: number): [number, Spit[]] {
+  private think(dt: number, target: THREE.Vector3, others: readonly Enemy[], obstacles: readonly Circle[]): [number, Spit[]] {
     const p = this.pose;
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.timer -= dt;
@@ -290,7 +290,7 @@ export class Elemental implements Enemy {
       const mx = intent === 0 ? tz * this.side : tx * intent + tz * this.side * 0.3;
       const mz = intent === 0 ? -tx * this.side : tz * intent - tx * this.side * 0.3;
       const s = intent === 0 ? speed * 0.5 : speed;
-      this.move(mx, mz, s, dt, others, obstacles, half);
+      this.move(mx, mz, s, dt, others, obstacles);
       if (this.cooldown === 0 && dist <= c.max + 2) this.setMode('windup', c.windup);
       return [s, []];
     }
@@ -305,7 +305,7 @@ export class Elemental implements Enemy {
       this.setMode('windup', melee.windup);
       return [0, []];
     }
-    this.move(tx, tz, speed, dt, others, obstacles, half);
+    this.move(tx, tz, speed, dt, others, obstacles);
     return [speed, []];
   }
 
@@ -336,7 +336,7 @@ export class Elemental implements Enemy {
     return [{ x: p.x + tx * out, z: p.z + tz * out, dirX: tx, dirZ: tz, kind: c.shot }];
   }
 
-  private move(dx: number, dz: number, speed: number, dt: number, others: readonly Enemy[], obstacles: readonly Circle[], half: number): void {
-    steerMove(this.pose, dx, dz, speed, dt, this.radius, this, others, obstacles, half, this.side);
+  private move(dx: number, dz: number, speed: number, dt: number, others: readonly Enemy[], obstacles: readonly Circle[]): void {
+    steerMove(this.pose, dx, dz, speed, dt, this.radius, this, others, obstacles, this.side);
   }
 }

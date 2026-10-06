@@ -1,4 +1,4 @@
-import { insideArena, type Circle, type Point } from './combat';
+import { insideArena, walkMap, type Circle, type Point } from './combat';
 
 /** Pure power-up rules: catalogue, timers, random choice and placement (no three.js; unit tested). */
 
@@ -80,21 +80,21 @@ export function pickPowerUp(rng: () => number, health: number, maxHealth: number
 }
 
 /**
- * A random spot on the arena floor that's clear of obstacles and the walls, and not too
- * close to any point in `avoid` (e.g. the player, so pickups don't appear underfoot).
+ * A random spot on the floor near `near` (6–18 m away), clear of obstacles and the walls, and
+ * not too close to any point in `avoid` (e.g. the player, so pickups don't appear underfoot).
  */
 export function randomSpawnPoint(
   rng: () => number,
-  half: number,
+  near: Point,
   obstacles: readonly Circle[],
   avoid: readonly Point[],
   avoidRadius: number,
 ): Point {
-  const margin = 3;
-  let best: Point = { x: 0, z: half / 2 };
+  const map = walkMap();
+  let best: Point = map.nearestFloor(near.x, near.z);
   for (let attempt = 0; attempt < 50; attempt++) {
-    const p = { x: (rng() * 2 - 1) * (half - margin), z: (rng() * 2 - 1) * (half - margin) };
-    if (!insideArena(p.x, p.z, half, margin)) continue; // round / eight-sided rooms
+    const p = map.randomFloor(rng, 2, near, 6, 18);
+    if (!insideArena(p.x, p.z, 2)) continue;
     best = p;
     const blocked = obstacles.some((o) => Math.hypot(p.x - o.x, p.z - o.z) < o.radius + 1.5);
     const crowded = avoid.some((a) => Math.hypot(p.x - a.x, p.z - a.z) < avoidRadius);

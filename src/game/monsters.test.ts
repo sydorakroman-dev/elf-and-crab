@@ -5,10 +5,9 @@ import type { Enemy, Spit, Strike } from './enemies';
 import { ENEMY_KIND_LIST } from './enemyKinds';
 import type { MonsterKind } from './enemies';
 
-const HALF = 26;
 function run(e: Monster, target: THREE.Vector3, seconds: number, onStep?: (e: Monster, spits: Spit[]) => void, others: Enemy[] = [e]) {
   for (let i = 0; i < Math.round(seconds * 60); i++) {
-    const spits = e.update(1 / 60, target, others, [], HALF);
+    const spits = e.update(1 / 60, target, others, []);
     onStep?.(e, spits);
   }
 }
@@ -123,7 +122,7 @@ describe('monsters', () => {
 
   it('ghosts drift straight through pillars', () => {
     const e = new Monster('ghost', 0, -10);
-    for (let i = 0; i < 60 * 3; i++) e.update(1 / 60, new THREE.Vector3(0, 0, 10), [e], [{ x: 0, z: 0, radius: 2 }], HALF);
+    for (let i = 0; i < 60 * 3; i++) e.update(1 / 60, new THREE.Vector3(0, 0, 10), [e], [{ x: 0, z: 0, radius: 2 }]);
     expect(Math.abs(e.x)).toBeLessThan(0.5); // didn't steer around
     expect(e.z).toBeGreaterThan(0);
   });

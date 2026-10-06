@@ -22,7 +22,6 @@ export function steerMove(
   self: unknown,
   others: readonly Body[],
   obstacles: readonly Circle[],
-  half: number,
   side: number,
 ): void {
   for (const ob of obstacles) {
@@ -54,5 +53,5 @@ export function steerMove(
   const len = Math.hypot(dx, dz) || 1;
   p.x += (dx / len) * speed * dt;
   p.z += (dz / len) * speed * dt;
-  clampToArena(p, half, radius);
+  clampToArena(p, radius);
 }

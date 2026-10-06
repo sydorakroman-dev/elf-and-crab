@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { arenaExit, clampToArena, insideArena, pickAimTarget, pushOutOfCircles, rangeIntent, segmentCircleHit } from './combat';
+import { arenaExit, clampToArena, setWalkMap, insideArena, pickAimTarget, pushOutOfCircles, rangeIntent, segmentCircleHit } from './combat';
+import { WalkMap, insideShape } from './walkmap';
 
 describe('pushOutOfCircles', () => {
   it('moves a point out to the touching distance', () => {
@@ -23,14 +24,14 @@ describe('pushOutOfCircles', () => {
 });
 
 describe('clampToArena', () => {
-  it('clamps each axis to the inner edge', () => {
+  it('keeps a circle inside the walls of the default open room', () => {
     const p = { x: 40, z: -3 };
-    expect(clampToArena(p, 28, 1)).toBe(true);
-    expect(p).toEqual({ x: 27, z: -3 });
+    expect(clampToArena(p, 1)).toBe(true);
+    expect(insideArena(p.x, p.z, 0.99)).toBe(true);
   });
 
   it('reports no clamp when inside', () => {
-    expect(clampToArena({ x: 0, z: 0 }, 28, 1)).toBe(false);
+    expect(clampToArena({ x: 0, z: 0 }, 1)).toBe(false);
   });
 });
 
@@ -78,24 +79,17 @@ describe('rangeIntent', () => {
 });
 
 describe('arena shapes', () => {
-  it('keeps things inside a round room', () => {
-    const p = { x: 30, z: 30 };
-    expect(clampToArena(p, 20, 1, 'circle')).toBe(true);
-    expect(Math.hypot(p.x, p.z)).toBeCloseTo(19);
-  });
-
   it('cuts the corners of an eight-sided room', () => {
-    expect(insideArena(19, 19, 20, 0, 'square')).toBe(true);
-    expect(insideArena(19, 19, 20, 0, 'octagon')).toBe(false);
-    expect(insideArena(19, 0, 20, 0, 'octagon')).toBe(true); // the middle of a wall is as far as a square's
-    const p = { x: 19, z: 19 };
-    clampToArena(p, 20, 0, 'octagon');
-    expect(Math.abs(p.x) + Math.abs(p.z)).toBeCloseTo(20 * Math.SQRT2);
+    expect(insideShape('square', 20, 19, 19)).toBe(true);
+    expect(insideShape('octagon', 20, 19, 19)).toBe(false);
+    expect(insideShape('octagon', 20, 19, 0)).toBe(true); // the middle of a wall is as far as a square's
+    expect(insideShape('circle', 20, 15, 15)).toBe(false);
   });
 
-  it('finds where a shot leaves the room', () => {
-    expect(arenaExit(0, 0, 5, 0, 20)).toBeNull();
-    const t = arenaExit(0, 0, 40, 0, 20, 0)!;
-    expect(t * 40).toBeCloseTo(20, 1);
+  it('finds where a shot hits the wall', () => {
+    setWalkMap(WalkMap.fromShape('square', 20));
+    expect(arenaExit(0, 0, 5, 0)).toBeNull();
+    const t = arenaExit(0, 0, 40, 0)!;
+    expect(t * 40).toBeCloseTo(20, 0);
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Writes docs/enemies.csv and docs/waves.csv straight from the game's numbers, so the tables never
+ * Writes docs/enemies.csv and docs/levels.csv straight from the game's numbers, so the tables never
  * drift from the code. Run: npm run stats
  */
 import fs from 'node:fs';
@@ -15,7 +15,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** Which room each kind fights in (as a regular or as the boss). */
 const roomOf = (k: string) =>
-  ROOMS.filter((r) => r.waves.some((w) => w.boss === k || (w.mix as Record<string, number>)[k]))
+  ROOMS.filter((r) => r.boss === k || k in r.pool || k in r.escort)
     .map((r) => r.name.replace('The ', ''))
     .join('; ');
 const nameOf = (k: EnemyKind) => (BEASTS as Record<string, { name: string }>)[k]?.name ?? (ELEMENTALS as Record<string, { name: string }>)[k]?.name ?? MONSTERS[k as keyof typeof MONSTERS].name;
@@ -92,19 +92,16 @@ for (const [k, d] of Object.entries(MONSTERS)) {
   ]);
 }
 enemies.push([]);
-enemies.push(['HERO (elf)', '', '', '', HERO.maxHp, 7.5, 0.5, '', 'arrow', HERO.arrowDamage, `invulnerable ${HERO.hurtInvulnerable} s after a hit; heals +${HEALING.waveClear} per wave, full per room, +${HEALING.heartPickup} heart pickup, +${HEALING.spring} spring`, '', '']);
+enemies.push(['HERO (elf)', '', '', '', HERO.maxHp, 7.5, 0.5, '', 'arrow', HERO.arrowDamage, `invulnerable ${HERO.hurtInvulnerable} s after a hit; heals +${HEALING.rest}/s out of a fight, +${HEALING.waveClear} per guardian, full per level, +${HEALING.heartPickup} heart pickup, +${HEALING.spring} spring`, '', '']);
 
-const waves: (string | number)[][] = [['room', 'room_name', 'wave', 'enemies', 'enemy_count', 'total_hp', 'boss']];
+// Levels are generated afresh each run: the monster mix (relative numbers), how many in packs, and the guardian.
+const levels: (string | number)[][] = [['level', 'level_name', 'layout', 'monster_mix', 'foes_in_packs', 'guardian', 'escort']];
 ROOMS.forEach((room, r) => {
-  room.waves.forEach((w, i) => {
-    const entries = Object.entries(w.mix) as [EnemyKind, number][];
-    const hp = (k: EnemyKind) => (BEASTS as Record<string, { hp: number }>)[k]?.hp ?? (ELEMENTALS as Record<string, { hp: number }>)[k]?.hp ?? MONSTERS[k as keyof typeof MONSTERS].hp;
-    const total = entries.reduce((s, [k, n]) => s + hp(k) * n, w.boss ? hp(w.boss) : 0);
-    waves.push([r + 1, room.name, i + 1, entries.map(([k, n]) => `${n} ${nameOf(k)}`).join(' + '), entries.reduce((s, [, n]) => s + n, 0), total, w.boss ? nameOf(w.boss) : '']);
-  });
+  const mix = (m: Partial<Record<EnemyKind, number>>) => (Object.entries(m) as [EnemyKind, number][]).map(([k, n]) => `${n} ${nameOf(k)}`).join(' + ');
+  levels.push([r + 1, room.name, room.layout, mix(room.pool), room.foes, room.boss ? nameOf(room.boss) : '', mix(room.escort)]);
 });
 
 fs.mkdirSync('docs', { recursive: true });
 fs.writeFileSync('docs/enemies.csv', csv(enemies));
-fs.writeFileSync('docs/waves.csv', csv(waves));
-console.log(`wrote docs/enemies.csv (${enemies.length - 1} rows) and docs/waves.csv (${waves.length - 1} rows)`);
+fs.writeFileSync('docs/levels.csv', csv(levels));
+console.log(`wrote docs/enemies.csv (${enemies.length - 1} rows) and docs/levels.csv (${levels.length - 1} rows)`);

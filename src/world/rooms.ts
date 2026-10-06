@@ -1,7 +1,6 @@
-import type { RoomWave } from '../game/enemies';
-import type { ArenaShape } from '../game/combat';
+import type { LevelTheme } from './levelgen';
 
-/** The rooms of the dungeon run, as data. The Dungeon builds whichever one is current. */
+/** The levels of the dungeon run, as data: each is generated afresh every run from its theme (levelgen.ts). */
 
 export type RoomFeature = 'woodland' | 'brazier' | 'puddles' | 'lava' | 'crystals' | 'throne' | 'dragonlair';
 
@@ -11,31 +10,17 @@ export interface Hsl {
   l: number;
 }
 
-export interface RoomDef {
+export interface RoomDef extends LevelTheme {
   name: string;
-  /** Floor plan: square, circle or octagon. */
-  shape: ArenaShape;
-  /** Centre to the middle of each wall, m (the gates sit at ±half). Integer (tiles are 2 m). */
-  half: number;
-  /** Pillar positions; every pillar blocks movement and arrows. */
-  pillars: [number, number][];
   feature: RoomFeature;
-  /** Crystal clusters (crystal cave): positions; they block like pillars. */
-  crystals?: [number, number][];
-  /** Obsidian spires (dragon's lair): positions; they block like pillars. */
-  spires?: [number, number][];
-  /** Lava pools (dragon's lair): positions; walking is blocked, arrows fly over. */
-  pools?: [number, number][];
-  /** Trees (woodland): positions; they block like pillars. */
-  trees?: [number, number][];
-  /** Outdoors: hedge walls with wooden gates, daylight and open sky instead of brick and torches. */
+  /** Outdoors: hedges and woods instead of brick and torches, daylight and open sky. */
   outdoor?: boolean;
-  /** The room's waves (usually three); the last one brings its boss. */
-  waves: RoomWave[];
-  /** Who lives here, for the room's intro card (with their illustration, public/art/<art>.jpg). */
+  /** Height of the level's walls (m). */
+  wallHeight: number;
+  /** Who lives here, for the level's intro card (with their illustration, public/art/<art>.jpg). */
   group: string;
   art: string;
-  /** A painted scene of the room (public/art/<scene>.jpg), shown instead of the group sheet when there is one. */
+  /** A painted scene of the level (public/art/<scene>.jpg), shown instead of the group sheet when there is one. */
   scene?: string;
   torchLight: number;
   torchFlame: number;
@@ -47,29 +32,18 @@ export interface RoomDef {
   moonIntensity: number;
   hemiSky: number;
   hemiGround: number;
-  /** The last room has no exit door: beat the boss to win. */
+  /** The last level has no exit door: beat the boss to win. */
   hasExit: boolean;
-  /** No gate in the west wall (the throne stands there). */
-  solidWest?: boolean;
 }
 
 export const ROOMS: RoomDef[] = [
   {
     name: 'The Woodland',
-    shape: 'circle',
     group: 'Forest beasts and living plants',
     art: 'beasts',
     scene: 'scene-woodland',
-    half: 24,
-    pillars: [],
     feature: 'woodland',
-    trees: [[-12, -12], [11, -14], [-15, 2], [15, -2], [-8, 4], [9, 5], [-13, 15], [14, 14], [0, -6]],
     outdoor: true,
-    waves: [
-      { mix: { beetle: 8, snake: 2, vine: 2 } },
-      { mix: { beetle: 6, snake: 2, direwolf: 2, boar: 1, vine: 1, treant: 1 } },
-      { mix: { beetle: 6, vine: 2 }, boss: 'bear' },
-    ],
     torchLight: 0xffe7b0,
     torchFlame: 0xfff3c0,
     floor: { h: 0.27, s: 0.42, l: 0.3 },
@@ -81,22 +55,20 @@ export const ROOMS: RoomDef[] = [
     hemiSky: 0xbfe3ff,
     hemiGround: 0x3a5a2a,
     hasExit: true,
+    layout: 'open',
+    shapes: ['circle'],
+    wallHeight: 4,
+    pool: { beetle: 14, snake: 4, vine: 3, direwolf: 2, boar: 1, treant: 1 },
+    boss: 'bear',
+    escort: { beetle: 3 },
+    foes: 34,
   },
   {
     name: 'The Crystal Cave',
-    shape: 'octagon',
     group: 'Underworld dwellers',
     art: 'underworld',
     scene: 'scene-crystal-cave',
-    waves: [
-      { mix: { spider: 6, ooze: 2, sporecrawler: 2 } },
-      { mix: { spider: 6, ooze: 3, sporecrawler: 2, mushroom: 2, mold: 1 } },
-      { mix: { spider: 4, ooze: 2, mushroom: 1 }, boss: 'caveworm' },
-    ],
-    half: 30,
-    pillars: [[-7, -14], [7, 14]], // off the centre line so the entry view is clear
     feature: 'crystals',
-    crystals: [[-12, -12], [12, -12], [-12, 12], [12, 12], [-20, 0], [20, 0], [-6, 2], [7, -3]],
     torchLight: 0xb070ff,
     torchFlame: 0xd0a0ff,
     floor: { h: 0.76, s: 0.1, l: 0.28 },
@@ -108,20 +80,19 @@ export const ROOMS: RoomDef[] = [
     hemiSky: 0x8f83b3,
     hemiGround: 0x100a1a,
     hasExit: true,
+    layout: 'halls',
+    shapes: ['octagon', 'circle'],
+    wallHeight: 5,
+    pool: { spider: 12, ooze: 5, sporecrawler: 4, mushroom: 2, mold: 1 },
+    boss: 'caveworm',
+    escort: { spider: 3 },
+    foes: 38,
   },
   {
     name: 'The Crypt',
-    shape: 'square',
     group: 'The undead',
     art: 'undead',
     scene: 'scene-crypt',
-    waves: [
-      { mix: { skeleton: 8, skelarcher: 2, ghost: 2 } },
-      { mix: { skeleton: 8, skelarcher: 3, ghost: 3, zombie: 2, knight: 1 } },
-      { mix: { skeleton: 4, skelarcher: 2, zombie: 1 }, boss: 'necromancer' },
-    ],
-    half: 24,
-    pillars: [[-9, -9], [9, -9], [-9, 9], [9, 9]],
     feature: 'brazier',
     torchLight: 0xff8a3d,
     torchFlame: 0xff9a40,
@@ -134,20 +105,19 @@ export const ROOMS: RoomDef[] = [
     hemiSky: 0x83839f,
     hemiGround: 0x1a1010,
     hasExit: true,
+    layout: 'halls',
+    shapes: ['square', 'octagon'],
+    wallHeight: 5,
+    pool: { skeleton: 14, skelarcher: 4, ghost: 4, zombie: 2, knight: 1 },
+    boss: 'necromancer',
+    escort: { skeleton: 2, skelarcher: 1 },
+    foes: 42,
   },
   {
     name: 'The Throne Room',
-    shape: 'square',
     group: 'Orcs',
     art: 'orcs',
     scene: 'scene-throne-room',
-    waves: [
-      { mix: { orcwarrior: 4, orcscout: 4, orcarcher: 2 } },
-      { mix: { orcwarrior: 5, orcscout: 4, orcarcher: 3, shaman: 2, shieldguard: 1 } },
-      { mix: { orcwarrior: 3, orcarcher: 2, shaman: 1 }, boss: 'chieftain' },
-    ],
-    half: 30,
-    pillars: [[-13, -16], [13, -16], [-13, -4], [13, -4], [-13, 8], [13, 8], [-13, 20], [13, 20]],
     feature: 'throne',
     torchLight: 0xffc060,
     torchFlame: 0xffd080,
@@ -161,21 +131,19 @@ export const ROOMS: RoomDef[] = [
     hemiGround: 0x1a0c08,
     hasExit: true,
     // The throne stands against the west wall (the north wall has the exit door).
-    solidWest: true,
+    layout: 'halls',
+    shapes: ['square'],
+    wallHeight: 5.5,
+    pool: { orcwarrior: 8, orcscout: 7, orcarcher: 4, shaman: 2, shieldguard: 1 },
+    boss: 'chieftain',
+    escort: { orcwarrior: 2, orcarcher: 1 },
+    foes: 44,
   },
   {
     name: 'The Flooded Hall',
-    shape: 'octagon',
     group: 'Goblins and water elementals',
     art: 'goblins',
     scene: 'scene-flooded-hall',
-    waves: [
-      { mix: { brawler: 8, riveter: 3, rotor: 2, water: 1 } },
-      { mix: { brawler: 8, rotor: 3, riveter: 3, lobber: 2, tinkerer: 2, water: 2 } },
-      { mix: { brawler: 6, riveter: 2, lobber: 2, water: 1 }, boss: 'scrapboss' },
-    ],
-    half: 28,
-    pillars: [[-9, -15], [9, -15], [-9, -5], [9, -5], [-9, 5], [9, 5], [-9, 15], [9, 15]],
     feature: 'puddles',
     torchLight: 0x5fc8ff,
     torchFlame: 0x9fe4ff,
@@ -188,20 +156,19 @@ export const ROOMS: RoomDef[] = [
     hemiSky: 0x778fa7,
     hemiGround: 0x0a1016,
     hasExit: true,
+    layout: 'open',
+    shapes: ['octagon', 'square'],
+    wallHeight: 5,
+    pool: { brawler: 14, riveter: 5, rotor: 4, lobber: 2, tinkerer: 2, water: 2 },
+    boss: 'scrapboss',
+    escort: { brawler: 2, riveter: 1, water: 1 },
+    foes: 54,
   },
   {
     name: 'The Lava Chamber',
-    shape: 'circle',
     group: 'Fire, wind and stone elementals',
     art: 'elementals',
     scene: 'scene-lava-chamber',
-    waves: [
-      { mix: { fire: 4, wind: 4, golem: 1 } },
-      { mix: { fire: 5, wind: 4, golem: 2 } },
-      { mix: { fire: 3, wind: 2, golem: 1 }, boss: 'inferno' },
-    ],
-    half: 26,
-    pillars: [[7.5, -13], [15, 0], [7.5, 13], [-7.5, 13], [-15, 0], [-7.5, -13]],
     feature: 'lava',
     torchLight: 0xff5a20,
     torchFlame: 0xff7a30,
@@ -214,22 +181,19 @@ export const ROOMS: RoomDef[] = [
     hemiSky: 0x9b6b5f,
     hemiGround: 0x1a0805,
     hasExit: true,
+    layout: 'halls',
+    shapes: ['circle', 'octagon'],
+    wallHeight: 5.5,
+    pool: { fire: 9, wind: 8, golem: 2 },
+    boss: 'inferno',
+    escort: { fire: 2, wind: 1 },
+    foes: 40,
   },
   {
     name: "The Ash King's Lair",
-    shape: 'circle',
     group: 'The Ash King',
     art: 'elementals',
     scene: 'scene-ash-king',
-    waves: [
-      // One wave: the Ash King alone (he calls in fire elementals himself).
-      { mix: {}, boss: 'ashking' },
-    ],
-    half: 34,
-    pillars: [],
-    // A vast round hall: towering obsidian spires, lava pools, lavafalls down the walls, a rune circle.
-    spires: [[-22, -10], [22, -10], [-13, -22], [13, -22], [-24, 8], [24, 8], [-12, 20], [12, 20]],
-    pools: [[-16, -1], [16, -1], [-8, 9], [8, 9]],
     feature: 'dragonlair',
     torchLight: 0xff4a10,
     torchFlame: 0xff6a20,
@@ -242,20 +206,27 @@ export const ROOMS: RoomDef[] = [
     hemiSky: 0x8b4b3f,
     hemiGround: 0x1a0503,
     hasExit: false, // the final room: the Ash King waits here
+    layout: 'lair',
+    shapes: ['circle'],
+    wallHeight: 8,
+    pool: {},
+    boss: 'ashking',
+    escort: {},
+    foes: 0,
   },
 ];
 
 
-/** ready: in the first room, waiting for the hero to start · fight · cleared (door open) · transition (walking through). */
+/** ready: in the first level, waiting for the hero to start · fight · cleared (exit open) · transition (walking through). */
 export type RunPhase = 'ready' | 'fight' | 'cleared' | 'transition';
 
-/** Top-of-screen label for where the run is. */
-export function runLabel(room: number, wave: number, remaining: number, phase: RunPhase, bossName: string | null): string {
+/** Top-of-screen label for where the run is. `foes`: monsters still alive in the level. */
+export function runLabel(room: number, foes: number, phase: RunPhase, bossName: string | null): string {
   const name = ROOMS[room]?.name ?? '';
-  if (phase === 'cleared') return `${name} cleared — through the north door ↑`;
+  if (phase === 'cleared') return `${name} cleared — the exit door is open ↑`;
   if (phase === 'transition') return 'Onward…';
   if (phase === 'ready') return `${name} · ready when you are`;
-  if (wave === 0) return `${name} · get ready…`;
   if (bossName) return `${name} · ${bossName}`;
-  return `${name} · Wave ${wave}/${ROOMS[room]?.waves.length ?? 0} · ${remaining} ${remaining === 1 ? 'foe' : 'foes'} left`;
+  const guard = ROOMS[room]?.hasExit ? 'its guardian waits by the exit, to the north' : 'the Ash King waits to the north';
+  return `${name} · ${foes} ${foes === 1 ? 'foe' : 'foes'} about · ${guard}`;
 }

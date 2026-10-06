@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Dungeon } from '../world/dungeon';
 import { ROOMS } from '../world/rooms';
+import { generateLevel } from '../world/levelgen';
+import { Minimap } from '../ui/minimap';
 import { TelegraphRings } from '../game/telegraph';
 import { BeastVisual } from '../game/beastVisual';
 import { ElementalVisual } from '../game/elementalVisual';
@@ -34,8 +36,6 @@ const EDGE = 0.86;
 /** …and stay clear of the top bar and the spell buttons (screen space, −1…1, y up). */
 const EDGE_TOP = 0.8;
 const EDGE_BOTTOM = -0.55;
-/** Within this many metres of the south wall, the wall turns half see-through. */
-const SOUTH_WALL_FADE_ZONE = 7;
 const STEER_SEND_INTERVAL = 0.1; // joystick updates at 10 Hz (resent while held)
 const STICK_RADIUS = 60; // px of drag for full speed
 const STICK_DEAD_ZONE = 0.15;
@@ -83,9 +83,7 @@ export class FamiliarGame {
   private readonly camGoal = new THREE.Vector3();
   private camPlaced = false;
   /** Pillars, trees and crystals that fade out when they stand between the camera and the creature. */
-  private fadeables: { obj: THREE.Object3D; mats: THREE.Material[]; opacity: number }[] = [];
   /** The south wall and gate: half see-through while the creature is near it. */
-  private southWall: { mats: THREE.Material[]; opacity: number } = { mats: [], opacity: 1 };
   /** Off-screen pointers to the elf and the boss. */
   private readonly pointers: Record<'elf' | 'boss', { el: HTMLElement; at: THREE.Vector3 | null }> = {
     elf: { el: null!, at: null },
@@ -98,15 +96,16 @@ export class FamiliarGame {
   private shownKind: FamiliarKind | null = null;
   private status: FamiliarStatus = 'connecting';
   private onFrame?: () => void;
+  private minimap!: Minimap;
 
   constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarLink) {
     this.renderer = renderer;
     this.elf = elf;
     this.bodies = bodies;
     this.session = session;
-    this.dungeon = new Dungeon(this.scene, ROOMS[0], 1024);
-    this.collectFadeables();
+    this.dungeon = new Dungeon(this.scene, ROOMS[0], generateLevel({ ...ROOMS[0], layout: 'practice' }, 1), 1024);
     for (const b of Object.values(bodies)) b.group.visible = false;
+    this.minimap = new Minimap(root);
 
     const additive = (color: number, opacity: number) =>
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -198,7 +197,7 @@ export class FamiliarGame {
 
   private receive(s: Snapshot): void {
     // The hero walked into another room (or started over): build it.
-    if (s.room !== ROOMS.indexOf(this.dungeon.room)) this.loadRoom(s.room);
+    if (s.room !== ROOMS.indexOf(this.dungeon.room) || (s.lvl ?? 0) !== this.dungeon.level.seed) this.loadRoom(s.room, s.lvl ?? 0, !!s.practice);
     this.buffer.push(s, performance.now() / 1000);
     if (s.ev.length) {
       const events = s.ev;
@@ -348,60 +347,19 @@ export class FamiliarGame {
     }
   }
 
-  private loadRoom(index: number): void {
+  /** Builds the hero's current level from its seed (the same generator gives the same level). */
+  private loadRoom(index: number, seed: number, practice: boolean): void {
     const room = ROOMS[index];
     if (!room) return;
     this.dungeon.dispose(this.scene);
-    this.dungeon = new Dungeon(this.scene, room, 1024);
-    // Drop everything from the old room.
+    this.dungeon = new Dungeon(this.scene, room, generateLevel(practice ? { ...room, layout: 'practice' } : room, seed), 1024);
+    // Drop everything from the old level.
     for (const v of this.slimes.values()) this.scene.remove(v.group);
     this.slimes.clear();
     this.effects.clear();
-    this.camPlaced = false; // snap to the new room's spot instead of gliding across
-    this.collectFadeables();
+    this.camPlaced = false; // snap to the new level's spot instead of gliding across
+    this.minimap.setLevel(this.dungeon.level.map);
     this.resize();
-  }
-
-  /** Gives each occluder (and the south wall) its own fadeable materials. */
-  private collectFadeables(): void {
-    const ownMaterials = (obj: THREE.Object3D) => {
-      const mats: THREE.Material[] = [];
-      obj.traverse((o) => {
-        if (!(o instanceof THREE.Mesh)) return;
-        const m = (o.material as THREE.Material).clone();
-        m.transparent = true;
-        o.material = m;
-        mats.push(m);
-      });
-      return mats;
-    };
-    this.fadeables = this.dungeon.occluders.map((obj) => ({ obj, mats: ownMaterials(obj), opacity: 1 }));
-    this.southWall = { mats: this.dungeon.southWall.flatMap(ownMaterials), opacity: 1 };
-  }
-
-  /** Fades occluders standing between the camera and what it follows (south of it, or right on top). */
-  private updateFades(dt: number): void {
-    const f = this.camFocus;
-    // Near the bottom (south) wall, the wall would hide the creature: make it half see-through.
-    const nearSouth = f.z > this.dungeon.half - SOUTH_WALL_FADE_ZONE;
-    this.fade(this.southWall, nearSouth ? 0.5 : 1, dt);
-    const camZ = this.camera.position.z;
-    for (const item of this.fadeables) {
-      const p = item.obj.position;
-      const dx = Math.abs(p.x - f.x);
-      const inLine = p.z > f.z - 2 && p.z < camZ && dx < 3.5 + (p.z - f.z) * 0.15;
-      const target = inLine || Math.hypot(p.x - f.x, p.z - f.z) < 3 ? 0.22 : 1;
-      this.fade(item, target, dt);
-    }
-  }
-
-  private fade(item: { mats: THREE.Material[]; opacity: number }, target: number, dt: number): void {
-    if (Math.abs(item.opacity - target) < 0.01) return;
-    item.opacity += (target - item.opacity) * (1 - Math.exp(-10 * dt));
-    for (const m of item.mats) {
-      m.opacity = item.opacity;
-      m.depthWrite = item.opacity > 0.95; // see-through when faded
-    }
   }
 
   private currentBody(): FamiliarBody | null {
@@ -412,7 +370,7 @@ export class FamiliarGame {
     this.timer.update(timestamp);
     const dt = Math.min(this.timer.getDelta(), 0.1);
     this.time += dt;
-    this.dungeon.update(this.time, dt);
+    this.dungeon.update(this.time, dt, this.camFocus);
     this.sfx.setAmbience(0.25, 0, dt);
     const s = this.buffer.sample(performance.now() / 1000);
     if (s) this.apply(s, dt);
@@ -425,20 +383,30 @@ export class FamiliarGame {
     this.sfx.music.update();
     this.updateStick();
     this.updateCamera(dt);
-    this.updateFades(dt);
+    this.dungeon.fadeBetween(this.camera.position, this.camFocus, dt);
     this.renderer.render(this.scene, this.camera);
     this.updatePointers();
     this.onFrame?.();
   }
 
   private apply(s: Snapshot, dt: number): void {
+    const e = this.dungeon.level.exit;
+    const bossHall = this.dungeon.level.halls.find((hh) => hh.kind === 'boss');
+    this.minimap.setVisible(!s.practice && (s.state === 'playing' || s.state === 'paused'));
+    this.minimap.update(dt, {
+      hero: { x: s.hero.x, z: s.hero.z, facing: s.hero.f },
+      familiar: s.fam,
+      exit: e ? { ...e, open: s.phase === 'cleared' && !s.rid } : null,
+      chests: this.dungeon.level.chests,
+      boss: bossHall && s.phase === 'fight' ? bossHall : null,
+    });
     // Elf: placed and animated from the hero's motion.
     const h = s.hero;
     // The camera follows our creature (or the elf, before a creature is picked).
     if (s.fam) this.camGoal.set(s.fam.x, 0, s.fam.z);
     else this.camGoal.set(h.x, 0, h.z);
     this.pointers.elf.at = (this.pointers.elf.at ?? new THREE.Vector3()).set(h.x, 1.4, h.z);
-    const bossKind = s.boss ? ROOMS[s.room]?.waves.at(-1)?.boss : undefined;
+    const bossKind = s.boss ? ROOMS[s.room]?.boss : undefined;
     const bossT = bossKind ? s.slimes.find((t) => SLIME_KIND_CODES[t[1]] === bossKind) : undefined;
     this.pointers.boss.at = bossT ? (this.pointers.boss.at ?? new THREE.Vector3()).set(bossT[2], 2, bossT[3]) : null;
     this.elf.group.position.set(h.x, 0, h.z);

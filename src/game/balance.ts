@@ -10,8 +10,11 @@ export const HERO = {
 };
 
 export const HEALING = {
-  /** For each wave cleared. */
+  /** When a level's guardian falls. */
   waveClear: 20,
+  /** Out of combat (nobody hunting nearby, no hit for `restAfter` s): health back per second. */
+  rest: 6,
+  restAfter: 4,
   /** The Heart power-up. */
   heartPickup: 25,
   /** The capybara's Soothing Spring (once per pool). */

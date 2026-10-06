@@ -1,4 +1,5 @@
 /** Pure 2D (XZ-plane) geometry and rules for combat — no three.js, easy to test. */
+import { WalkMap, type Shape } from './walkmap';
 
 export interface Circle {
   x: number;
@@ -32,70 +33,33 @@ export function pushOutOfCircles(p: Point, radius: number, circles: readonly Cir
   return moved;
 }
 
-/**
- * Room floor plans. `half` is the apothem: the distance from the centre to the middle of each wall
- * (so the gates on the north, south, east and west walls sit at ±half on every shape).
- */
-export type ArenaShape = 'square' | 'circle' | 'octagon';
+/** Hall floor plans (the generator stamps halls in these shapes). */
+export type ArenaShape = Shape;
 
-let currentShape: ArenaShape = 'square';
+let currentMap = WalkMap.fromShape('square', 28);
 
-/** The shape every arena check uses (set when a room is built). */
-export function setArenaShape(shape: ArenaShape): void {
-  currentShape = shape;
+/** The level every walkability check uses (set when a level is built). */
+export function setWalkMap(map: WalkMap): void {
+  currentMap = map;
 }
 
-export function arenaShape(): ArenaShape {
-  return currentShape;
+export function walkMap(): WalkMap {
+  return currentMap;
 }
 
-/** True if (x, z) is inside the arena of apothem `half`, at least `margin` from the wall. */
-export function insideArena(x: number, z: number, half: number, margin = 0, shape: ArenaShape = currentShape): boolean {
-  const a = half - margin;
-  if (shape === 'circle') return x * x + z * z <= a * a;
-  if (Math.abs(x) > a || Math.abs(z) > a) return false;
-  return shape === 'square' || Math.abs(x) + Math.abs(z) <= a * Math.SQRT2;
+/** True if (x, z) is on the floor, at least `margin` from any wall. */
+export function insideArena(x: number, z: number, margin = 0): boolean {
+  return margin > 0 ? currentMap.clear(x, z, margin) : currentMap.floorAt(x, z);
 }
 
-/** Keeps a circle inside the arena (square, circle or octagon of apothem `half`). Returns true if it was clamped. */
-export function clampToArena(p: Point, half: number, radius: number, shape: ArenaShape = currentShape): boolean {
-  const lim = half - radius;
-  let { x, z } = p;
-  if (shape === 'circle') {
-    const d = Math.hypot(x, z);
-    if (d > lim) {
-      x *= lim / d;
-      z *= lim / d;
-    }
-  } else {
-    x = Math.max(-lim, Math.min(lim, x));
-    z = Math.max(-lim, Math.min(lim, z));
-    if (shape === 'octagon') {
-      // The diagonal walls: |x| + |z| ≤ lim·√2; slide along them.
-      const over = (Math.abs(x) + Math.abs(z) - lim * Math.SQRT2) / 2;
-      if (over > 0) {
-        x -= Math.sign(x) * over;
-        z -= Math.sign(z) * over;
-      }
-    }
-  }
-  const clamped = x !== p.x || z !== p.z;
-  p.x = x;
-  p.z = z;
-  return clamped;
+/** Keeps a circle out of the walls (sliding along them). Returns true if it was moved. */
+export function clampToArena(p: Point, radius: number): boolean {
+  return currentMap.clampCircle(p, radius);
 }
 
-/** Fraction along A→B (A inside) where it leaves the arena, `margin` in from the wall; null if B is inside too. */
-export function arenaExit(ax: number, az: number, bx: number, bz: number, half: number, margin = 0): number | null {
-  if (insideArena(bx, bz, half, margin)) return null;
-  let lo = 0;
-  let hi = 1;
-  for (let i = 0; i < 14; i++) {
-    const t = (lo + hi) / 2;
-    if (insideArena(ax + (bx - ax) * t, az + (bz - az) * t, half, margin)) lo = t;
-    else hi = t;
-  }
-  return lo;
+/** Fraction along A→B (A on the floor) just before it hits a wall, `margin` in from it; null if the way is clear. */
+export function arenaExit(ax: number, az: number, bx: number, bz: number, margin = 0): number | null {
+  return currentMap.raycast(ax, az, bx, bz, margin);
 }
 
 /**
