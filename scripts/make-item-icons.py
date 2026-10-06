@@ -2,7 +2,7 @@
 Cuts the item art sheets (5 x 2 grids on a cream background, numbered) into icons for the bag:
 the background becomes transparent, each icon is trimmed, centred on a square and saved as WebP.
 
-  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves,cape}-{1..10}.webp
+  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves,cape,belt}-{1..10}.webp
 """
 import os
 from PIL import Image
@@ -17,6 +17,7 @@ SHEETS = {
     'gloves': (f'{HOME}/Downloads/Ten fantasy glove designs.png', [(40, 395), (470, 905)], [0, 300, 588, 882, 1188, 1536]),
     # Capes 9 and 10 overlap side to side: each cell is given as its own (left, right), overlapping;
     # the numbers and the neighbour's hem get dropped as small shapes.
+    'belt': (f'{HOME}/Downloads/Ten fantasy belt designs.png', [(60, 420), (440, 745)]),
     'cape': (f'{HOME}/Downloads/Ten fantasy capes concept sheet.png', [(0, 450), (455, 990)],
              [[(0, 320), (330, 615), (640, 915), (925, 1210), (1215, 1536)], [(0, 305), (305, 600), (600, 895), (880, 1215), (1130, 1536)]]),
 }
@@ -46,13 +47,13 @@ def clear_background(cell, bg):
         if y < h - 1: stack.append((x, y + 1))
 
 
-def clear_enclosed(cell, bg, min_area=4000):
+def clear_enclosed(cell, bg, min_area=4000, tol=45):
     """Big cream areas shut in by the drawing (inside a bow, between limb and string) → transparent.
     Thin cream parts of the drawing itself (an ivory bow) are smaller, so they stay."""
     px = cell.load()
     w, h = cell.size
     seen = bytearray(w * h)
-    near = lambda p: p[3] > 0 and sum(abs(a - b) for a, b in zip(p[:3], bg)) <= 45
+    near = lambda p: p[3] > 0 and sum(abs(a - b) for a, b in zip(p[:3], bg)) <= tol
     for sy in range(h):
         for sx in range(w):
             if seen[sy * w + sx] or not near(px[sx, sy]):
@@ -126,6 +127,8 @@ for name, (path, rows, *cols) in SHEETS.items():
             clear_background(cell, bg)
             if name == 'bow':
                 clear_enclosed(cell, bg)
+            if name == 'belt':
+                clear_enclosed(cell, bg, 1500, 18)  # inside the loop (tight: the ivory belt must stay)
             keep_biggest(cell)
             icon = cell.crop(cell.getbbox())
             if name == 'bow':

@@ -116,6 +116,10 @@ export const ITEM_ART: Partial<Record<ItemSlot, { names: string[]; byRarity: Rec
     names: ['Hooded Capelet', 'Traveler’s Cloak', 'Crimson Wrap', 'Gilded White Mantle', 'Ranger’s Hooded Cloak', 'Midnight Capelet', 'Plum Shawl Cloak', 'Ember Mantle', 'Frost Cloak', 'Black-and-Gold Cloak'],
     byRarity: { common: [1, 2, 3, 6], rare: [4, 5, 7, 8], epic: [9, 10] },
   },
+  belt: {
+    names: ['Leather Belt', 'Sand Sash', 'Ring-Buckle Belt', 'Ivory Gem Belt', 'Ranger’s Double Belt', 'Adventurer’s Pouch Belt', 'Laced Corset Belt', 'Bronze Plate Belt', 'Knight’s Girdle', 'Black-and-Gold Girdle'],
+    byRarity: { common: [1, 2, 3, 6], rare: [4, 5, 7, 8], epic: [9, 10] },
+  },
 };
 
 /** Each stat: its size on a common level-1 item, a cap on the total, and how it reads. */
