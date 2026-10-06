@@ -3,12 +3,12 @@
  * shared by both, and the gold purse. Plus the merchant's stock between levels. Pure rules, unit
  * tested; the hero's game owns the one true inventory and the familiar's tablet sends requests.
  */
-import { FAM_SLOTS, HERO_SLOTS, makeItem, makePotion, rollRarity, sellPrice, totalStats, type BagEntry, type GearSlot, type Item, type Stats } from './items';
+import { FAM_SLOTS, HERO_SLOTS, fits, makeItem, makePotion, rollRarity, sellPrice, totalStats, type BagEntry, type GearSlot, type Item, type Stats } from './items';
 
 export const BAG_SIZE = 16;
 
 export type InvOp =
-  | { op: 'equip'; i: number } // bag slot → its gear slot (what was worn goes back to that bag slot)
+  | { op: 'equip'; i: number; to?: GearSlot } // bag slot → a place it fits (what was worn there goes back to that bag slot)
   | { op: 'unequip'; slot: GearSlot; to?: number } // gear slot → bag slot `to` (or the first free one)
   | { op: 'move'; i: number; j: number } // bag slot i ↔ bag slot j
   | { op: 'use'; i: number } // drink a potion
@@ -71,8 +71,12 @@ export class Inventory {
       case 'equip': {
         const e = this.bag[req.i];
         if (!e || e.kind !== 'item') return null;
-        this.bag[req.i] = this.gear[e.slot];
-        this.gear[e.slot] = e;
+        // Where: the place asked for, else the free one of its places (rings), else the first.
+        const places = (Object.keys(this.gear) as GearSlot[]).filter((g) => fits(e.slot, g));
+        const to = req.to ? (fits(e.slot, req.to) ? req.to : null) : (places.find((g) => !this.gear[g]) ?? places[0]);
+        if (!to) return null;
+        this.bag[req.i] = this.gear[to];
+        this.gear[to] = e;
         break;
       }
       case 'unequip': {
@@ -83,7 +87,7 @@ export class Inventory {
         if (there === null) {
           this.bag[to] = it; // dropped on an empty bag slot
           this.gear[req.slot] = null;
-        } else if (there?.kind === 'item' && there.slot === req.slot) {
+        } else if (there?.kind === 'item' && fits(there.slot, req.slot)) {
           this.bag[to] = it; // onto gear for the same slot: swap them
           this.gear[req.slot] = there;
         } else {

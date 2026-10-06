@@ -1,4 +1,4 @@
-import { POTIONS, RARITY_INFO, SLOT_INFO, STAT_INFO, sellPrice, statLines, type BagEntry, type GearSlot, type Item, type StatKey } from '../game/items';
+import { HERO_SLOTS, POTIONS, RARITY_INFO, SLOT_INFO, STAT_INFO, fits, sellPrice, statLines, type BagEntry, type GearSlot, type Item, type StatKey } from '../game/items';
 import type { InvOp, InvState, StockEntry } from '../game/inventory';
 
 type Selection = { from: 'bag'; i: number } | { from: 'gear'; slot: GearSlot } | { from: 'shop'; i: number } | null;
@@ -26,15 +26,19 @@ function colorOf(e: Thing): string {
   return '#c79bff';
 }
 
-/** Where each gear slot sits on the paper doll (grid areas) and how big it is. */
-const DOLL: Record<GearSlot, { area: string; big: boolean }> = {
-  amulet: { area: 'amulet', big: false },
-  bow: { area: 'bow', big: true },
-  armor: { area: 'armor', big: true },
-  ring: { area: 'ring', big: false },
-  boots: { area: 'boots', big: false },
-  collar: { area: 'collar', big: false },
-  charm: { area: 'charm', big: false },
+/** Where each gear slot sits on the paper doll (grid areas): weapons tall at the sides, armor in the middle. */
+const DOLL: Record<GearSlot, { area: string; size: 'small' | 'tall' | 'body' }> = {
+  amulet: { area: 'amulet', size: 'small' },
+  helmet: { area: 'helmet', size: 'small' },
+  gloves: { area: 'gloves', size: 'small' },
+  bow: { area: 'bow', size: 'tall' },
+  armor: { area: 'armor', size: 'body' },
+  offhand: { area: 'offhand', size: 'tall' },
+  ring: { area: 'ring', size: 'small' },
+  boots: { area: 'boots', size: 'small' },
+  ring2: { area: 'ring2', size: 'small' },
+  collar: { area: 'collar', size: 'small' },
+  charm: { area: 'charm', size: 'small' },
 };
 
 /**
@@ -151,7 +155,7 @@ export class InventoryPanel {
       document.body.append(this.ghost);
       this.el.setPointerCapture(e.pointerId);
       this.el.classList.add('dragging');
-      for (const g of this.el.querySelectorAll<HTMLElement>('[data-gear]')) g.classList.toggle('fits', thing.kind === 'item' && thing.slot === g.dataset.gear);
+      for (const g of this.el.querySelectorAll<HTMLElement>('[data-gear]')) g.classList.toggle('fits', thing.kind === 'item' && fits(thing.slot, g.dataset.gear as GearSlot));
       this.sel = p.src;
     }
     this.ghost.style.left = `${e.clientX}px`;
@@ -188,7 +192,7 @@ export class InventoryPanel {
     const bagI = target.dataset.bag !== undefined ? Number(target.dataset.bag) : -1;
     const gear = target.dataset.gear as GearSlot | undefined;
     if (src.from === 'bag') {
-      if (gear && thing.kind === 'item' && thing.slot === gear) return { op: 'equip', i: src.i };
+      if (gear && thing.kind === 'item' && fits(thing.slot, gear)) return { op: 'equip', i: src.i, to: gear };
       if (bagI >= 0 && bagI !== src.i) return { op: 'move', i: src.i, j: bagI };
       if (target.dataset.sellZone !== undefined && this.shop && thing.kind !== 'book') return { op: 'sell', i: src.i };
       if (target.dataset.trash !== undefined) return { op: 'drop', i: src.i };
@@ -264,7 +268,7 @@ export class InventoryPanel {
       const it = st.gear[slot];
       const on = this.sel?.from === 'gear' && this.sel.slot === slot;
       const d = DOLL[slot];
-      return `<button type="button" class="doll-slot${d.big ? ' big' : ''}${it ? ' full' : ''}${on ? ' on' : ''}" data-gear="${slot}" style="grid-area:${d.area};${it ? `--rc:${colorOf(it)}` : ''}" title="${esc(it ? it.name : SLOT_INFO[slot].label)}">
+      return `<button type="button" class="doll-slot ${d.size}${it ? ' full' : ''}${on ? ' on' : ''}" data-gear="${slot}" style="grid-area:${d.area};${it ? `--rc:${colorOf(it)}` : ''}" title="${esc(it ? it.name : SLOT_INFO[slot].label)}">
         <span class="ds-icon">${SLOT_INFO[slot].icon}</span>${it ? '' : `<span class="ds-label">${SLOT_INFO[slot].label}</span>`}</button>`;
     };
     const bag = st.bag
@@ -290,7 +294,7 @@ export class InventoryPanel {
         <section class="doll" data-buy-zone>
           <div class="doll-figure" aria-hidden="true">🧝</div>
           <div class="doll-grid">
-            ${(['amulet', 'bow', 'armor', 'ring', 'boots'] as GearSlot[]).map(gearCell).join('')}
+            ${HERO_SLOTS.map(gearCell).join('')}
           </div>
           <div class="doll-fam"><span class="df-label">Familiar</span>${gearCell('collar')}${gearCell('charm')}</div>
           ${this.statsLine ? `<p class="bag-stats">${this.statsLine}</p>` : ''}
@@ -315,7 +319,7 @@ export class InventoryPanel {
       sub = `${RARITY_INFO[e.rarity].label} ${SLOT_INFO[e.slot].label.toLowerCase()}${SLOT_INFO[e.slot].familiar ? ' · for the familiar' : ''}`;
       lines = statLines(e.stats);
       // Compared with what's worn in that slot now.
-      const worn = this.state!.gear[e.slot];
+      const worn = e.slot === 'ring' ? (this.state!.gear.ring && this.state!.gear.ring2 ? this.state!.gear.ring : null) : this.state!.gear[e.slot];
       if (s.from !== 'gear' && worn) lines.push(...compare(e, worn));
       if (s.from === 'bag') buttons.push('<button type="button" data-act="equip">Equip</button>');
       if (s.from === 'gear') buttons.push('<button type="button" data-act="unequip">Take off</button>');

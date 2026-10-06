@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BAG_SIZE, Inventory, makeStock } from './inventory';
-import { GEAR_SLOTS, RARITY_INFO, SLOT_INFO, STAT_INFO, makeItem, makePotion, rollRarity, sellPrice, statLines, totalStats, type StatKey } from './items';
+import { ITEM_SLOTS, RARITY_INFO, SLOT_INFO, STAT_INFO, makeItem, makePotion, rollRarity, sellPrice, statLines, totalStats, type StatKey } from './items';
 import { mulberry32 } from '../util/rng';
 
 describe('items', () => {
   it('rolls stats that fit the slot, more and bigger for rarer items and later levels', () => {
     const rng = mulberry32(4);
     for (let i = 0; i < 300; i++) {
-      const slot = GEAR_SLOTS[i % GEAR_SLOTS.length];
+      const slot = ITEM_SLOTS[i % ITEM_SLOTS.length];
       const rarity = (['common', 'rare', 'epic'] as const)[i % 3];
       const it = makeItem(rng, rarity, 1 + (i % 7), slot);
       const keys = Object.keys(it.stats) as StatKey[];
@@ -112,6 +112,23 @@ describe('inventory', () => {
     inv.apply({ op: 'unequip', slot: 'bow', to: at }, null); // dropped onto the other bow: swap
     expect(inv.gear.bow).toBe(bow2);
     expect(inv.bag[at]).toBe(bow);
+  });
+
+  it('wears two rings, a helmet, gloves and an off-hand weapon', () => {
+    const inv = new Inventory();
+    const rng = mulberry32(21);
+    const [r1, r2, r3] = [0, 1, 2].map(() => makeItem(rng, 'common', 1, 'ring'));
+    for (const it of [r1, r2, r3, makeItem(rng, 'rare', 1, 'helmet'), makeItem(rng, 'rare', 1, 'gloves'), makeItem(rng, 'rare', 1, 'offhand')]) inv.add(it);
+    inv.apply({ op: 'equip', i: 0 }, null);
+    inv.apply({ op: 'equip', i: 1 }, null);
+    expect(inv.gear.ring).toBe(r1);
+    expect(inv.gear.ring2).toBe(r2); // the second ring goes on the free finger
+    inv.apply({ op: 'equip', i: 2, to: 'ring2' }, null);
+    expect(inv.gear.ring2).toBe(r3);
+    expect(inv.bag[2]).toBe(r2);
+    expect(inv.apply({ op: 'equip', i: 3, to: 'boots' }, null)).toBeNull(); // a helmet isn't boots
+    for (const i of [3, 4, 5]) inv.apply({ op: 'equip', i }, null);
+    expect(inv.gear.helmet && inv.gear.gloves && inv.gear.offhand).toBeTruthy();
   });
 
   it('holds 16 things; a full bag takes no more', () => {

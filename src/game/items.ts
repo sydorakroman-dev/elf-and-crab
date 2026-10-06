@@ -3,12 +3,27 @@
  * the totals the elf and the familiar get from what they wear. Pure rules, unit tested.
  */
 
-export type HeroSlot = 'bow' | 'armor' | 'boots' | 'amulet' | 'ring';
+/** What a piece of gear is (where it can be worn). */
+export type ItemSlot = 'bow' | 'offhand' | 'helmet' | 'armor' | 'gloves' | 'boots' | 'amulet' | 'ring' | 'collar' | 'charm';
+/** Places to wear gear: one per kind, except two rings. */
+export type HeroSlot = 'bow' | 'offhand' | 'helmet' | 'armor' | 'gloves' | 'boots' | 'amulet' | 'ring' | 'ring2';
 export type FamSlot = 'collar' | 'charm';
 export type GearSlot = HeroSlot | FamSlot;
-export const HERO_SLOTS: HeroSlot[] = ['bow', 'armor', 'boots', 'amulet', 'ring'];
+export const HERO_SLOTS: HeroSlot[] = ['bow', 'offhand', 'helmet', 'armor', 'gloves', 'boots', 'amulet', 'ring', 'ring2'];
 export const FAM_SLOTS: FamSlot[] = ['collar', 'charm'];
 export const GEAR_SLOTS: GearSlot[] = [...HERO_SLOTS, ...FAM_SLOTS];
+/** Every kind of gear that can drop. */
+export const ITEM_SLOTS: ItemSlot[] = ['bow', 'offhand', 'helmet', 'armor', 'gloves', 'boots', 'amulet', 'ring', 'collar', 'charm'];
+
+/** Can gear of kind `item` be worn in place `place`? (A ring fits either ring finger.) */
+export function fits(item: ItemSlot, place: GearSlot): boolean {
+  return item === place || (item === 'ring' && place === 'ring2');
+}
+
+/** The kind of gear a place takes. */
+export function kindFor(place: GearSlot): ItemSlot {
+  return place === 'ring2' ? 'ring' : place;
+}
 
 export type Rarity = 'common' | 'rare' | 'epic';
 export const RARITIES: Rarity[] = ['common', 'rare', 'epic'];
@@ -31,7 +46,7 @@ export type Stats = Partial<Record<StatKey, number>>;
 export interface Item {
   kind: 'item';
   id: number;
-  slot: GearSlot;
+  slot: ItemSlot;
   rarity: Rarity;
   name: string;
   stats: Stats;
@@ -54,12 +69,16 @@ export const POTIONS: Record<PotionKind, { name: string; icon: string; amount: n
   mana: { name: 'Mana Potion', icon: '🔮', amount: 50, value: 18, color: 0x5ea8ff },
 };
 
-export const SLOT_INFO: Record<GearSlot, { label: string; icon: string; nouns: string[]; stats: StatKey[]; familiar: boolean }> = {
+export const SLOT_INFO: Record<ItemSlot | 'ring2', { label: string; icon: string; nouns: string[]; stats: StatKey[]; familiar: boolean }> = {
   bow: { label: 'Bow', icon: '🏹', nouns: ['Elmwood Bow', 'Yew Longbow', 'Moonwood Bow', 'Hunter’s Recurve'], stats: ['damage', 'attackSpeed', 'crit'], familiar: false },
+  offhand: { label: 'Off-hand', icon: '🗡️', nouns: ['Hunting Knife', 'Elven Dagger', 'Fletcher’s Quiver', 'Wooden Buckler'], stats: ['damage', 'crit', 'armor', 'attackSpeed'], familiar: false },
+  helmet: { label: 'Helmet', icon: '🪖', nouns: ['Leather Cap', 'Ranger’s Hood', 'Leaf Circlet', 'Horned Helm'], stats: ['maxHp', 'armor', 'manaRegen'], familiar: false },
+  gloves: { label: 'Gloves', icon: '🧤', nouns: ['Archer’s Gloves', 'Leather Bracers', 'Silk Gloves', 'Hawk Grips'], stats: ['attackSpeed', 'crit', 'damage'], familiar: false },
   armor: { label: 'Armor', icon: '🦺', nouns: ['Leather Jerkin', 'Ranger’s Coat', 'Leafweave Vest', 'Scale Tunic'], stats: ['maxHp', 'armor', 'moveSpeed'], familiar: false },
   boots: { label: 'Boots', icon: '👢', nouns: ['Soft Boots', 'Trail Boots', 'Wind Treads', 'Elven Boots'], stats: ['moveSpeed', 'staminaRegen', 'maxHp'], familiar: false },
   amulet: { label: 'Amulet', icon: '📿', nouns: ['Acorn Amulet', 'Moonstone Pendant', 'Rune Locket', 'Star Charm'], stats: ['manaRegen', 'maxHp', 'damage', 'crit'], familiar: false },
   ring: { label: 'Ring', icon: '💍', nouns: ['Silver Ring', 'Jade Band', 'Signet Ring', 'Ember Ring'], stats: ['crit', 'attackSpeed', 'manaRegen', 'damage'], familiar: false },
+  ring2: { label: 'Ring', icon: '💍', nouns: [], stats: [], familiar: false },
   collar: { label: 'Collar', icon: '🎀', nouns: ['Leaf Collar', 'Braided Collar', 'Bell Collar', 'Shell Collar'], stats: ['famPower', 'famSpeed', 'famCooldown'], familiar: true },
   charm: { label: 'Charm', icon: '🍀', nouns: ['Lucky Charm', 'Clover Token', 'Tide Pebble', 'Spirit Feather'], stats: ['famCooldown', 'famPower', 'famSpeed'], familiar: true },
 };
@@ -110,8 +129,8 @@ export function newId(): number {
 }
 
 /** Rolls a piece of gear for `slot` (random if not given) of `rarity` on level `level` (1-based). */
-export function makeItem(rng: () => number, rarity: Rarity, level: number, slot?: GearSlot): Item {
-  const s = slot ?? GEAR_SLOTS[Math.floor(rng() * GEAR_SLOTS.length)];
+export function makeItem(rng: () => number, rarity: Rarity, level: number, slot?: ItemSlot): Item {
+  const s = slot ?? ITEM_SLOTS[Math.floor(rng() * ITEM_SLOTS.length)];
   const info = SLOT_INFO[s];
   const r = RARITY_INFO[rarity];
   const pool = [...info.stats];

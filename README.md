@@ -77,11 +77,12 @@ first free slot (4–9), or raises one you know a rank (I → II → III); once 
 Monsters, guardians and chests also drop **gear** — common (white), rare (blue) or epic (purple), with more and
 bigger bonuses the rarer it is and the later the level — and **potions**. Everything goes into the party's
 **16-slot bag** (**I** or **B**, or the 🎒 button; on the tablet too). Tap an item to see it (compared with what's
-worn), then equip it, drink it or drop it. **Q** / **E** drink a health / mana potion.
+worn), then equip it, drink it or drop it — or drag it: onto a slot on the paper doll to wear it, back into the
+bag, onto the merchant to sell, onto the bin to drop. **Q** / **E** drink a health / mana potion.
 
 | Slot | Can roll |
 | --- | --- |
-| 🏹 Bow · 🦺 Armor · 👢 Boots · 📿 Amulet · 💍 Ring (the elf) | arrow damage, attack speed, critical shots, max health, armor, move speed, mana and stamina regen |
+| 🏹 Bow · 🗡️ Off-hand · 🪖 Helmet · 🦺 Armor · 🧤 Gloves · 👢 Boots · 📿 Amulet · 💍 two Rings (the elf) | arrow damage, attack speed, critical shots, max health, armor, move speed, mana and stamina regen |
 | 🎀 Collar · 🍀 Charm (the familiar) | familiar damage, shorter familiar cooldowns, familiar speed |
 
 Through the exit door you reach the **merchant's camp**: four pieces of gear, two potions and a spell book for sale,

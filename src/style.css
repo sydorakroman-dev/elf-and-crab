@@ -758,10 +758,10 @@ kbd {
 .doll-grid {
   position: relative;
   display: grid;
-  grid-template-columns: 78px 104px 78px;
-  grid-template-rows: 64px 124px 76px;
-  grid-template-areas: '. amulet .' 'bow armor ring' 'bow boots .';
-  gap: 10px 14px;
+  grid-template-columns: 82px 104px 82px;
+  grid-template-rows: 62px 62px 62px 62px;
+  grid-template-areas: 'amulet helmet gloves' 'bow armor offhand' 'bow armor offhand' 'ring boots ring2';
+  gap: 10px 16px;
   justify-content: center;
   align-items: center;
   justify-items: center;
@@ -780,10 +780,10 @@ kbd {
   display: grid;
   place-items: center;
 }
-.doll-slot.big { width: 78px; height: 118px; }
-.doll-slot[data-gear='bow'].big { height: 190px; }
+.doll-slot.tall { width: 76px; height: 134px; }
+.doll-slot.body { width: 96px; height: 134px; }
 .doll-slot .ds-icon { font-size: 26px; filter: grayscale(1) brightness(1.6); opacity: 0.22; }
-.doll-slot.big .ds-icon { font-size: 40px; }
+.doll-slot.tall .ds-icon, .doll-slot.body .ds-icon { font-size: 40px; }
 .doll-slot .ds-label { position: absolute; bottom: 3px; left: 0; right: 0; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.4; }
 .doll-slot.full { border-color: color-mix(in srgb, var(--rc) 70%, #4d3b2b); box-shadow: 0 0 12px color-mix(in srgb, var(--rc) 45%, transparent), inset 0 6px 14px rgba(0, 0, 0, 0.5); }
 .doll-slot.full .ds-icon { filter: none; opacity: 1; }
@@ -801,9 +801,9 @@ kbd {
 .bag-panel.dragging .bag-trash.drop-over { opacity: 1; background: rgba(255, 80, 80, 0.15); }
 .bag-panel.dragging .shop.drop-over { background: rgba(255, 210, 74, 0.06); border-radius: 12px; }
 @media (max-width: 700px), (max-height: 500px) {
-  .doll-grid { grid-template-columns: 64px 84px 64px; grid-template-rows: 54px 100px 60px; gap: 6px 10px; }
-  .doll-slot { width: 50px; height: 50px; }
-  .doll-slot.big { width: 64px; height: 96px; }
-  .doll-slot[data-gear='bow'].big { height: 160px; }
+  .doll-grid { grid-template-columns: 64px 84px 64px; grid-template-rows: 50px 50px 50px 50px; gap: 6px 10px; }
+  .doll-slot { width: 46px; height: 46px; }
+  .doll-slot.tall { width: 60px; height: 106px; }
+  .doll-slot.body { width: 78px; height: 106px; }
   .doll-figure { font-size: 160px; }
 }

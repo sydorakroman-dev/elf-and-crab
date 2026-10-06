@@ -126,6 +126,7 @@ export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
   if (v.type === 'inv' && isObject(v.req)) {
     const r = v.req;
     const index = Number.isInteger(r.i) && (r.i as number) >= 0 && (r.i as number) < 32 ? (r.i as number) : -1;
+    if (r.op === 'equip' && index >= 0 && (GEAR_SLOTS as unknown[]).includes(r.to)) return { type: 'inv', req: { op: 'equip', i: index, to: r.to as GearSlot } };
     if ((r.op === 'equip' || r.op === 'use' || r.op === 'drop' || r.op === 'sell' || r.op === 'buy') && index >= 0) return { type: 'inv', req: { op: r.op, i: index } };
     if (r.op === 'unequip' && (GEAR_SLOTS as unknown[]).includes(r.slot)) {
       const to = Number.isInteger(r.to) && (r.to as number) >= 0 && (r.to as number) < 32 ? (r.to as number) : undefined;
