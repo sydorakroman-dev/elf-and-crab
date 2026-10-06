@@ -11,6 +11,7 @@ import { FAMILIARS, FAMILIAR_KINDS, SPELLS, SPELL_IDS, type FamiliarKind, type S
 export type Blocking = 'start' | 'pick' | 'no-room' | 'room-full' | 'hero-left' | null;
 
 const BASE = import.meta.env.BASE_URL;
+const NEW_RIDDLE = 'Wrong rune! The runes shift… a new riddle appears.';
 
 /** Four corner brackets (drawn, so it looks the same on every device); they point inward while full screen. */
 const FS_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
@@ -40,6 +41,7 @@ export class FamiliarHud {
   onRiddle?: () => void;
   private readonly seal: HTMLElement;
   private readonly riddleTry: HTMLButtonElement;
+  private sealMisses = 0;
   private sealKey = '';
   /** Practice room: show this monster. */
   onParade?: (kind: EnemyKind) => void;
@@ -168,10 +170,9 @@ export class FamiliarHud {
     this.seal = root.querySelector('[data-seal]')!;
     this.seal.querySelector('[data-seal-choices]')!.addEventListener('pointerdown', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-answer]');
-      if (!b || b.classList.contains('used')) return;
+      if (!b) return;
       e.preventDefault();
       e.stopPropagation();
-      this.pendingAnswer = b;
       this.onAnswer?.(Number(b.dataset.answer));
     });
     this.riddleTry = root.querySelector('[data-f-riddle-try]')!;
@@ -294,24 +295,26 @@ export class FamiliarHud {
     if (text !== null && this.status.textContent !== text) this.status.textContent = text;
   }
 
-  private pendingAnswer: HTMLElement | null = null;
 
   /** Shows (or hides) the Rune Seal; redraws only when the riddle changes. */
   private showSeal(r: Snapshot['rid']): void {
     this.seal.hidden = !r;
     if (!r) {
       this.sealKey = '';
+      this.sealMisses = 0;
       return;
     }
-    const key = `${r.a}${r.op}${r.b}:${r.n}`;
+    const key = `${r.a}${r.op}${r.b}:${r.n}:${r.m ?? 0}`;
     if (key === this.sealKey) return;
     const fresh = !this.sealKey;
+    const missed = (r.m ?? 0) > this.sealMisses;
+    this.sealMisses = r.m ?? 0;
     this.sealKey = key;
     this.seal.querySelector('[data-seal-gems]')!.innerHTML = Array.from({ length: r.t }, (_, i) => `<span class="gem${i < r.n ? ' lit' : ''}"></span>`).join('');
     this.seal.querySelector('[data-seal-riddle]')!.innerHTML = `<span>${r.a}</span><span class="op">${r.op}</span><span>${r.b}</span><span class="op">=</span><span class="q">?</span>`;
     this.seal.querySelector('[data-seal-choices]')!.innerHTML = r.c.map((v) => `<button type="button" class="rune" data-answer="${v}">${v}</button>`).join('');
-    this.seal.querySelector('[data-seal-msg]')!.textContent = fresh ? 'Tap the rune stone with the answer.' : 'The runes glow brighter…';
-    this.seal.classList.remove('wrong');
+    this.seal.querySelector('[data-seal-msg]')!.textContent = missed && !fresh ? NEW_RIDDLE : fresh ? 'Tap the rune stone with the answer.' : 'The runes glow brighter…';
+    if (!missed) this.seal.classList.remove('wrong');
   }
 
   /** The hero judged an answer: shake on a wrong one, celebrate the last right one. */
@@ -321,8 +324,7 @@ export class FamiliarHud {
       if (done) msg.textContent = 'The seal breaks!';
       return;
     }
-    this.pendingAnswer?.classList.add('used');
-    msg.textContent = 'The runes resist… try another stone.';
+    msg.textContent = NEW_RIDDLE;
     this.seal.classList.remove('wrong');
     void this.seal.offsetWidth; // restart the shake
     this.seal.classList.add('wrong');

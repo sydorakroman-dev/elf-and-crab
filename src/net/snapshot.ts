@@ -103,7 +103,7 @@ export interface Snapshot {
   /** Room whose intro card is up (-1: none). */
   card: number;
   /** Rune Seal on the exit door: the riddle to solve (a op b), the choices, solved so far / needed. */
-  rid?: { a: number; op: string; b: number; c: number[]; n: number; t: number };
+  rid?: { a: number; op: string; b: number; c: number[]; n: number; t: number; /** wrong answers so far */ m?: number };
   /** The current boss or mini-boss, while it lives. */
   boss: { hp: number; max: number; name: string } | null;
   /** Warning rings for attacks about to land. */

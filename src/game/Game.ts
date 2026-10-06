@@ -144,6 +144,8 @@ export class Game {
   /** Rune Seal on the exit door (familiar's riddles), and how many are solved. */
   private riddle: Riddle | null = null;
   private sealSolved = 0;
+  /** Wrong answers so far on this seal (the familiar's view uses it to say the riddle changed). */
+  private sealMisses = 0;
   /** Double Shot: charged shots left. */
   private doubleShots = 0;
   /** The elf's mana and stamina. */
@@ -677,6 +679,7 @@ export class Game {
       if (this.practice && !this.riddle) {
         this.riddle = makeRiddle();
         this.sealSolved = 0;
+        this.sealMisses = 0;
       }
       return;
     }
@@ -741,7 +744,7 @@ export class Game {
       rw: this.waveInRoom,
       phase: this.phase,
       card: this.phase === 'transition' && this.doorSwitched ? this.room : -1,
-      ...(this.riddle ? { rid: { a: this.riddle.a, op: this.riddle.op, b: this.riddle.b, c: this.riddle.choices, n: this.sealSolved, t: SEAL_RIDDLES } } : {}),
+      ...(this.riddle ? { rid: { a: this.riddle.a, op: this.riddle.op, b: this.riddle.b, c: this.riddle.choices, n: this.sealSolved, t: SEAL_RIDDLES, m: this.sealMisses } } : {}),
       boss: this.bossState(),
       tels: this.telegraphTuples(),
       wave: this.wave,
@@ -1016,6 +1019,7 @@ export class Game {
   private startSeal(): void {
     this.riddle = makeRiddle();
     this.sealSolved = 0;
+    this.sealMisses = 0;
     this.dungeon.setExitOpen(false);
     this.banner('🔮 The door is sealed!');
     this.hud.toast('Your familiar must break the rune seal', 0xc79bff);
@@ -1027,6 +1031,9 @@ export class Game {
     const r = this.riddle;
     if (!r) return;
     if (value !== r.answer) {
+      // Wrong: the runes shift to a different riddle (progress so far is kept).
+      this.riddle = makeRiddle(Math.random, r);
+      this.sealMisses++;
       this.events.push({ e: 'riddle', ok: 0 });
       return;
     }
