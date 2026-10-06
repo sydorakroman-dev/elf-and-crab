@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BOSS_DEATH_SECONDS, DEATH_SECONDS } from './reactions';
 import { scaledHp } from './difficulty';
 import { clampToArena, pushOutOfCircles, type Circle } from './combat';
 import { steerMove } from './steer';
@@ -215,7 +216,7 @@ export class Beast implements Enemy {
 
     if (this.dying) {
       this.deathTimer += dt;
-      p.death = Math.min(1, this.deathTimer / 0.35);
+      p.death = Math.min(1, this.deathTimer / (this.bossName ? BOSS_DEATH_SECONDS : DEATH_SECONDS));
       p.speed = 0;
       if (p.death === 1) this.removed = true;
       this.visual.apply(p, dt, this.time);

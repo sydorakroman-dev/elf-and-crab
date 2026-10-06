@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyReaction } from './reactions';
 import { attachAtPivot, bounds, loadParts } from '../player/rig';
 import { MONSTER_NO_OUTLINE, toonifyMeshes } from '../player/toon';
 import { glowTexture } from '../util/glow';
@@ -166,13 +167,15 @@ export class BeastVisual {
     for (const m of parts.values()) this.body.add(m);
   }
 
+  /** Which way it falls when it dies. */
+  private readonly seed = Math.random() * 10;
+
   apply(p: BeastPose, dt: number, time: number): void {
     const g = this.group;
     g.position.set(p.x, p.y, p.z);
     g.rotation.y = p.yaw;
-    const life = 1 - p.death;
-    g.scale.setScalar(Math.max(0.001, life));
-    g.rotation.z = p.death * 1.2; // topples over as it dies
+    // Hit flinch and death (shared by every monster).
+    applyReaction(g, p.flash, p.death, 'topple', time, this.seed);
 
     const move = Math.min(1, p.speed / 5);
     const stunned = p.stun > 0.5 && p.death === 0;
