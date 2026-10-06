@@ -2,7 +2,7 @@
 Cuts the item art sheets (5 x 2 grids on a cream background, numbered) into icons for the bag:
 the background becomes transparent, each icon is trimmed, centred on a square and saved as WebP.
 
-  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves}-{1..10}.webp
+  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves,cape}-{1..10}.webp
 """
 import os
 from PIL import Image
@@ -15,6 +15,10 @@ SHEETS = {
     'helmet': (f'{HOME}/Downloads/Fantasy headwear lineup, ten designs.png', [(30, 420), (480, 905)]),
     'boots': (f'{HOME}/Downloads/Numbered sheet of ten matching boot pairs.png', [(20, 425), (500, 910)]),
     'gloves': (f'{HOME}/Downloads/Ten fantasy glove designs.png', [(40, 395), (470, 905)], [0, 300, 588, 882, 1188, 1536]),
+    # Capes 9 and 10 overlap side to side: each cell is given as its own (left, right), overlapping;
+    # the numbers and the neighbour's hem get dropped as small shapes.
+    'cape': (f'{HOME}/Downloads/Ten fantasy capes concept sheet.png', [(0, 450), (455, 990)],
+             [[(0, 320), (330, 615), (640, 915), (925, 1210), (1215, 1536)], [(0, 305), (305, 600), (600, 895), (880, 1215), (1130, 1536)]]),
 }
 SIZE = 160
 OUT = 'public/art/items'
@@ -110,11 +114,15 @@ for name, (path, rows, *cols) in SHEETS.items():
     w, _ = sheet.size
     bg = sheet.getpixel((5, 5))[:3]
     n = 0
-    for top, bottom in rows:
+    for r, (top, bottom) in enumerate(rows):
         for col in range(5):
             n += 1
-            edges = cols[0] if cols else [c * w // 5 for c in range(6)]
-            cell = sheet.crop((edges[col], top, edges[col + 1], bottom))
+            if cols and isinstance(cols[0][0], list):
+                left, right = cols[0][r][col]  # explicit cells per row
+            else:
+                edges = cols[0] if cols else [c * w // 5 for c in range(6)]
+                left, right = edges[col], edges[col + 1]
+            cell = sheet.crop((left, top, right, bottom))
             clear_background(cell, bg)
             if name == 'bow':
                 clear_enclosed(cell, bg)

@@ -112,6 +112,10 @@ export const ITEM_ART: Partial<Record<ItemSlot, { names: string[]; byRarity: Rec
     names: ['Leather Gloves', 'Silk Gloves', 'Fingerless Grips', 'Padded Gloves', 'Forest Gauntlets', 'Studded Bluesteel Gloves', 'Wrapped Gloves', 'Copper Gauntlets', 'Knight’s Gauntlets', 'Black-and-Gold Gauntlets'],
     byRarity: { common: [1, 2, 3, 4], rare: [5, 6, 7, 8], epic: [9, 10] },
   },
+  cape: {
+    names: ['Hooded Capelet', 'Traveler’s Cloak', 'Crimson Wrap', 'Gilded White Mantle', 'Ranger’s Hooded Cloak', 'Midnight Capelet', 'Plum Shawl Cloak', 'Ember Mantle', 'Frost Cloak', 'Black-and-Gold Cloak'],
+    byRarity: { common: [1, 2, 3, 6], rare: [4, 5, 7, 8], epic: [9, 10] },
+  },
 };
 
 /** Each stat: its size on a common level-1 item, a cap on the total, and how it reads. */
