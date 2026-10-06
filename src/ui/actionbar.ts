@@ -26,6 +26,8 @@ export class ActionBar {
   /** True while the panel waits for a key to bind. */
   rebinding = false;
   onUse?: (slot: number) => void;
+  /** The bag button at the end of the bar. */
+  onBag?: () => void;
   private readonly bar: HTMLElement;
   private readonly slots: HTMLElement[];
   private readonly manaFill: HTMLElement;
@@ -49,11 +51,18 @@ export class ActionBar {
     this.pips = hudLeft.querySelector('.stamina')!;
 
     const slotHtml = this.defs.map((_, i) => `<button type="button" class="slot" data-slot="${i}"></button>`).join('');
-    root.insertAdjacentHTML('beforeend', `<div class="action-bar${touch ? ' touch-bar' : ''}" hidden>${slotHtml}</div>`);
+    const bagHtml = '<button type="button" class="slot bag-slot" data-bag-open title="Bag (I)"><span class="slot-key">I</span><span class="slot-icon">🎒</span></button>';
+    root.insertAdjacentHTML('beforeend', `<div class="action-bar${touch ? ' touch-bar' : ''}" hidden>${slotHtml}${bagHtml}</div>`);
     this.bar = root.querySelector('.action-bar')!;
-    this.slots = [...this.bar.querySelectorAll<HTMLElement>('.slot')];
+    this.slots = [...this.bar.querySelectorAll<HTMLElement>('.slot[data-slot]')];
     this.defs.forEach((_, i) => this.renderSlot(i));
     this.bar.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('[data-bag-open]')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onBag?.();
+        return;
+      }
       const slot = (e.target as HTMLElement).closest<HTMLElement>('[data-slot]');
       if (!slot) return;
       e.preventDefault();

@@ -536,7 +536,17 @@ kbd {
   position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   display: flex; gap: 6px; z-index: 12; pointer-events: auto;
 }
-.action-bar.touch-bar { bottom: auto; top: calc(110px + env(safe-area-inset-top, 0px)); left: auto; right: 12px; transform: none; flex-direction: column; }
+.action-bar.touch-bar {
+  bottom: auto; top: calc(242px + env(safe-area-inset-top, 0px)); left: auto; right: 12px; transform: none;
+  display: grid; grid-template-columns: repeat(2, 52px); gap: 6px; direction: rtl; /* fills from the right edge, under the map */
+}
+.action-bar.touch-bar > * { direction: ltr; }
+.action-bar.touch-bar .bag-slot { margin-left: 0; }
+@media (max-height: 500px) {
+  .action-bar.touch-bar { top: calc(172px + env(safe-area-inset-top, 0px)); grid-template-columns: repeat(3, 44px); gap: 4px; }
+  .action-bar.touch-bar .slot { width: 44px; height: 44px; }
+  .action-bar.touch-bar .slot-icon { font-size: 21px; line-height: 40px; }
+}
 .action-bar.touch-bar .slot.empty { display: none; }
 .slot {
   position: relative; width: 52px; height: 52px; border-radius: 10px; padding: 0; cursor: pointer;
@@ -807,3 +817,7 @@ kbd {
   .doll-slot.body { width: 78px; height: 106px; }
   .doll-figure { font-size: 160px; }
 }
+
+/* The bag button at the end of the action bar. */
+.action-bar .bag-slot { margin-left: 10px; border-color: rgba(255, 210, 74, 0.55); background: rgba(60, 44, 20, 0.75); }
+.action-bar .bag-slot .slot-icon { font-size: 22px; }

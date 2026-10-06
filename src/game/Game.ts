@@ -243,15 +243,7 @@ export class Game {
     this.bagPanel.onAction = (req) => this.applyInv(req, false);
     this.bagPanel.onClose = () => this.closeBag();
     this.bagPanel.onContinue = () => this.leaveShop();
-    if (!this.headless) {
-      root.insertAdjacentHTML('beforeend', '<button type="button" class="bag-btn" data-bag-btn hidden title="Bag (I)">🎒</button>');
-      const btn = root.querySelector<HTMLElement>('[data-bag-btn]')!;
-      btn.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        this.toggleBag();
-      });
-    }
+    this.hud.actionBar.onBag = () => this.toggleBag();
     this.minimap.setLevel(this.level.map);
     if (mode === 'touch') this.touch = new TouchControls(root, this.player);
     this.player.onActiveChange = (active) => {
@@ -1229,8 +1221,9 @@ export class Game {
     this.applyInv({ op: 'use', i }, false);
   }
 
+  /** The bag button on the action bar (not in the practice room). */
   private setBagButton(show: boolean): void {
-    const btn = document.querySelector<HTMLElement>('[data-bag-btn]');
+    const btn = document.querySelector<HTMLElement>('.action-bar [data-bag-open]');
     if (btn && btn.hidden === show) btn.hidden = !show;
   }
 
