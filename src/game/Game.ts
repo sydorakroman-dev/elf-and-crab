@@ -509,6 +509,7 @@ export class Game {
 
   private shoot(dt: number): void {
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+    if (this.phase === 'ready' && !this.practice) return; // nothing to shoot at until the hero starts
     if (!this.player.trigger || this.fireCooldown > 0) return;
     this.fireCooldown = (this.powers.has('rapid') ? FIRE_INTERVAL / 2 : FIRE_INTERVAL) / (1 + this.heroGear.attackSpeed);
     this.invisible = 0; // shooting gives you away
@@ -895,6 +896,7 @@ export class Game {
   }
 
   private damage(slime: Enemy, dirX: number, dirZ: number, amount = HERO.arrowDamage): void {
+    if (this.phase === 'ready' && !this.practice) return; // monsters can't be hurt before the start
     const hpBefore = slime.hp;
     const killed = slime.hurt(amount, dirX, dirZ);
     const y = slime.radius;
@@ -1112,7 +1114,7 @@ export class Game {
   private useSlot(slot: number): void {
     const running = this.state === 'playing' && this.player.isActive;
     const spell = this.spellbook.inSlot(slot);
-    if (running && spell) {
+    if (running && spell && this.phase !== 'ready') {
       this.castElfSpell(spell);
       return;
     }
