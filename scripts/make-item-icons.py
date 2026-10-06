@@ -2,18 +2,19 @@
 Cuts the item art sheets (5 x 2 grids on a cream background, numbered) into icons for the bag:
 the background becomes transparent, each icon is trimmed, centred on a square and saved as WebP.
 
-  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots}-{1..10}.webp
+  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves}-{1..10}.webp
 """
 import os
 from PIL import Image
 
 HOME = os.path.expanduser('~')
 SHEETS = {
-    # name: (file, row bands (top, bottom) above the numbers)
+    # name: (file, row bands (top, bottom) above the numbers[, column edges if not an even grid])
     'bow': (f'{HOME}/Downloads/Ten colorful fantasy bow designs.png', [(0, 538), (568, 1132)]),
     'armor': (f'{HOME}/Downloads/Ten varied breastplate designs.png', [(40, 440), (470, 915)]),
     'helmet': (f'{HOME}/Downloads/Fantasy headwear lineup, ten designs.png', [(30, 420), (480, 905)]),
     'boots': (f'{HOME}/Downloads/Numbered sheet of ten matching boot pairs.png', [(20, 425), (500, 910)]),
+    'gloves': (f'{HOME}/Downloads/Ten fantasy glove designs.png', [(40, 395), (470, 905)], [0, 300, 588, 882, 1188, 1536]),
 }
 SIZE = 160
 OUT = 'public/art/items'
@@ -104,7 +105,7 @@ def keep_biggest(cell):
                 px[x, y] = (0, 0, 0, 0)
 
 
-for name, (path, rows) in SHEETS.items():
+for name, (path, rows, *cols) in SHEETS.items():
     sheet = Image.open(path).convert('RGBA')
     w, _ = sheet.size
     bg = sheet.getpixel((5, 5))[:3]
@@ -112,7 +113,8 @@ for name, (path, rows) in SHEETS.items():
     for top, bottom in rows:
         for col in range(5):
             n += 1
-            cell = sheet.crop((col * w // 5, top, (col + 1) * w // 5, bottom))
+            edges = cols[0] if cols else [c * w // 5 for c in range(6)]
+            cell = sheet.crop((edges[col], top, edges[col + 1], bottom))
             clear_background(cell, bg)
             if name == 'bow':
                 clear_enclosed(cell, bg)
