@@ -9,12 +9,16 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const DRAG_START = 6;
 
 const BASE = import.meta.env.BASE_URL;
+/** Gear kinds shown with a basic placeholder picture until they get painted art. */
+const PLACEHOLDER = new Set(['offhand', 'collar', 'charm']);
 
 /** An item's icon: its painted picture where it has one (bows, armor), otherwise an emoji. */
 function iconOf(e: Thing): string {
   if (e.kind === 'book') return '📖';
   if (e.kind === 'potion') return POTIONS[e.potion].icon;
   if (e.art) return `<img class="item-art" src="${BASE}art/items/${e.slot}-${e.art}.webp" alt="" draggable="false" />`;
+  // Kinds still waiting for their art: a plain placeholder picture.
+  if (PLACEHOLDER.has(e.slot)) return `<img class="item-art" src="${BASE}art/items/${e.slot}-0.svg" alt="" draggable="false" />`;
   return SLOT_INFO[e.slot].icon;
 }
 

@@ -830,3 +830,9 @@ kbd {
 .doll-slot.tall .item-art { transform: rotate(-38deg) scale(1.35); } /* bows stand upright in the tall slot */
 .sr-icon .item-art, .bd-title .item-art { width: 30px; height: 30px; vertical-align: middle; }
 .bag-ghost .item-art { width: 48px; height: 48px; }
+
+/* Items sit on a backdrop tinted by rarity: grey commons, blue rares, purple epics. */
+.bag-cell:not(.empty), .doll-slot.full {
+  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--rc) 38%, #241b15) 0%, color-mix(in srgb, var(--rc) 14%, #17120e) 70%, #120e0b 100%);
+}
+.shop-row .sr-icon:has(.item-art) { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: radial-gradient(circle, color-mix(in srgb, var(--rc) 35%, #241b15), #120e0b); }
