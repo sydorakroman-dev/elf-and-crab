@@ -116,6 +116,10 @@ export const ITEM_ART: Partial<Record<ItemSlot, { names: string[]; byRarity: Rec
     names: ['Hooded Capelet', 'Traveler’s Cloak', 'Crimson Wrap', 'Gilded White Mantle', 'Ranger’s Hooded Cloak', 'Midnight Capelet', 'Plum Shawl Cloak', 'Ember Mantle', 'Frost Cloak', 'Black-and-Gold Cloak'],
     byRarity: { common: [1, 2, 3, 6], rare: [4, 5, 7, 8], epic: [9, 10] },
   },
+  ring: {
+    names: ['Silver Band', 'Copper Band', 'Ruby Signet', 'Sapphire Ring', 'Twin Bands', 'Emerald Ring', 'Moonstone Ring', 'Amber Ring', 'Starsapphire Ring', 'Black-and-Gold Ring'],
+    byRarity: { common: [1, 2, 4, 5], rare: [3, 6, 7, 8], epic: [9, 10] },
+  },
   belt: {
     names: ['Leather Belt', 'Sand Sash', 'Ring-Buckle Belt', 'Ivory Gem Belt', 'Ranger’s Double Belt', 'Adventurer’s Pouch Belt', 'Laced Corset Belt', 'Bronze Plate Belt', 'Knight’s Girdle', 'Black-and-Gold Girdle'],
     byRarity: { common: [1, 2, 3, 6], rare: [4, 5, 7, 8], epic: [9, 10] },

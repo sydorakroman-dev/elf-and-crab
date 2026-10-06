@@ -2,7 +2,7 @@
 Cuts the item art sheets (5 x 2 grids on a cream background, numbered) into icons for the bag:
 the background becomes transparent, each icon is trimmed, centred on a square and saved as WebP.
 
-  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves,cape,belt}-{1..10}.webp
+  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves,cape,belt,ring}-{1..10}.webp
 """
 import os
 from PIL import Image
@@ -18,6 +18,8 @@ SHEETS = {
     # Capes 9 and 10 overlap side to side: each cell is given as its own (left, right), overlapping;
     # the numbers and the neighbour's hem get dropped as small shapes.
     'belt': (f'{HOME}/Downloads/Ten fantasy belt designs.png', [(60, 420), (440, 745)]),
+    'ring': (f'{HOME}/Downloads/Ten Distinct Fantasy Game Rings.png', [(60, 435), (480, 885)],
+             [[(0, 305), (305, 600), (600, 930), (925, 1200), (1190, 1536)], [(0, 285), (280, 580), (575, 895), (890, 1200), (1195, 1536)]]),
     'cape': (f'{HOME}/Downloads/Ten fantasy capes concept sheet.png', [(0, 450), (455, 990)],
              [[(0, 320), (330, 615), (640, 915), (925, 1210), (1215, 1536)], [(0, 305), (305, 600), (600, 895), (880, 1215), (1130, 1536)]]),
 }
@@ -25,7 +27,7 @@ SIZE = 160
 OUT = 'public/art/items'
 
 
-def clear_background(cell, bg):
+def clear_background(cell, bg, tol=60, warm=False):
     """Background → transparent: everything cream joined to the cell's edges (inner highlights stay)."""
     px = cell.load()
     w, h = cell.size
@@ -38,7 +40,7 @@ def clear_background(cell, bg):
             continue
         seen[i] = 1
         p = px[x, y]
-        if sum(abs(a - b) for a, b in zip(p[:3], bg)) > 60:
+        if sum(abs(a - b) for a, b in zip(p[:3], bg)) > tol or (warm and p[0] - p[2] < 12):
             continue
         px[x, y] = (0, 0, 0, 0)
         if x > 0: stack.append((x - 1, y))
@@ -47,13 +49,14 @@ def clear_background(cell, bg):
         if y < h - 1: stack.append((x, y + 1))
 
 
-def clear_enclosed(cell, bg, min_area=4000, tol=45):
+def clear_enclosed(cell, bg, min_area=4000, tol=45, warm=False):
     """Big cream areas shut in by the drawing (inside a bow, between limb and string) → transparent.
     Thin cream parts of the drawing itself (an ivory bow) are smaller, so they stay."""
     px = cell.load()
     w, h = cell.size
     seen = bytearray(w * h)
-    near = lambda p: p[3] > 0 and sum(abs(a - b) for a, b in zip(p[:3], bg)) <= tol
+    # `warm`: paper is cream (red well above blue); silver highlights are neutral and must stay.
+    near = lambda p: p[3] > 0 and sum(abs(a - b) for a, b in zip(p[:3], bg)) <= tol and (not warm or p[0] - p[2] >= 12)
     for sy in range(h):
         for sx in range(w):
             if seen[sy * w + sx] or not near(px[sx, sy]):
@@ -74,6 +77,35 @@ def clear_enclosed(cell, bg, min_area=4000, tol=45):
             if len(region) >= min_area:
                 for x, y in region:
                     px[x, y] = (0, 0, 0, 0)
+                # …and the soft edge round the hole (paper blended into the outline), up to the outline.
+                edge = region
+                for _ in range(3):
+                    grown = []
+                    for x, y in edge:
+                        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                            if 0 <= nx < w and 0 <= ny < h:
+                                q = px[nx, ny]
+                                if q[3] > 0 and sum(abs(a - b) for a, b in zip(q[:3], bg)) <= 90:
+                                    px[nx, ny] = (0, 0, 0, 0)
+                                    grown.append((nx, ny))
+                    edge = grown
+
+
+def defringe(cell, passes=2):
+    """Peels off the light, paper-tinted halo left round the outline (soft edge pixels)."""
+    px = cell.load()
+    w, h = cell.size
+    for _ in range(passes):
+        drop = []
+        for y in range(h):
+            for x in range(w):
+                p = px[x, y]
+                if p[3] == 0 or sum(p[:3]) < 560:
+                    continue
+                if any(px[nx, ny][3] == 0 for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)) if 0 <= nx < w and 0 <= ny < h):
+                    drop.append((x, y))
+        for x, y in drop:
+            px[x, y] = (0, 0, 0, 0)
 
 
 def keep_biggest(cell):
@@ -127,8 +159,12 @@ for name, (path, rows, *cols) in SHEETS.items():
             clear_background(cell, bg)
             if name == 'bow':
                 clear_enclosed(cell, bg)
+            if name == 'ring':
+                clear_enclosed(cell, bg, 800, 24, warm=True)  # the holes in the bands
             if name == 'belt':
                 clear_enclosed(cell, bg, 1500, 18)  # inside the loop (tight: the ivory belt must stay)
+            if name == 'ring':
+                defringe(cell)
             keep_biggest(cell)
             icon = cell.crop(cell.getbbox())
             if name == 'bow':
