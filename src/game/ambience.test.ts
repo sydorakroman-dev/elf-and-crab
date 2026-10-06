@@ -26,4 +26,11 @@ describe('fireAmbience', () => {
   it('is silent with no fires', () => {
     expect(fireAmbience({ x: 0, z: 0 }, 1, 0, [])).toEqual({ level: 0, pan: 0 });
   });
+
+  it("doesn't add up dozens of far torches into a roar", () => {
+    const torches = Array.from({ length: 60 }, (_, i) => ({ position: { x: 14 + (i % 10) * 3, z: (Math.floor(i / 10) - 3) * 8 }, strength: 1 }));
+    expect(fireAmbience({ x: 0, z: 0 }, 1, 0, torches).level).toBeLessThan(0.5); // summed, it was the full 1
+    const far = Array.from({ length: 100 }, (_, i) => ({ position: { x: 30 + i, z: 0 }, strength: 1 }));
+    expect(fireAmbience({ x: 0, z: 0 }, 1, 0, far).level).toBe(0);
+  });
 });
