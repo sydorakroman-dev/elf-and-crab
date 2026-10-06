@@ -85,7 +85,7 @@ bag, onto the merchant to sell, onto the bin to drop. **Q** / **E** drink a heal
 | 🏹 Bow · 🗡️ Off-hand · 🪖 Helmet · 🦺 Armor · 🧣 Cape · 🪢 Belt · 🧤 Gloves · 👢 Boots · 📿 Amulet · 💍 two Rings (the elf) | arrow damage, attack speed, critical shots, max health, armor, move speed, mana and stamina regen |
 | 🎀 Collar · 🍀 Charm (the familiar) | familiar damage, shorter familiar cooldowns, familiar speed |
 
-Bows, armor, helmets, capes, belts, gloves, boots and rings have painted icons (`public/art/items/`, cut from the art sheets by
+Bows, armor, helmets, capes, belts, gloves, boots, rings and amulets have painted icons (`public/art/items/`, cut from the art sheets by
 `python3 scripts/make-item-icons.py`); plainer designs come as commons, gilded and steel ones as epics.
 
 Through the exit door you reach the **merchant's camp**: four pieces of gear, two potions and a spell book for sale,
@@ -95,7 +95,8 @@ to move on. The bag pauses a solo game; with a familiar along, the game keeps go
 ## The run
 
 Seven **levels**, each **generated afresh every run** (`src/world/levelgen.ts`, seeded — your familiar's tablet
-builds the same level from the seed): about 160 × 160 m, three times the old rooms. Dungeon levels are **halls
+builds the same level from the seed): a 200 × 400 m rectangle — you arrive at the bottom (south) and the
+guardian holds the very top (north). Dungeon levels are **halls
 joined by corridors** (square, round and eight-sided halls, loops, dead-end side rooms); the Woodland and the
 Flooded Hall are **open ground** — glades and flooded caverns joined by wide trails.
 
@@ -103,7 +104,7 @@ You arrive in the south. **Packs** of 3–6 monsters wait asleep around the leve
 (or hit one); awake, they hunt you round the walls along the shortest way. The level's **guardian** (a mini-boss and
 its escort) holds the big hall in the north; beat it and the **exit door** behind it opens — walk through to the next
 level (your familiar comes along, and you're healed to full). Other packs can be left behind. Out of a fight for a
-few seconds, the elf's health comes back. A **map** in the top right fills in as you explore. Walls and trees between
+few seconds, the elf's health comes back. A **map** in the top right, centred on the elf, fills in as you explore. Walls and trees between
 the camera and the elf turn see-through.
 
 The run waits in the Woodland until you're ready — press **Enter** (or tap **Start**) and the monsters stir; handy

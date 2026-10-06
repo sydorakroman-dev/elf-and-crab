@@ -4,6 +4,8 @@ import { TILE, type WalkMap } from '../game/walkmap';
 const SIGHT = 16;
 const PX = 2; // canvas pixels per tile
 const REDRAW = 0.2; // seconds between redraws
+/** The map shows this many tiles across around the elf (a level is much bigger). */
+const VIEW = 70;
 
 export interface MinimapMarks {
   hero: { x: number; z: number; facing?: number };
@@ -17,8 +19,8 @@ export interface MinimapMarks {
 }
 
 /**
- * The level map in a corner of the screen: halls and corridors appear as you explore them, with
- * the elf, the familiar, the exit door and anything worth finding marked on it.
+ * The level map in a corner of the screen, centred on the elf: halls and corridors appear as you
+ * explore them, with the elf, the familiar, the exit door and anything worth finding marked on it.
  */
 export class Minimap {
   private readonly canvas: HTMLCanvasElement;
@@ -44,8 +46,9 @@ export class Minimap {
     if (map === this.map) return;
     this.map = map;
     this.seen = new Uint8Array(map.cols * map.rows);
-    this.canvas.width = this.base.width = map.cols * PX;
-    this.canvas.height = this.base.height = map.rows * PX;
+    this.base.width = map.cols * PX;
+    this.base.height = map.rows * PX;
+    this.canvas.width = this.canvas.height = VIEW * PX;
     this.base.getContext('2d')!.clearRect(0, 0, this.base.width, this.base.height);
     this.timer = 0;
   }
@@ -69,10 +72,16 @@ export class Minimap {
     this.timer = REDRAW;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.drawImage(this.base, 0, 0);
+    // The window of the map round the elf (kept inside the level where it can be).
+    const fit = (centre: number, size: number) => (size <= VIEW ? (size - VIEW) / 2 : Math.max(0, Math.min(size - VIEW, centre - VIEW / 2)));
+    const c0 = fit((marks.hero.x - m.originX) / TILE, m.cols);
+    const r0 = fit((marks.hero.z - m.originZ) / TILE, m.rows);
+    ctx.drawImage(this.base, -c0 * PX, -r0 * PX);
+    const sx = (x: number) => ((x - m.originX) / TILE - c0) * PX;
+    const sz = (z: number) => ((z - m.originZ) / TILE - r0) * PX;
     const dot = (x: number, z: number, r: number, fill: string, ring = 'rgba(0,0,0,0.7)') => {
       ctx.beginPath();
-      ctx.arc(((x - m.originX) / TILE) * PX, ((z - m.originZ) / TILE) * PX, r, 0, Math.PI * 2);
+      ctx.arc(sx(x), sz(z), r, 0, Math.PI * 2);
       ctx.fillStyle = fill;
       ctx.fill();
       ctx.lineWidth = 1.5;
@@ -86,8 +95,8 @@ export class Minimap {
     const h = marks.hero;
     if (h.facing !== undefined) {
       // A little arrow for the elf, pointing where it faces.
-      const cx = ((h.x - m.originX) / TILE) * PX;
-      const cz = ((h.z - m.originZ) / TILE) * PX;
+      const cx = sx(h.x);
+      const cz = sz(h.z);
       ctx.save();
       ctx.translate(cx, cz);
       ctx.rotate(-h.facing + Math.PI);

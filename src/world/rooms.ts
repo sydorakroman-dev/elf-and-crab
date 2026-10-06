@@ -61,7 +61,7 @@ export const ROOMS: RoomDef[] = [
     pool: { beetle: 14, snake: 4, vine: 3, direwolf: 2, boar: 1, treant: 1 },
     boss: 'bear',
     escort: { beetle: 3 },
-    foes: 34,
+    foes: 102,
   },
   {
     name: 'The Crystal Cave',
@@ -86,7 +86,7 @@ export const ROOMS: RoomDef[] = [
     pool: { spider: 12, ooze: 5, sporecrawler: 4, mushroom: 2, mold: 1 },
     boss: 'caveworm',
     escort: { spider: 3 },
-    foes: 38,
+    foes: 114,
   },
   {
     name: 'The Crypt',
@@ -111,7 +111,7 @@ export const ROOMS: RoomDef[] = [
     pool: { skeleton: 14, skelarcher: 4, ghost: 4, zombie: 2, knight: 1 },
     boss: 'necromancer',
     escort: { skeleton: 2, skelarcher: 1 },
-    foes: 42,
+    foes: 126,
   },
   {
     name: 'The Throne Room',
@@ -137,7 +137,7 @@ export const ROOMS: RoomDef[] = [
     pool: { orcwarrior: 8, orcscout: 7, orcarcher: 4, shaman: 2, shieldguard: 1 },
     boss: 'chieftain',
     escort: { orcwarrior: 2, orcarcher: 1 },
-    foes: 44,
+    foes: 132,
   },
   {
     name: 'The Flooded Hall',
@@ -162,7 +162,7 @@ export const ROOMS: RoomDef[] = [
     pool: { brawler: 14, riveter: 5, rotor: 4, lobber: 2, tinkerer: 2, water: 2 },
     boss: 'scrapboss',
     escort: { brawler: 2, riveter: 1, water: 1 },
-    foes: 54,
+    foes: 162,
   },
   {
     name: 'The Lava Chamber',
@@ -187,7 +187,7 @@ export const ROOMS: RoomDef[] = [
     pool: { fire: 9, wind: 8, golem: 2 },
     boss: 'inferno',
     escort: { fire: 2, wind: 1 },
-    foes: 40,
+    foes: 120,
   },
   {
     name: "The Ash King's Lair",

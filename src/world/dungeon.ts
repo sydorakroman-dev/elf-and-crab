@@ -173,7 +173,10 @@ export class Dungeon {
     this.cullTimer -= dt;
     if (this.cullTimer <= 0 || dt === 0) {
       this.cullTimer = 0.2;
-      for (const [obj, range] of this.nearOnly) obj.visible = Math.abs(obj.position.x - focus.x) < range && Math.abs(obj.position.z - focus.z) < range;
+      for (const [obj, range] of this.nearOnly) {
+        const c = (obj.userData.centre as { x: number; z: number } | undefined) ?? obj.position;
+        obj.visible = Math.abs(c.x - focus.x) < range && Math.abs(c.z - focus.z) < range;
+      }
     }
     // The shadow-casting sun / moon keeps the focus in the middle of its shadow.
     this.moon.position.set(focus.x + 12, 40, focus.z + 18);
@@ -316,9 +319,8 @@ export class Dungeon {
     tiles.receiveShadow = true;
     tiles.computeBoundingSphere();
     // Dark ground under everything (the grout between tiles, and beyond the walls).
-    const size = m.cols * TILE + 80;
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
+      new THREE.PlaneGeometry(m.cols * TILE + 80, m.rows * TILE + 80).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({ color: this.room.outdoor ? 0x22381a : 0x0e0c10, roughness: 1 }),
     );
     ground.position.set(m.originX + (m.cols * TILE) / 2, -0.3, m.originZ + (m.rows * TILE) / 2);
@@ -414,6 +416,9 @@ export class Dungeon {
         add(canopyGeo, canopies, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true }), canopyColors);
         this.group.add(chunk);
         const x0 = m.originX + cc * TILE;
+        // Only chunks near the camera are drawn (a level is 400 m long; fog hides the rest).
+        chunk.userData.centre = { x: x0 + (CHUNK * TILE) / 2, z: m.originZ + cr * TILE + (CHUNK * TILE) / 2 };
+        this.nearOnly.push([chunk, 75]);
         const z0 = m.originZ + cr * TILE;
         this.chunks.push({ minX: x0, maxX: x0 + CHUNK * TILE, minZ: z0, maxZ: z0 + CHUNK * TILE, mats, opacity: 1 });
       }
@@ -660,7 +665,7 @@ export class Dungeon {
     switch (room.feature) {
       case 'woodland': {
         // Undergrowth: grass tufts, mushrooms and flowers (decoration only).
-        const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.12, 0.5, 3).translate(0, 0.25, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }), 900);
+        const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.12, 0.5, 3).translate(0, 0.25, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }), 2500);
         const mat = new THREE.Matrix4();
         const c = new THREE.Color();
         for (let i = 0; i < tufts.count; i++) {
@@ -677,7 +682,7 @@ export class Dungeon {
         const stemGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.3, 5).translate(0, 0.15, 0);
         const capGeo = new THREE.SphereGeometry(0.22, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2);
         const flowerGeo = new THREE.OctahedronGeometry(0.12, 0);
-        for (let i = 0; i < 90; i++) {
+        for (let i = 0; i < 260; i++) {
           const p = spot(1.5);
           const bit = new THREE.Group();
           if (i % 2 === 0) {
@@ -694,22 +699,23 @@ export class Dungeon {
         }
         // Fireflies drifting about.
         const glowMat = new THREE.SpriteMaterial({ map: glowTexture(), color: 0xf4ff9a, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
-        for (let i = 0; i < 70; i++) {
+        for (let i = 0; i < 160; i++) {
           const sprite = new THREE.Sprite(glowMat.clone());
           sprite.scale.setScalar(0.35);
           const p = spot(2);
           this.fireflies.push({ sprite, base: new THREE.Vector3(p.x, 0.8 + rng() * 2.5, p.z), seed: rng() * 10 });
-          this.group.add(sprite);
+          this.decor(sprite);
         }
         break;
       }
       case 'puddles': {
         // Flooded: a sheet of water over the whole floor (everyone wades ankle-deep), deeper dark
         // pools, ripples, waterfalls pouring down the walls into foaming water, and floating debris.
-        const size = m.cols * TILE;
+        const sizeX = m.cols * TILE;
+        const sizeZ = m.rows * TILE;
         const sheetMat = new THREE.MeshStandardMaterial({ color: 0x2a9cc4, emissive: 0x0b4a66, emissiveIntensity: 0.55, roughness: 0.04, metalness: 0.25, transparent: true, opacity: 0.8, depthWrite: false });
-        const sheet = new THREE.Mesh(new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2), sheetMat);
-        sheet.position.set(m.originX + size / 2, 0.22, m.originZ + size / 2);
+        const sheet = new THREE.Mesh(new THREE.PlaneGeometry(sizeX, sizeZ).rotateX(-Math.PI / 2), sheetMat);
+        sheet.position.set(m.originX + sizeX / 2, 0.22, m.originZ + sizeZ / 2);
         sheet.receiveShadow = true;
         sheet.renderOrder = 1;
         this.group.add(sheet);
@@ -879,7 +885,7 @@ export class Dungeon {
   }
 
   private buildRubble(rng: () => number): void {
-    const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), 400);
+    const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), 1200);
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const e = new THREE.Euler();

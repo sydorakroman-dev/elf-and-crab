@@ -18,13 +18,17 @@ describe('level generator', () => {
     it(`${room.name}: a big, connected level with a guardian and an exit`, () => {
       for (const seed of SEEDS) {
         const level = generateLevel(room, seed);
-        // Much more room than the old arenas (~2000 m²): around three times as much.
-        expect(floorArea(level)).toBeGreaterThan(room.layout === 'lair' ? 4000 : 5500);
+        // Big: at least 16 000 m² (the first levels were ~6 000, the old rooms ~2 000).
+        expect(floorArea(level)).toBeGreaterThan(room.layout === 'lair' ? 4000 : 16000);
         // You start on open floor, and every hall, pack, chest and the exit can be walked to.
         expect(level.map.clear(level.start.x, level.start.z, 1)).toBe(true);
         for (const h of level.halls) expect(reach(level, h.x, h.z)).toBeGreaterThanOrEqual(0);
         for (const p of level.packs) expect(reach(level, p.x, p.z)).toBeGreaterThanOrEqual(0);
         for (const c of level.chests) expect(reach(level, c.x, c.z)).toBeGreaterThanOrEqual(0);
+        // The guardian holds the very top (north); you start at the bottom.
+        const boss = level.halls.find((h) => h.kind === 'boss')!;
+        expect(Math.min(...level.halls.map((h) => h.z))).toBe(boss.z);
+        expect(level.start.z).toBeGreaterThan(boss.z + (room.layout === 'lair' ? 60 : 250));
         if (room.hasExit) {
           expect(level.exit).not.toBeNull();
           const e = level.exit!;

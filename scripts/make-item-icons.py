@@ -2,7 +2,7 @@
 Cuts the item art sheets (5 x 2 grids on a cream background, numbered) into icons for the bag:
 the background becomes transparent, each icon is trimmed, centred on a square and saved as WebP.
 
-  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves,cape,belt,ring}-{1..10}.webp
+  python3 scripts/make-item-icons.py   → public/art/items/{bow,armor,helmet,boots,gloves,cape,belt,ring,amulet}-{1..10}.webp
 """
 import os
 from PIL import Image
@@ -20,6 +20,8 @@ SHEETS = {
     'belt': (f'{HOME}/Downloads/Ten fantasy belt designs.png', [(60, 420), (440, 745)]),
     'ring': (f'{HOME}/Downloads/Ten Distinct Fantasy Game Rings.png', [(60, 435), (480, 885)],
              [[(0, 305), (305, 600), (600, 930), (925, 1200), (1190, 1536)], [(0, 285), (280, 580), (575, 895), (890, 1200), (1195, 1536)]]),
+    'amulet': (f'{HOME}/Downloads/Ten Fantasy Necklaces Equipment Sheet.png', [(0, 440), (478, 945)],
+               [[(0, 300), (290, 600), (600, 905), (895, 1185), (1180, 1536)], [(0, 275), (270, 565), (560, 880), (870, 1185), (1180, 1536)]]),
     'cape': (f'{HOME}/Downloads/Ten fantasy capes concept sheet.png', [(0, 450), (455, 990)],
              [[(0, 320), (330, 615), (640, 915), (925, 1210), (1215, 1536)], [(0, 305), (305, 600), (600, 895), (880, 1215), (1130, 1536)]]),
 }
@@ -161,9 +163,11 @@ for name, (path, rows, *cols) in SHEETS.items():
                 clear_enclosed(cell, bg)
             if name == 'ring':
                 clear_enclosed(cell, bg, 800, 24, warm=True)  # the holes in the bands
+            if name == 'amulet':
+                clear_enclosed(cell, bg, 30, 24, warm=True)  # inside the cord loops and every chain link
             if name == 'belt':
                 clear_enclosed(cell, bg, 1500, 18)  # inside the loop (tight: the ivory belt must stay)
-            if name == 'ring':
+            if name in ('ring', 'amulet'):
                 defringe(cell)
             keep_biggest(cell)
             icon = cell.crop(cell.getbbox())

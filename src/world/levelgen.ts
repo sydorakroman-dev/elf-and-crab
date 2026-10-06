@@ -68,12 +68,16 @@ export interface Level {
   chests: { x: number; z: number }[];
 }
 
-const SIZE = 80; // tiles a side (160 m)
+/** Tiles across and from south to north: a tall rectangle, 200 m × 400 m. */
+const COLS = 100;
+const ROWS = 200;
+const HALF_W = (COLS * TILE) / 2; // 100 m
+const HALF_H = (ROWS * TILE) / 2; // 200 m
 const BLOCKING: Record<PropKind, number> = { tree: 0.9, crystal: 1.4, pillar: 1.3, brazier: 1.3, lavapit: 3.6, spire: 1.6, pool: 3.3, throne: 3 };
 
 export function generateLevel(theme: LevelTheme, seed: number): Level {
   const rng = mulberry32(seed);
-  const map = new WalkMap(SIZE, SIZE, -(SIZE * TILE) / 2, -(SIZE * TILE) / 2, new Uint8Array(SIZE * SIZE));
+  const map = new WalkMap(COLS, ROWS, -HALF_W, -HALF_H, new Uint8Array(COLS * ROWS));
   const g = new Gen(map, rng);
   switch (theme.layout) {
     case 'practice':
@@ -176,8 +180,8 @@ class Gen {
 
   /** Is a hall at (x, z) of apothem r clear of the others (with a gap) and inside the map? */
   fits(halls: Hall[], x: number, z: number, r: number, gap: number): boolean {
-    const lim = (SIZE * TILE) / 2 - TILE * 2 - r * 1.42;
-    if (Math.abs(x) > lim || Math.abs(z) > lim) return false;
+    const pad = TILE * 2 + r * 1.42;
+    if (Math.abs(x) > HALF_W - pad || Math.abs(z) > HALF_H - pad) return false;
     return halls.every((h) => Math.hypot(h.x - x, h.z - z) > (h.r + r) * 1.2 + gap);
   }
 
@@ -247,7 +251,7 @@ class Gen {
       case 'woodland': {
         // Trees everywhere in the open (not in the start clearing): woods to weave through.
         const m = this.map;
-        for (let i = 0; i < 1400 && this.props.length < 120; i++) {
+        for (let i = 0; i < 4500 && this.props.length < 360; i++) {
           const p = m.randomFloor(this.rng, 2.5);
           this.prop('tree', p.x, p.z, keepClear);
         }
@@ -330,7 +334,7 @@ class Gen {
         i++;
       }
     }
-    for (let tries = 0; tries < 400 && spots.length * 4.5 < theme.foes; tries++) {
+    for (let tries = 0; tries < 1200 && spots.length * 4.5 < theme.foes; tries++) {
       const p = this.map.randomFloor(this.rng, 2);
       if (ok(p.x, p.z)) spots.push(p);
     }
@@ -347,19 +351,20 @@ class Gen {
   halls(theme: LevelTheme, seed: number): Level {
     const halls: Hall[] = [];
     const shape = () => this.pick(theme.shapes);
-    const start: Hall = { x: this.range(-24, 24), z: 58, r: 11, shape: 'square', kind: 'start' };
-    const boss: Hall = { x: this.range(-18, 18), z: -46, r: 19, shape: shape(), kind: 'boss' };
+    // Start at the bottom (south), the guardian at the very top (north).
+    const start: Hall = { x: this.range(-30, 30), z: HALF_H - 22, r: 11, shape: 'square', kind: 'start' };
+    const boss: Hall = { x: this.range(-24, 24), z: -HALF_H + 34, r: 19, shape: shape(), kind: 'boss' };
     halls.push(start, boss);
-    const want = 8 + Math.floor(this.rng() * 3);
-    for (let tries = 0; tries < 600 && halls.length < want + 2; tries++) {
+    const want = 24 + Math.floor(this.rng() * 6);
+    for (let tries = 0; tries < 3000 && halls.length < want + 2; tries++) {
       const r = Math.round(this.range(9, 15));
-      const x = this.range(-64, 64);
-      const z = this.range(-44, 44);
+      const x = this.range(-HALF_W + 16, HALF_W - 16);
+      const z = this.range(-HALF_H + 60, HALF_H - 40);
       if (this.fits(halls, x, z, r, 5)) halls.push({ x, z, r, shape: shape(), kind: 'normal' });
     }
     for (const h of halls) this.stamp(h);
-    this.connect(halls, 2);
-    this.treasureRooms(halls, 1 + Math.floor(this.rng() * 2));
+    this.connect(halls, 5);
+    this.treasureRooms(halls, 3 + Math.floor(this.rng() * 3));
     const exit = this.exitAlcove(boss);
     const begin = { x: this.map.centre(this.map.col(start.x), 0).x, z: start.z + 4 };
     this.keepReachable(begin.x, begin.z);
@@ -383,17 +388,17 @@ class Gen {
     }
     // Clearings: the start (south), the boss's (north), and some in between, joined by wide trails.
     const halls: Hall[] = [];
-    const start: Hall = { x: this.range(-24, 24), z: 60, r: 12, shape: 'circle', kind: 'start' };
-    const boss: Hall = { x: this.range(-18, 18), z: -48, r: 19, shape: 'circle', kind: 'boss' };
+    const start: Hall = { x: this.range(-30, 30), z: HALF_H - 22, r: 12, shape: 'circle', kind: 'start' };
+    const boss: Hall = { x: this.range(-24, 24), z: -HALF_H + 34, r: 19, shape: 'circle', kind: 'boss' };
     halls.push(start, boss);
-    for (let tries = 0; tries < 400 && halls.length < 11; tries++) {
+    for (let tries = 0; tries < 2000 && halls.length < 30; tries++) {
       const r = Math.round(this.range(8, 13));
-      const x = this.range(-62, 62);
-      const z = this.range(-46, 46);
+      const x = this.range(-HALF_W + 14, HALF_W - 14);
+      const z = this.range(-HALF_H + 60, HALF_H - 40);
       if (this.fits(halls, x, z, r, 4)) halls.push({ x, z, r, shape: this.pick(theme.shapes), kind: 'normal' });
     }
     for (const h of halls) this.stamp(h);
-    this.connect(halls, 3, 4);
+    this.connect(halls, 6, 4);
     const exit = this.exitAlcove(boss);
     const begin = { x: start.x, z: start.z + 4 };
     this.keepReachable(begin.x, begin.z);
@@ -402,8 +407,8 @@ class Gen {
 
   lair(theme: LevelTheme, seed: number): Level {
     // A small antechamber in the south, a long approach north, then the vast round lair.
-    const start: Hall = { x: 0, z: 62, r: 9, shape: 'square', kind: 'start' };
-    const lair: Hall = { x: 0, z: -20, r: 38, shape: 'circle', kind: 'boss' };
+    const start: Hall = { x: 0, z: -HALF_H + 150, r: 9, shape: 'square', kind: 'start' };
+    const lair: Hall = { x: 0, z: -HALF_H + 50, r: 38, shape: 'circle', kind: 'boss' };
     const halls = [start, lair];
     for (const h of halls) this.stamp(h);
     this.corridor(start, lair, 4);
