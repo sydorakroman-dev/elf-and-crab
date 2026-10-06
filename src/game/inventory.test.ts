@@ -92,6 +92,28 @@ describe('inventory', () => {
     expect(inv.bag.every((e) => e === null)).toBe(true);
   });
 
+  it('moves things round the bag, and takes gear off into a chosen slot', () => {
+    const inv = new Inventory();
+    const rng = mulberry32(11);
+    const bow = makeItem(rng, 'rare', 1, 'bow');
+    const bow2 = makeItem(rng, 'common', 1, 'bow');
+    inv.add(bow);
+    inv.add(makePotion('health'));
+    expect(inv.apply({ op: 'move', i: 0, j: 9 }, null)).not.toBeNull();
+    expect(inv.bag[9]).toBe(bow);
+    expect(inv.bag[0]).toBeNull();
+    expect(inv.apply({ op: 'move', i: 0, j: 3 }, null)).toBeNull(); // nothing there
+    inv.apply({ op: 'equip', i: 9 }, null);
+    inv.apply({ op: 'unequip', slot: 'bow', to: 5 }, null);
+    expect(inv.bag[5]).toBe(bow);
+    inv.add(bow2);
+    inv.apply({ op: 'equip', i: 5 }, null); // the rare bow on again
+    const at = inv.bag.indexOf(bow2);
+    inv.apply({ op: 'unequip', slot: 'bow', to: at }, null); // dropped onto the other bow: swap
+    expect(inv.gear.bow).toBe(bow2);
+    expect(inv.bag[at]).toBe(bow);
+  });
+
   it('holds 16 things; a full bag takes no more', () => {
     const inv = new Inventory();
     for (let i = 0; i < BAG_SIZE; i++) expect(inv.add(makePotion('mana'))).toBe(true);

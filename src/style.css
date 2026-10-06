@@ -699,8 +699,7 @@ kbd {
 .bag-body { display: grid; grid-template-columns: minmax(200px, 1fr) auto minmax(0, 1fr); gap: 14px; align-items: start; }
 .bag-panel:not(:has(.shop)) .bag-body { grid-template-columns: minmax(200px, 1fr) auto; }
 .bag-body h3 { margin: 6px 0 4px; font: 700 11px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.6; }
-.gear { display: flex; flex-direction: column; gap: 5px; }
-.gear-cell, .bag-cell, .shop-row {
+.bag-cell, .shop-row {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.05);
   color: inherit;
@@ -708,16 +707,10 @@ kbd {
   cursor: pointer;
   font: inherit;
 }
-.gear-cell { display: flex; align-items: center; gap: 8px; padding: 5px 8px; text-align: left; border-left: 3px solid var(--rc, rgba(255, 255, 255, 0.14)); }
-.gear-cell.empty { opacity: 0.55; }
-.gc-icon { font-size: 20px; }
-.gc-text { display: flex; flex-direction: column; min-width: 0; }
-.gc-text b { font-size: 11px; opacity: 0.7; font-weight: 600; }
-.gc-text i { font-style: normal; color: var(--rc, inherit); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bag-grid { display: grid; grid-template-columns: repeat(4, 52px); grid-auto-rows: 52px; gap: 6px; }
 .bag-cell { font-size: 24px; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--rc, transparent) 70%, transparent); }
 .bag-cell.empty { cursor: default; opacity: 0.45; }
-.gear-cell.on, .bag-cell.on, .shop-row.on { outline: 2px solid #ffd24a; outline-offset: 1px; }
+.doll-slot.on, .bag-cell.on, .shop-row.on { outline: 2px solid #ffd24a; outline-offset: 1px; }
 .bag-stats { margin: 6px 0 0; font-size: 12px; opacity: 0.8; }
 .shop-list { display: flex; flex-direction: column; gap: 5px; }
 .shop-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; text-align: left; border-left: 3px solid var(--rc); }
@@ -757,4 +750,60 @@ kbd {
   .bag-body { grid-template-columns: 1fr; }
   .bag-panel:not(:has(.shop)) .bag-body { grid-template-columns: 1fr; }
   .bag-grid { grid-template-columns: repeat(8, 1fr); grid-auto-rows: 44px; }
+}
+
+/* The paper doll: the elf's gear round a faint figure, engraved frames like a hero sheet. */
+.doll { position: relative; padding: 10px; border-radius: 14px; background: radial-gradient(ellipse at 50% 40%, rgba(70, 56, 44, 0.55), rgba(20, 15, 12, 0.7)); border: 1px solid rgba(160, 130, 90, 0.25); }
+.doll-figure { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); font-size: 210px; line-height: 1; opacity: 0.08; filter: grayscale(1); pointer-events: none; }
+.doll-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: 78px 104px 78px;
+  grid-template-rows: 64px 124px 76px;
+  grid-template-areas: '. amulet .' 'bow armor ring' 'bow boots .';
+  gap: 10px 14px;
+  justify-content: center;
+  align-items: center;
+  justify-items: center;
+}
+.doll-slot {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  border: 2px solid #4d3b2b;
+  background: linear-gradient(180deg, #2c231c, #17120e);
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 160, 0.08), inset 0 6px 14px rgba(0, 0, 0, 0.6);
+  color: inherit;
+  cursor: pointer;
+  touch-action: none;
+  display: grid;
+  place-items: center;
+}
+.doll-slot.big { width: 78px; height: 118px; }
+.doll-slot[data-gear='bow'].big { height: 190px; }
+.doll-slot .ds-icon { font-size: 26px; filter: grayscale(1) brightness(1.6); opacity: 0.22; }
+.doll-slot.big .ds-icon { font-size: 40px; }
+.doll-slot .ds-label { position: absolute; bottom: 3px; left: 0; right: 0; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.4; }
+.doll-slot.full { border-color: color-mix(in srgb, var(--rc) 70%, #4d3b2b); box-shadow: 0 0 12px color-mix(in srgb, var(--rc) 45%, transparent), inset 0 6px 14px rgba(0, 0, 0, 0.5); }
+.doll-slot.full .ds-icon { filter: none; opacity: 1; }
+.doll-fam { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(160, 130, 90, 0.2); }
+.doll-fam .df-label { font: 700 11px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.6; }
+.doll-fam .doll-slot { width: 52px; height: 52px; }
+.bag-side { display: flex; flex-direction: column; gap: 8px; }
+.bag-cell { touch-action: none; }
+.bag-trash { padding: 8px; border-radius: 10px; border: 1px dashed rgba(255, 255, 255, 0.2); text-align: center; font-size: 12px; opacity: 0.55; }
+.shop h3 small { font-weight: 500; text-transform: none; letter-spacing: 0; opacity: 0.7; margin-left: 6px; }
+/* Dragging: the icon follows the pointer; fitting slots glow, the spot under the pointer lights up. */
+.bag-ghost { position: fixed; z-index: 40; width: 56px; height: 56px; margin: -28px 0 0 -28px; display: grid; place-items: center; font-size: 30px; border-radius: 12px; background: rgba(30, 22, 18, 0.85); border: 2px solid var(--rc); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.6); pointer-events: none; }
+.bag-panel.dragging .doll-slot.fits { border-color: #ffd24a; box-shadow: 0 0 16px rgba(255, 210, 74, 0.7); }
+.bag-panel.dragging .drop-over { outline: 2px dashed #ffd24a; outline-offset: 2px; }
+.bag-panel.dragging .bag-trash.drop-over { opacity: 1; background: rgba(255, 80, 80, 0.15); }
+.bag-panel.dragging .shop.drop-over { background: rgba(255, 210, 74, 0.06); border-radius: 12px; }
+@media (max-width: 700px), (max-height: 500px) {
+  .doll-grid { grid-template-columns: 64px 84px 64px; grid-template-rows: 54px 100px 60px; gap: 6px 10px; }
+  .doll-slot { width: 50px; height: 50px; }
+  .doll-slot.big { width: 64px; height: 96px; }
+  .doll-slot[data-gear='bow'].big { height: 160px; }
+  .doll-figure { font-size: 160px; }
 }

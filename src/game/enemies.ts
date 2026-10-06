@@ -128,9 +128,20 @@ const HEAR_RANGE = 7;
 /** Sight lines and routes are rechecked this often (steps), staggered across enemies. */
 const THINK_EVERY = 6;
 
+/** Unaware packs stroll about this far (m) from where they started, at this share of their speed. */
+const ROAM_RADIUS = 6;
+const ROAM_PACE = 0.35;
+/** Only packs this close (m) to the hero bother to stroll (the rest of the level holds still). */
+const ROAM_NEAR = 60;
+
 interface Brain {
   pack: number;
+  /** Unaware of the hero yet: strolling about its spot. */
   asleep: boolean;
+  /** Where it started, and the spot it's strolling to (null: standing for `rest` s). */
+  home: { x: number; z: number };
+  stroll: { x: number; z: number } | null;
+  rest: number;
   /** Last check: can it see the hero? And the way round if not. */
   sees: boolean;
   waypoint: { x: number; z: number } | null;
@@ -243,8 +254,43 @@ export class Enemies {
   private add<T extends Enemy>(e: T, pack: number, asleep: boolean): T {
     this.all.push(e);
     this.group.add(e.group);
-    this.brains.set(e, { pack, asleep, sees: false, waypoint: null });
+    this.brains.set(e, { pack, asleep, home: { x: e.x, z: e.z }, stroll: null, rest: Math.random() * 3, sees: false, waypoint: null });
     return e;
+  }
+
+  /**
+   * An unaware monster strolls between spots near where it started, resting a moment at each.
+   * Guardians hold their ground. It walks (slowly) by aiming at a point far beyond the spot, so it
+   * never mistakes the spot for a foe.
+   */
+  private roam(s: Enemy, b: Brain, dt: number, heroDist: number, obstacles: readonly Circle[]): void {
+    if (s.bossName || heroDist > ROAM_NEAR) return;
+    if (!b.stroll) {
+      b.rest -= dt;
+      if (b.rest > 0) return;
+      const a = Math.random() * Math.PI * 2;
+      const r = 1.5 + Math.random() * (ROAM_RADIUS - 1.5);
+      const x = b.home.x + Math.cos(a) * r;
+      const z = b.home.z + Math.sin(a) * r;
+      if (!walkMap().clear(x, z, s.radius + 0.3) || walkMap().raycast(s.x, s.z, x, z, s.radius * 0.8) !== null) {
+        b.rest = 0.5;
+        return;
+      }
+      b.stroll = { x, z };
+    }
+    const dx = b.stroll.x - s.x;
+    const dz = b.stroll.z - s.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.6) {
+      b.stroll = null;
+      b.rest = 1.5 + Math.random() * 3.5;
+      return;
+    }
+    const before = { x: s.x, z: s.z };
+    s.slow = ROAM_PACE;
+    s.update(dt, this.far.set(s.x + (dx / d) * 300, 0, s.z + (dz / d) * 300), this.all, obstacles);
+    // Stuck against something: give up on this spot.
+    if (Math.hypot(s.x - before.x, s.z - before.z) < 0.001) b.stroll = null;
   }
 
   /** Spawns reinforcements in a ring around (x, z) (a boss calling for help), awake. */
@@ -278,10 +324,14 @@ export class Enemies {
     for (const s of [...this.all]) {
       const b = this.brains.get(s)!;
       if (b.asleep) {
-        if (!s.alive || (this.step + s.id) % THINK_EVERY) continue;
+        if (!s.alive) continue;
         const d = Math.hypot(hero.x - s.x, hero.z - s.z);
-        if (s.hp < s.maxHp || d < HEAR_RANGE || (d < WAKE_RANGE && map.lineOfSight(s, hero))) this.wake(s); // hurt, heard or seen
-        continue;
+        if ((this.step + s.id) % THINK_EVERY === 0 && (s.hp < s.maxHp || d < HEAR_RANGE || (d < WAKE_RANGE && map.lineOfSight(s, hero)))) {
+          this.wake(s); // hurt, heard or seen
+        } else {
+          this.roam(s, b, dt, d, obstacles);
+          continue;
+        }
       }
       if (s.alive && ((this.step + s.id) % THINK_EVERY === 0 || dt === 0)) {
         b.sees = map.raycast(s.x, s.z, target.x, target.z, Math.min(0.6, s.radius * 0.7)) === null;

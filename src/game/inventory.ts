@@ -9,7 +9,8 @@ export const BAG_SIZE = 16;
 
 export type InvOp =
   | { op: 'equip'; i: number } // bag slot → its gear slot (what was worn goes back to that bag slot)
-  | { op: 'unequip'; slot: GearSlot } // gear slot → first free bag slot
+  | { op: 'unequip'; slot: GearSlot; to?: number } // gear slot → bag slot `to` (or the first free one)
+  | { op: 'move'; i: number; j: number } // bag slot i ↔ bag slot j
   | { op: 'use'; i: number } // drink a potion
   | { op: 'drop'; i: number }
   | { op: 'sell'; i: number } // only at the merchant
@@ -76,10 +77,27 @@ export class Inventory {
       }
       case 'unequip': {
         const it = this.gear[req.slot];
-        const free = this.bag.indexOf(null);
-        if (!it || free < 0) return null;
-        this.bag[free] = it;
-        this.gear[req.slot] = null;
+        if (!it) return null;
+        const to = req.to ?? -1;
+        const there = to >= 0 && to < BAG_SIZE ? this.bag[to] : undefined;
+        if (there === null) {
+          this.bag[to] = it; // dropped on an empty bag slot
+          this.gear[req.slot] = null;
+        } else if (there?.kind === 'item' && there.slot === req.slot) {
+          this.bag[to] = it; // onto gear for the same slot: swap them
+          this.gear[req.slot] = there;
+        } else {
+          const free = this.bag.indexOf(null);
+          if (free < 0) return null;
+          this.bag[free] = it;
+          this.gear[req.slot] = null;
+        }
+        break;
+      }
+      case 'move': {
+        const { i, j } = req;
+        if (i === j || i < 0 || j < 0 || i >= BAG_SIZE || j >= BAG_SIZE || !this.bag[i]) return null;
+        [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
         break;
       }
       case 'use': {

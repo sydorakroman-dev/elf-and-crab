@@ -40,6 +40,8 @@ const LOOT_COLORS: Record<LootKind, number> = {
 const isLoot = (k: PickupKind): k is LootKind => k in LOOT_COLORS;
 const colorOf = (k: PickupKind) => (isLoot(k) ? LOOT_COLORS[k] : POWER_UPS[k].color);
 const FLOAT_HEIGHT = 1.1;
+/** Coins hover lower (they're small). */
+const COIN_HEIGHT = 0.45;
 
 interface Pickup {
   id: number;
@@ -218,7 +220,7 @@ export class Pickups {
     const group = new THREE.Group();
     group.position.set(x, 0, z);
     const icon = this.icons[type]();
-    icon.scale.setScalar(type === 'gold' ? 1.6 : 1.35); // readable from the default camera distance
+    icon.scale.setScalar(type === 'gold' ? 0.48 : 1.35); // readable from the default camera distance (coins: small)
     icon.traverse((o) => (o.castShadow = true));
     const glow = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: glowTexture(), color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 }),
@@ -233,7 +235,11 @@ export class Pickups {
     group.add(icon, glow, ring);
     group.scale.setScalar(0.01);
     this.group.add(group);
-    if (type === 'gold') glow.scale.setScalar(2);
+    if (type === 'gold') {
+      glow.scale.setScalar(0.9);
+      glow.position.y = COIN_HEIGHT;
+      ring.scale.setScalar(0.3);
+    }
     this.items.push({ id, type, amount, payload, group, icon, life: isLoot(type) ? Infinity : LIFETIME, age: 0 });
     return id;
   }
@@ -257,7 +263,7 @@ export class Pickups {
       p.group.position.z = z;
       p.age += dt;
       p.group.scale.setScalar(Math.min(1, p.age / 0.25));
-      p.icon.position.y = FLOAT_HEIGHT + Math.sin(time * 2.4 + x) * 0.15;
+      p.icon.position.y = (p.type === 'gold' ? COIN_HEIGHT : FLOAT_HEIGHT) + Math.sin(time * 2.4 + x) * 0.15;
       p.icon.rotation.y = time * 2;
       p.group.visible = visible === 1;
     }
@@ -311,7 +317,7 @@ export class Pickups {
       }
       // Pop in, bob and spin; blink faster and faster before vanishing.
       p.group.scale.setScalar(Math.min(1, p.age / 0.25) * (1 + Math.max(0, 0.3 - p.age) * 0.8));
-      p.icon.position.y = FLOAT_HEIGHT + Math.sin(time * 2.4 + gp.x) * 0.15;
+      p.icon.position.y = (p.type === 'gold' ? COIN_HEIGHT : FLOAT_HEIGHT) + Math.sin(time * 2.4 + gp.x) * 0.15;
       p.icon.rotation.y = time * 2;
       p.group.visible = p.life > BLINK_AT || Math.sin(p.life * (22 - p.life * 4)) > -0.3;
     }

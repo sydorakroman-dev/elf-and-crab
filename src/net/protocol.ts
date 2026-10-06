@@ -127,7 +127,12 @@ export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
     const r = v.req;
     const index = Number.isInteger(r.i) && (r.i as number) >= 0 && (r.i as number) < 32 ? (r.i as number) : -1;
     if ((r.op === 'equip' || r.op === 'use' || r.op === 'drop' || r.op === 'sell' || r.op === 'buy') && index >= 0) return { type: 'inv', req: { op: r.op, i: index } };
-    if (r.op === 'unequip' && (GEAR_SLOTS as unknown[]).includes(r.slot)) return { type: 'inv', req: { op: 'unequip', slot: r.slot as GearSlot } };
+    if (r.op === 'unequip' && (GEAR_SLOTS as unknown[]).includes(r.slot)) {
+      const to = Number.isInteger(r.to) && (r.to as number) >= 0 && (r.to as number) < 32 ? (r.to as number) : undefined;
+      return { type: 'inv', req: { op: 'unequip', slot: r.slot as GearSlot, ...(to !== undefined ? { to } : {}) } };
+    }
+    const j = Number.isInteger(r.j) && (r.j as number) >= 0 && (r.j as number) < 32 ? (r.j as number) : -1;
+    if (r.op === 'move' && index >= 0 && j >= 0) return { type: 'inv', req: { op: 'move', i: index, j } };
     return null;
   }
   if (v.type === 'parade' && typeof v.kind === 'string' && v.kind.length <= 24) return { type: 'parade', kind: v.kind }; // the hero checks it's a real monster
