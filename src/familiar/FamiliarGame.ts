@@ -409,7 +409,7 @@ export class FamiliarGame {
     const dt = Math.min(this.timer.getDelta(), 0.1);
     this.time += dt;
     this.dungeon.update(this.time, dt, this.camFocus);
-    this.sfx.setAmbience(0.25, 0, dt);
+    this.sfx.setAmbience(0, 0, dt); // no constant fire hiss on the tablet
     const s = this.buffer.sample(performance.now() / 1000);
     if (s) this.apply(s, dt);
     this.effects.update(dt);

@@ -963,7 +963,7 @@ export class Dungeon {
       bracket.position.set(x - dx * 0.15, Math.min(3.2, this.wallHeight - 1.6), z - dz * 0.15);
       bracket.rotation.y = Math.atan2(dx, dz);
       this.group.add(bracket);
-      this.flame(x - dx * 0.4, bracket.position.y + 0.55, z - dz * 0.4, 1.3, 20, 24, room.torchLight, room.torchFlame, 0.25); // wall torches: a soft crackle (there are dozens)
+      this.flame(x - dx * 0.4, bracket.position.y + 0.55, z - dz * 0.4, 1.3, 20, 24, room.torchLight, room.torchFlame, 0); // wall torches are silent (there are dozens); braziers and lava crackle
     }
     return moon;
   }

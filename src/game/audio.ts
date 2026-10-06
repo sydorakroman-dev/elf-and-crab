@@ -43,10 +43,10 @@ export class Sfx {
     const ctx = this.ctx;
     if (!ctx || !this.fireGain || !this.firePan) return;
     this.fireLevel = level;
-    this.fireGain.gain.setTargetAtTime(0.004 + level * 0.16, ctx.currentTime, 0.15);
+    // A soft hiss only near a fire (nothing at all away from one), and crackles, more the closer.
+    this.fireGain.gain.setTargetAtTime(level * 0.05, ctx.currentTime, 0.25);
     this.firePan.pan.setTargetAtTime(pan * 0.7, ctx.currentTime, 0.15);
-    // Crackles: more (and louder) the closer the fire.
-    if (Math.random() < dt * (1 + level * 11)) this.crackle();
+    if (level > 0.05 && Math.random() < dt * level * 4) this.crackle();
   }
 
   /** Bowstring release. */
