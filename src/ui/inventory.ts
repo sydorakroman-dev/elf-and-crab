@@ -8,9 +8,13 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 /** How far (px) a press has to move before it's a drag rather than a tap. */
 const DRAG_START = 6;
 
+const BASE = import.meta.env.BASE_URL;
+
+/** An item's icon: its painted picture where it has one (bows, armor), otherwise an emoji. */
 function iconOf(e: Thing): string {
   if (e.kind === 'book') return '📖';
   if (e.kind === 'potion') return POTIONS[e.potion].icon;
+  if (e.art) return `<img class="item-art" src="${BASE}art/items/${e.slot}-${e.art}.webp" alt="" draggable="false" />`;
   return SLOT_INFO[e.slot].icon;
 }
 
@@ -33,6 +37,8 @@ const DOLL: Record<GearSlot, { area: string; size: 'small' | 'tall' | 'body' }> 
   gloves: { area: 'gloves', size: 'small' },
   bow: { area: 'bow', size: 'tall' },
   armor: { area: 'armor', size: 'body' },
+  cape: { area: 'cape', size: 'small' },
+  belt: { area: 'belt', size: 'small' },
   offhand: { area: 'offhand', size: 'tall' },
   ring: { area: 'ring', size: 'small' },
   boots: { area: 'boots', size: 'small' },
@@ -151,7 +157,7 @@ export class InventoryPanel {
       this.ghost = document.createElement('div');
       this.ghost.className = 'bag-ghost';
       this.ghost.style.setProperty('--rc', colorOf(thing));
-      this.ghost.textContent = iconOf(thing);
+      this.ghost.innerHTML = iconOf(thing);
       document.body.append(this.ghost);
       this.el.setPointerCapture(e.pointerId);
       this.el.classList.add('dragging');
@@ -269,7 +275,7 @@ export class InventoryPanel {
       const on = this.sel?.from === 'gear' && this.sel.slot === slot;
       const d = DOLL[slot];
       return `<button type="button" class="doll-slot ${d.size}${it ? ' full' : ''}${on ? ' on' : ''}" data-gear="${slot}" style="grid-area:${d.area};${it ? `--rc:${colorOf(it)}` : ''}" title="${esc(it ? it.name : SLOT_INFO[slot].label)}">
-        <span class="ds-icon">${SLOT_INFO[slot].icon}</span>${it ? '' : `<span class="ds-label">${SLOT_INFO[slot].label}</span>`}</button>`;
+        <span class="ds-icon">${it ? iconOf(it) : SLOT_INFO[slot].icon}</span>${it ? '' : `<span class="ds-label">${SLOT_INFO[slot].label}</span>`}</button>`;
     };
     const bag = st.bag
       .map((e, i) => {

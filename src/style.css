@@ -769,8 +769,8 @@ kbd {
   position: relative;
   display: grid;
   grid-template-columns: 82px 104px 82px;
-  grid-template-rows: 62px 62px 62px 62px;
-  grid-template-areas: 'amulet helmet gloves' 'bow armor offhand' 'bow armor offhand' 'ring boots ring2';
+  grid-template-rows: 62px 62px 62px 62px 62px;
+  grid-template-areas: 'cape helmet amulet' 'bow armor offhand' 'bow armor offhand' 'gloves belt ring' '. boots ring2';
   gap: 10px 16px;
   justify-content: center;
   align-items: center;
@@ -811,7 +811,7 @@ kbd {
 .bag-panel.dragging .bag-trash.drop-over { opacity: 1; background: rgba(255, 80, 80, 0.15); }
 .bag-panel.dragging .shop.drop-over { background: rgba(255, 210, 74, 0.06); border-radius: 12px; }
 @media (max-width: 700px), (max-height: 500px) {
-  .doll-grid { grid-template-columns: 64px 84px 64px; grid-template-rows: 50px 50px 50px 50px; gap: 6px 10px; }
+  .doll-grid { grid-template-columns: 64px 84px 64px; grid-template-rows: 50px 50px 50px 50px 50px; gap: 6px 10px; }
   .doll-slot { width: 46px; height: 46px; }
   .doll-slot.tall { width: 60px; height: 106px; }
   .doll-slot.body { width: 78px; height: 106px; }
@@ -821,3 +821,12 @@ kbd {
 /* The bag button at the end of the action bar. */
 .action-bar .bag-slot { margin-left: 10px; border-color: rgba(255, 210, 74, 0.55); background: rgba(60, 44, 20, 0.75); }
 .action-bar .bag-slot .slot-icon { font-size: 22px; }
+
+/* Painted item pictures (bows, armor). */
+.item-art { width: 100%; height: 100%; object-fit: contain; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.bag-cell .item-art { width: 44px; height: 44px; }
+.doll-slot .ds-icon:has(.item-art) { width: 100%; height: 100%; display: grid; place-items: center; }
+.doll-slot .item-art { width: 92%; height: 92%; }
+.doll-slot.tall .item-art { transform: rotate(-38deg) scale(1.35); } /* bows stand upright in the tall slot */
+.sr-icon .item-art, .bd-title .item-art { width: 30px; height: 30px; vertical-align: middle; }
+.bag-ghost .item-art { width: 48px; height: 48px; }

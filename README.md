@@ -82,8 +82,11 @@ bag, onto the merchant to sell, onto the bin to drop. **Q** / **E** drink a heal
 
 | Slot | Can roll |
 | --- | --- |
-| 🏹 Bow · 🗡️ Off-hand · 🪖 Helmet · 🦺 Armor · 🧤 Gloves · 👢 Boots · 📿 Amulet · 💍 two Rings (the elf) | arrow damage, attack speed, critical shots, max health, armor, move speed, mana and stamina regen |
+| 🏹 Bow · 🗡️ Off-hand · 🪖 Helmet · 🦺 Armor · 🧣 Cape · 🪢 Belt · 🧤 Gloves · 👢 Boots · 📿 Amulet · 💍 two Rings (the elf) | arrow damage, attack speed, critical shots, max health, armor, move speed, mana and stamina regen |
 | 🎀 Collar · 🍀 Charm (the familiar) | familiar damage, shorter familiar cooldowns, familiar speed |
+
+Bows, armor, helmets and boots have painted icons (`public/art/items/`, cut from the art sheets by
+`python3 scripts/make-item-icons.py`); plainer designs come as commons, gilded and steel ones as epics.
 
 Through the exit door you reach the **merchant's camp**: four pieces of gear, two potions and a spell book for sale,
 and anything in the bag sells for 30% of its worth. Both players can buy from the shared purse; the elf decides when
