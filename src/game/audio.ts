@@ -116,6 +116,24 @@ export class Sfx {
     });
   }
 
+  /** Coins: two bright metallic pings. */
+  coin(): void {
+    this.tone('square', 1568, 1568, 0.06, 0.03);
+    this.tone('square', 2093, 2093, 0.12, 0.03, 0.06);
+  }
+
+  /** A spell book read: a rising magical shimmer. */
+  book(): void {
+    this.hiss(0.4, 0.06, 4000, 'highpass');
+    [0, 4, 7, 12, 16].forEach((semi, i) => this.tone('sine', 523 * Math.pow(2, semi / 12), 523 * Math.pow(2, semi / 12), 0.3, 0.06, i * 0.07));
+  }
+
+  /** A chest creaking open. */
+  chest(): void {
+    this.tone('sawtooth', 140, 90, 0.35, 0.05);
+    this.hiss(0.25, 0.05, 700, 'bandpass');
+  }
+
   /** The crab's Magic Burst: a shimmering whoosh down into a soft boom. */
   burst(): void {
     this.hiss(0.35, 0.16, 2500, 'bandpass');

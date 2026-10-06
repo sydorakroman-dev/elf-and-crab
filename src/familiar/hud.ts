@@ -51,6 +51,7 @@ export class FamiliarHud {
   private readonly powers: HTMLElement;
   private readonly wave: HTMLElement;
   private readonly score: HTMLElement;
+  private readonly gold: HTMLElement;
   private readonly status: HTMLElement;
   private readonly spellBar: HTMLElement;
   private readonly changeBtn: HTMLButtonElement;
@@ -94,6 +95,7 @@ export class FamiliarHud {
            <button type="button" class="role-badge parade-btn" data-f-parade hidden>👾 Monsters</button>
            <button type="button" class="role-badge" data-f-change title="Change creature">🐾 ${code}</button>
            <button type="button" class="role-badge fs-btn" data-f-fullscreen title="Full screen" aria-label="Full screen" hidden>${FS_ICON}</button>
+           <div class="gold" data-f-gold title="Gold">🪙 0</div>
            <div class="score" data-f-score>0</div>
          </div>
        </div>
@@ -124,6 +126,7 @@ export class FamiliarHud {
     this.powers = root.querySelector('[data-f-powers]')!;
     this.wave = root.querySelector('[data-f-wave]')!;
     this.score = root.querySelector('[data-f-score]')!;
+    this.gold = root.querySelector('[data-f-gold]')!;
     this.status = root.querySelector('[data-f-status]')!;
     this.spellBar = root.querySelector('[data-f-spells]')!;
     this.changeBtn = root.querySelector('[data-f-change]')!;
@@ -341,6 +344,8 @@ export class FamiliarHud {
     const w = s.rid && !s.practice ? `🔮 Break the rune seal to open the door (${s.rid.n}/${s.rid.t})` : s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.remaining, s.phase, s.boss?.name ?? null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
+    const g = `🪙 ${s.gold ?? 0}`;
+    if (this.gold.textContent !== g) this.gold.textContent = g;
     this.bossBar.set(s.boss);
     this.fade.set(s.phase === 'transition', s.card ?? -1);
 

@@ -18,6 +18,7 @@ interface Arrow {
   active: boolean;
   /** Piercing arrows fly through slimes, hitting each one once. */
   pierce: boolean;
+  enchant: number;
   hitSlimes: Set<Enemy>;
 }
 
@@ -25,6 +26,20 @@ export interface ArrowHit {
   slime: Enemy;
   dirX: number;
   dirZ: number;
+  /** Spell enchantments the arrow carried (ENCHANT_* bits). */
+  enchant: number;
+}
+
+/** Arrow enchantments from the elf's spells (bits). */
+export const ENCHANT_FIRE = 1;
+export const ENCHANT_FROST = 2;
+export const ENCHANT_CHAIN = 4;
+/** Glow colour for an arrow: piercing purple, or its enchantment's. */
+function glowColor(pierce: boolean, enchant: number): number {
+  if (enchant & ENCHANT_FIRE) return 0xff7a2a;
+  if (enchant & ENCHANT_FROST) return 0x9fe4ff;
+  if (enchant & ENCHANT_CHAIN) return 0xfff27a;
+  return pierce ? 0xc77dff : 0xffffff;
 }
 
 /** Pooled arrows that fly flat at chest height, hit slimes, and stick in walls and pillars. */
@@ -53,7 +68,7 @@ export class Arrows {
       f2.rotation.z = Math.PI / 2;
       mesh.add(new THREE.Mesh(shaftGeo, wood), new THREE.Mesh(headGeo, steel), f1, f2);
       mesh.traverse((o) => (o.castShadow = true));
-      const glow = new THREE.Sprite(pierceGlow);
+      const glow = new THREE.Sprite(pierceGlow.clone());
       glow.scale.set(0.9, 0.9, 1);
       glow.position.z = 0.5;
       glow.visible = false;
@@ -61,20 +76,21 @@ export class Arrows {
       mesh.userData.glow = glow;
       mesh.visible = false;
       this.group.add(mesh);
-      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false, pierce: false, hitSlimes: new Set() });
+      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false, pierce: false, enchant: 0, hitSlimes: new Set() });
     }
   }
 
-  fire(x: number, z: number, dir: { x: number; z: number }, pierce = false): void {
+  fire(x: number, z: number, dir: { x: number; z: number }, pierce = false, enchant = 0): void {
     // Reuse a free arrow, or the oldest stuck one.
     const a = this.arrows.find((a) => !a.active) ?? this.arrows.reduce((o, a) => (a.stuck && a.stuck < o.stuck ? a : o));
     a.active = true;
     a.life = LIFETIME;
     a.stuck = 0;
     a.pierce = pierce;
+    a.enchant = enchant;
     a.hitSlimes.clear();
     a.dir.set(dir.x, 0, dir.z).normalize();
-    a.mesh.userData.glow.visible = pierce;
+    this.setGlow(a.mesh, pierce, enchant);
     a.mesh.position.set(x, HEIGHT, z);
     a.mesh.rotation.set(0, Math.atan2(a.dir.x, a.dir.z), 0);
     a.mesh.visible = true;
@@ -84,7 +100,7 @@ export class Arrows {
   snapshot(): ArrowTuple[] {
     const out: ArrowTuple[] = [];
     this.arrows.forEach((a, i) => {
-      if (a.active) out.push([i, q(a.mesh.position.x), q(a.mesh.position.z), q(a.mesh.rotation.y), a.pierce ? 1 : 0]);
+      if (a.active) out.push([i, q(a.mesh.position.x), q(a.mesh.position.z), q(a.mesh.rotation.y), (a.pierce ? 1 : 0) | (a.enchant << 1)]);
     });
     return out;
   }
@@ -99,11 +115,17 @@ export class Arrows {
       a.mesh.visible = true;
       a.mesh.position.set(x, HEIGHT, z);
       a.mesh.rotation.set(0, yaw, 0);
-      a.mesh.userData.glow.visible = pierce === 1;
+      this.setGlow(a.mesh, (pierce & 1) === 1, pierce >> 1);
     }
     this.arrows.forEach((a, i) => {
       if (!seen.has(i)) a.mesh.visible = false;
     });
+  }
+
+  private setGlow(mesh: THREE.Group, pierce: boolean, enchant: number): void {
+    const glow = mesh.userData.glow as THREE.Sprite;
+    glow.visible = pierce || enchant > 0;
+    if (glow.visible) glow.material.color.setHex(glowColor(pierce, enchant));
   }
 
   clear(): void {
@@ -161,12 +183,12 @@ export class Arrows {
 
       if (hitSlime && a.pierce) {
         // Punch through: register the hit and keep flying from here this step.
-        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z });
+        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z, enchant: a.enchant });
         a.hitSlimes.add(hitSlime);
         p.x += (bx - p.x) * bestT;
         p.z += (bz - p.z) * bestT;
       } else if (hitSlime) {
-        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z });
+        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z, enchant: a.enchant });
         a.active = false;
         a.mesh.visible = false;
       } else if (solid) {

@@ -20,6 +20,7 @@ export class Hud {
   private readonly hearts: HTMLElement;
   private readonly wave: HTMLElement;
   private readonly score: HTMLElement;
+  private readonly gold: HTMLElement;
   private readonly muted: HTMLElement;
   private readonly powers: HTMLElement;
   private powersKey = '';
@@ -55,6 +56,7 @@ export class Hud {
          <div class="right">
            <span class="familiar-badge" data-familiar hidden title="Familiar connected">🦀</span>
            <span class="muted" data-muted hidden>🔇</span>
+           <div class="gold" data-gold title="Gold">🪙 0</div>
            <div class="score" data-score>0</div>
          </div>
        </div>
@@ -123,6 +125,7 @@ export class Hud {
     this.hearts = root.querySelector('[data-hearts]')!;
     this.wave = root.querySelector('[data-wave]')!;
     this.score = root.querySelector('[data-score]')!;
+    this.gold = root.querySelector('[data-gold]')!;
     this.muted = root.querySelector('[data-muted]')!;
     this.powers = root.querySelector('[data-powers]')!;
     this.popups = new Popups(root);
@@ -301,6 +304,11 @@ export class Hud {
 
   setScore(score: number): void {
     this.score.textContent = String(score);
+  }
+
+  setGold(gold: number): void {
+    const t = `🪙 ${gold}`;
+    if (this.gold.textContent !== t) this.gold.textContent = t;
   }
 
   /** The "Start" prompt before the first wave: a button on touch screens, a hint for Enter with a mouse (the pointer is locked). */

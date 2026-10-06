@@ -80,6 +80,8 @@ export class Dungeon {
   private exitPortal: THREE.Mesh | null = null;
   private exitLight: THREE.PointLight | null = null;
   private exitOpen = 0;
+  /** Chest lids (in the level's chest order): how open (0 → 1), and where they're heading. */
+  private readonly chestLids: { lid: THREE.Object3D; open: number; target: number; glow: THREE.Sprite }[] = [];
   private readonly fireflies: { sprite: THREE.Sprite; base: THREE.Vector3; seed: number }[] = [];
   private readonly embers: { sprite: THREE.Sprite; x: number; z: number; speed: number; seed: number }[] = [];
   private waterSheet: THREE.Mesh | null = null;
@@ -109,6 +111,7 @@ export class Dungeon {
     this.buildFloor(rng);
     this.buildWalls(rng);
     this.buildExit();
+    this.buildChests();
     for (const p of level.props) this.buildProp(p, rng);
     this.buildFeature(rng);
     this.buildRubble(rng);
@@ -127,6 +130,12 @@ export class Dungeon {
 
   setExitOpen(open: boolean): void {
     this.exitTarget = open ? 1 : 0;
+  }
+
+  /** Swings chest `i`'s lid open. */
+  openChest(i: number): void {
+    const c = this.chestLids[i];
+    if (c) c.target = 1;
   }
 
   /** Torch flicker, the lights and shadow following `focus`, glowing things, water, the exit door. */
@@ -201,6 +210,11 @@ export class Dungeon {
       e.sprite.material.opacity = Math.min(1, y / 2) * Math.max(0, 1 - y / 16);
     }
 
+    for (const c of this.chestLids) {
+      c.open += (c.target - c.open) * (1 - Math.exp(-6 * dt));
+      c.lid.rotation.x = -c.open * 1.9;
+      c.glow.material.opacity = c.target ? Math.max(0, 0.9 - c.open * 0.9) : 0.35 + Math.sin(time * 3) * 0.15;
+    }
     this.exitOpen += (this.exitTarget - this.exitOpen) * (1 - Math.exp(-3 * dt));
     if (this.exitBars) this.exitBars.position.y = this.exitOpen * (GATE_HEIGHT - 0.3);
     if (this.exitPortal && this.exitLight) {
@@ -439,6 +453,41 @@ export class Dungeon {
     this.exitLight = light;
     gate.add(voidPlane, lintel, postL, postR, bars, portal, light);
     this.group.add(gate);
+  }
+
+  /** Treasure chests in the side rooms: wood, gold bands, a lid that swings open. */
+  private buildChests(): void {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a5530, roughness: 0.8, flatShading: true });
+    const band = new THREE.MeshStandardMaterial({ color: 0xe0b040, metalness: 0.7, roughness: 0.35, flatShading: true });
+    for (const c of this.level.chests) {
+      const chest = new THREE.Group();
+      chest.position.set(c.x, 0, c.z);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.9, 1.0), wood);
+      body.position.y = 0.45;
+      const lid = new THREE.Group();
+      lid.position.set(0, 0.9, -0.5); // hinged at the back
+      const lidTop = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.6, 10, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), wood);
+      lidTop.position.z = 0.5;
+      lid.add(lidTop);
+      for (const x of [-0.55, 0.55]) {
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.95, 1.04), band);
+        strap.position.set(x, 0.45, 0);
+        chest.add(strap);
+        const lidStrap = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.14, 10, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), band);
+        lidStrap.position.set(x, 0, 0.5);
+        lid.add(lidStrap);
+      }
+      const lock = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.3, 0.1), band);
+      lock.position.set(0, 0.8, 0.52);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffd34d, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.4 }));
+      glow.position.y = 1.2;
+      glow.scale.setScalar(3.2);
+      chest.add(body, lid, lock, glow);
+      chest.traverse((o) => (o.castShadow = o.receiveShadow = true));
+      this.group.add(chest);
+      this.obstacles.push({ x: c.x, z: c.z, radius: 0.9 });
+      this.chestLids.push({ lid, open: 0, target: 0, glow });
+    }
   }
 
   private glow(color: number, emissive: number, intensity: number, extra: Partial<THREE.MeshStandardMaterialParameters> = {}): THREE.MeshStandardMaterial {

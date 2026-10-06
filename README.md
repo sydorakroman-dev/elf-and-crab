@@ -52,7 +52,27 @@ the title / pause screen; saved in your browser); on touch screens, tap the slot
 | 1 | 💨 **Dash** (also Space) | 1 stamina | a quick dash; you can't be hit while dashing |
 | 2 | 🌬️ **Wind Walk** | 2 stamina | invisible for 3 s: enemies lose track of you and head for where you vanished; shooting breaks it |
 | 3 | 🏹 **Double Shot** | 1 stamina | the next 3 shots fire two arrows side by side |
-| 4–9 | spells | mana | coming from the magic book |
+| 4–9 | spells | mana | learned from **spell books** (below) |
+
+### Spells and loot
+
+Monsters drop **gold** (more from tough ones, guardians and later levels) and now and then a **spell book**;
+guardians always drop one, and **treasure chests** in the levels' dead-end side rooms hold gold and often a book.
+Coins fly to whoever's near — the familiar can pick up loot too, for the party. A book teaches a new spell into the
+first free slot (4–9), or raises one you know a rank (I → II → III); once all six slots are full, books only rank up.
+
+| Spell | Mana | Rank I (II and III are stronger) |
+| --- | --- | --- |
+| 🔥 Fire Arrows | 20 | the next 3 shots explode on hit (14 damage round them) |
+| ❄️ Frost Arrows | 20 | the next 3 shots slow foes to half speed for 3 s (rank III also freezes) |
+| ⚡ Chain Shot | 30 | the next 3 shots arc lightning on to 2 more foes |
+| ✨ Arcane Volley | 45 | a fan of 7 piercing arcane arrows |
+| 🌿 Entangling Roots | 30 | roots every foe in a 4 m circle ahead for 2 s |
+| 🧊 Frost Nova | 35 | freezes every foe within 6 m for 1.5 s (10 damage) |
+| 💚 Healing Bloom | 40 | heals 30 over 5 s |
+| 🌳 Bark Skin | 35 | take 40% less damage for 6 s |
+
+Gold is for the merchant between levels (coming next).
 
 ## The run
 

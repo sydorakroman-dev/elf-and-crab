@@ -1,29 +1,49 @@
 import * as THREE from 'three';
 import type { Point } from './combat';
 import { POWER_UPS, type PowerUpType } from './powerups';
-import { POWER_CODES, q, type PickupTuple } from '../net/snapshot';
+import { PICKUP_CODES, q, type PickupTuple } from '../net/snapshot';
 import { glowTexture } from '../util/glow';
 
-const LIFETIME = 14;
+const LIFETIME = 14; // power-ups; loot stays until picked up
 const BLINK_AT = 3; // seconds left when it starts blinking
 const PICKUP_RADIUS = 1.4;
+/** Coins fly to whoever comes within this many metres. */
+const MAGNET_RADIUS = 3.5;
+const MAGNET_SPEED = 14;
+
+/** Anything lying on the floor to pick up: a power-up, or loot (gold, a spell book). */
+export type PickupKind = PowerUpType | 'gold' | 'book';
+
+export interface Collected {
+  type: PickupKind;
+  /** Which collector picked it up (0 the elf, 1 the familiar). */
+  by: number;
+  /** Gold in a coin pile. */
+  amount: number;
+  x: number;
+  z: number;
+}
+
+const LOOT_COLORS: Record<'gold' | 'book', number> = { gold: 0xffc93d, book: 0xb78aff };
+const colorOf = (k: PickupKind) => (k === 'gold' || k === 'book' ? LOOT_COLORS[k] : POWER_UPS[k].color);
 const FLOAT_HEIGHT = 1.1;
 
 interface Pickup {
   id: number;
-  type: PowerUpType;
+  type: PickupKind;
+  amount: number;
   group: THREE.Group;
   icon: THREE.Object3D;
   life: number;
   age: number;
 }
 
-/** Power-ups lying in the arena: glowing, spinning icons you walk over to collect. */
+/** Power-ups and loot lying about: glowing, spinning icons you walk over to collect. */
 export class Pickups {
   readonly group = new THREE.Group();
   private readonly items: Pickup[] = [];
   private nextId = 1;
-  private readonly icons: Record<PowerUpType, () => THREE.Object3D>;
+  private readonly icons: Record<PickupKind, () => THREE.Object3D>;
   private readonly ringGeo = new THREE.RingGeometry(0.85, 1.2, 32).rotateX(-Math.PI / 2);
 
   constructor() {
@@ -100,19 +120,51 @@ export class Pickups {
     const heartGeo = extrude(h, 0.22);
     const heart = () => new THREE.Mesh(heartGeo, mat('heart'));
 
-    this.icons = { multishot, rapid, pierce, shield, heart };
+    // Gold: a little pile of coins.
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xffc93d, emissive: 0x8a5a00, emissiveIntensity: 0.6, metalness: 0.7, roughness: 0.3, flatShading: true });
+    const coinGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.06, 12);
+    const gold = () => {
+      const g = new THREE.Group();
+      [[0, 0, 0, 0], [0.18, 0.07, 0.05, 0.4], [-0.12, 0.13, -0.08, -0.3], [0.02, 0.19, 0.12, 0.8]].forEach(([x, y, z, tilt]) => {
+        const c = new THREE.Mesh(coinGeo, goldMat);
+        c.position.set(x, y - 0.25, z);
+        c.rotation.set(tilt, 0, tilt * 0.5);
+        g.add(c);
+      });
+      return g;
+    };
+    // Spell book: a purple tome with a glowing rune.
+    const coverMat = new THREE.MeshStandardMaterial({ color: 0x5a2e8f, roughness: 0.6, flatShading: true });
+    const pageMat = new THREE.MeshStandardMaterial({ color: 0xf6ead0, flatShading: true });
+    const runeMat = new THREE.MeshBasicMaterial({ color: 0xe8d4ff });
+    const book = () => {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.8, 0.16), coverMat));
+      const pages = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.74, 0.12), pageMat);
+      pages.position.x = 0.04;
+      g.add(pages);
+      const rune = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), runeMat);
+      rune.position.z = 0.1;
+      rune.scale.z = 0.3;
+      g.add(rune);
+      return g;
+    };
+
+    this.icons = { multishot, rapid, pierce, shield, heart, gold, book };
   }
 
+  /** Power-ups on the floor (loot doesn't count). */
   get count(): number {
-    return this.items.length;
+    return this.items.filter((p) => p.type !== 'gold' && p.type !== 'book').length;
   }
 
-  spawn(type: PowerUpType, x: number, z: number, id = this.nextId++): number {
-    const color = POWER_UPS[type].color;
+  /** Puts a pickup on the floor; loot (gold, books) never expires. Returns its id. */
+  spawn(type: PickupKind, x: number, z: number, id = this.nextId++, amount = 0): number {
+    const color = colorOf(type);
     const group = new THREE.Group();
     group.position.set(x, 0, z);
     const icon = this.icons[type]();
-    icon.scale.setScalar(1.35); // readable from the default camera distance
+    icon.scale.setScalar(type === 'gold' ? 1.6 : 1.35); // readable from the default camera distance
     icon.traverse((o) => (o.castShadow = true));
     const glow = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: glowTexture(), color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 }),
@@ -127,12 +179,14 @@ export class Pickups {
     group.add(icon, glow, ring);
     group.scale.setScalar(0.01);
     this.group.add(group);
-    this.items.push({ id, type, group, icon, life: LIFETIME, age: 0 });
+    if (type === 'gold') glow.scale.setScalar(2);
+    const loot = type === 'gold' || type === 'book';
+    this.items.push({ id, type, amount, group, icon, life: loot ? Infinity : LIFETIME, age: 0 });
     return id;
   }
 
   snapshot(): PickupTuple[] {
-    return this.items.map((p) => [p.id, POWER_CODES.indexOf(p.type), q(p.group.position.x), q(p.group.position.z), p.group.visible ? 1 : 0]);
+    return this.items.map((p) => [p.id, PICKUP_CODES.indexOf(p.type), q(p.group.position.x), q(p.group.position.z), p.group.visible ? 1 : 0]);
   }
 
   /** Shows exactly these pickups (familiar's view): creates new ones, removes gone ones, animates. */
@@ -144,8 +198,10 @@ export class Pickups {
       this.items.splice(i, 1);
     }
     for (const [id, code, x, z, visible] of list) {
-      if (!this.items.some((p) => p.id === id)) this.spawn(POWER_CODES[code] ?? 'multishot', x, z, id);
+      if (!this.items.some((p) => p.id === id)) this.spawn(PICKUP_CODES[code] ?? 'multishot', x, z, id);
       const p = this.items.find((it) => it.id === id)!;
+      p.group.position.x = x;
+      p.group.position.z = z;
       p.age += dt;
       p.group.scale.setScalar(Math.min(1, p.age / 0.25));
       p.icon.position.y = FLOAT_HEIGHT + Math.sin(time * 2.4 + x) * 0.15;
@@ -163,16 +219,33 @@ export class Pickups {
    * Animates, expires, and returns what was collected this step: the type, and which of
    * `collectors` (the elf first, then the familiar) touched it.
    */
-  update(dt: number, time: number, collectors: readonly Point[]): { type: PowerUpType; by: number }[] {
-    const collected: { type: PowerUpType; by: number }[] = [];
+  update(dt: number, time: number, collectors: readonly Point[]): Collected[] {
+    const collected: Collected[] = [];
     for (let i = this.items.length - 1; i >= 0; i--) {
       const p = this.items[i];
       p.age += dt;
       p.life -= dt;
       const gp = p.group.position;
-      const by = collectors.findIndex((c) => Math.hypot(gp.x - c.x, gp.z - c.z) < PICKUP_RADIUS);
+      if (p.type === 'gold' && p.age > 0.4) {
+        // Coins fly to whoever's near.
+        let best: Point | null = null;
+        let bestD = MAGNET_RADIUS;
+        for (const c of collectors) {
+          const d = Math.hypot(gp.x - c.x, gp.z - c.z);
+          if (d < bestD) {
+            bestD = d;
+            best = c;
+          }
+        }
+        if (best && bestD > 0.01) {
+          const step = Math.min(bestD, MAGNET_SPEED * dt);
+          gp.x += ((best.x - gp.x) / bestD) * step;
+          gp.z += ((best.z - gp.z) / bestD) * step;
+        }
+      }
+      const by = p.age > 0.25 ? collectors.findIndex((c) => Math.hypot(gp.x - c.x, gp.z - c.z) < PICKUP_RADIUS) : -1;
       if (by >= 0) {
-        collected.push({ type: p.type, by });
+        collected.push({ type: p.type, by, amount: p.amount, x: gp.x, z: gp.z });
         this.group.remove(p.group);
         this.items.splice(i, 1);
         continue;

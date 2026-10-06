@@ -31,7 +31,10 @@ import { Minimap } from '../ui/minimap';
 import { Sfx } from './audio';
 import { loadBest, recordRun } from './highscore';
 import { ActivePowers, POWER_UPS, pickPowerUp, randomSpawnPoint, spreadDirections, type PowerUpType } from './powerups';
-import { Pickups } from './pickups';
+import { Pickups, type Collected } from './pickups';
+import { ELF_SPELLS, FIRST_SPELL_SLOT, SPELL_POWER, Spellbook, spellCost, spellTitle, type SpellKey } from './spells';
+import { chestLoot, rollLoot, tierOf, type Drop } from './loot';
+import { ENCHANT_CHAIN, ENCHANT_FIRE, ENCHANT_FROST, type ArrowHit } from './arrows';
 import type { HeroLink } from '../net/client';
 import { POWER_CODES, q, type GameEvent, type Snapshot } from '../net/snapshot';
 
@@ -154,6 +157,20 @@ export class Game {
   private sealMisses = 0;
   /** Double Shot: charged shots left. */
   private doubleShots = 0;
+  /** Spells learned from books this run, and the party's gold. */
+  private readonly spellbook = new Spellbook();
+  private gold = 0;
+  /** Arrow enchantments waiting: shots left, and the rank they were cast at. */
+  private readonly enchants: Record<'fire' | 'frost' | 'chain', { shots: number; rank: number }> = {
+    fire: { shots: 0, rank: 1 },
+    frost: { shots: 0, rank: 1 },
+    chain: { shots: 0, rank: 1 },
+  };
+  /** Healing Bloom (seconds left, health per second) and Bark Skin (seconds left, share of damage taken away). */
+  private bloom = { left: 0, rate: 0 };
+  private bark = { left: 0, reduce: 0 };
+  /** Chests opened in this level (bit i: chest i). */
+  private chestsOpened = 0;
   /** The elf's mana and stamina. */
   private readonly resources = new Resources();
   /** Wind Walk: seconds of invisibility left, and where the elf vanished (enemies head there). */
@@ -312,6 +329,15 @@ export class Game {
     this.invisible = 0;
     this.doubleShots = 0;
     this.hud.actionBar.setCharges('doubleshot', 0);
+    this.spellbook.clear();
+    for (let i = 0; i < 6; i++) {
+      this.hud.actionBar.setSlot(FIRST_SPELL_SLOT + i, null);
+      this.hud.actionBar.setSlotCharges(FIRST_SPELL_SLOT + i, 0);
+    }
+    for (const e of Object.values(this.enchants)) e.shots = 0;
+    this.bloom.left = this.bark.left = 0;
+    this.gold = 0;
+    this.hud.setGold(0);
     this.ward = 0;
     this.riddle = null;
     this.elf.setGhost(false);
@@ -348,6 +374,7 @@ export class Game {
     this.enemies.clear();
     this.enemies.spawnPacks(this.level.packs, this.dungeon.obstacles);
     this.bossAnnounced = false;
+    this.chestsOpened = 0;
     this.minimap?.setLevel(this.level.map);
   }
 
@@ -427,10 +454,12 @@ export class Game {
 
     for (const hit of this.arrows.update(dt, this.enemies.all, this.dungeon.obstacles)) {
       this.damage(hit.slime, hit.dirX, hit.dirZ);
+      if (hit.enchant) this.enchantHit(hit);
     }
 
     this.updateFamiliar(dt);
     this.rest(dt);
+    this.updateBlessings(dt);
 
     this.checkContacts();
     this.updatePowerUps(dt);
@@ -468,14 +497,15 @@ export class Game {
       this.doubleShots--;
       this.hud.actionBar.setCharges('doubleshot', this.doubleShots);
     }
+    const enchant = this.takeEnchant();
     for (const d of spreadDirections(dir.x, dir.z, count, MULTISHOT_SPREAD)) {
       if (!twin) {
-        this.arrows.fire(p.x + d.x * 0.6, p.z + d.z * 0.6, d, pierce);
+        this.arrows.fire(p.x + d.x * 0.6, p.z + d.z * 0.6, d, pierce, enchant);
         continue;
       }
       const sx = d.z * (DOUBLE_GAP / 2); // sideways (perpendicular to the shot)
       const sz = -d.x * (DOUBLE_GAP / 2);
-      for (const k of [-1, 1]) this.arrows.fire(p.x + d.x * 0.6 + sx * k, p.z + d.z * 0.6 + sz * k, d, pierce);
+      for (const k of [-1, 1]) this.arrows.fire(p.x + d.x * 0.6 + sx * k, p.z + d.z * 0.6 + sz * k, d, pierce, enchant);
     }
     this.sfx.twang();
     this.events.push({ e: 'twang' });
@@ -777,6 +807,8 @@ export class Game {
       health: Math.max(0, this.health),
       maxHealth: MAX_HEALTH,
       score: this.score,
+      gold: this.gold,
+      ch: this.chestsOpened,
       powers: this.powers.list().map((pw) => [POWER_CODES.indexOf(pw.type), q(pw.remaining)]),
       cds: c.kind ? FAMILIARS[c.kind].spells.map((id) => [SPELL_IDS.indexOf(id), q(c.cooldowns.remaining(id))]) : [],
       ev: this.events,
@@ -846,6 +878,7 @@ export class Game {
       this.effects.burst(slime.x, y, slime.z, slime.color, big ? 40 : 22, big ? 8 : 6);
       this.sfx.splat(big);
       this.events.push({ e: 'splat', x: q(slime.x), z: q(slime.z), c: slime.color.getHex(), big });
+      this.dropLoot(slime.x, slime.z, rollLoot(tierOf(slime), this.room + 1, Math.random));
       const drop = (slime as Enemy & { def?: { drop: number } }).def?.drop ?? 0; // each kind carries its own chance
       if (Math.random() < drop && this.pickups.count < MAX_PICKUPS + 1) {
         this.pickups.spawn(pickPowerUp(Math.random, this.health, MAX_HEALTH), slime.x, slime.z);
@@ -891,7 +924,8 @@ export class Game {
 
     // The elf and the familiar can both grab power-ups; either way they go to the elf.
     const collectors = this.companion.present && this.companion.height < 0.5 ? [p, this.companion.position] : [p];
-    for (const { type, by } of this.pickups.update(dt, this.time, collectors)) this.applyPowerUp(type, by === 1);
+    for (const c of this.pickups.update(dt, this.time, collectors)) this.collect(c);
+    this.openChests(collectors);
 
     const shielded = this.powers.has('shield');
     this.shieldBubble.visible = shielded;
@@ -1003,7 +1037,8 @@ export class Game {
       this.events.push({ e: 'shield', x: q(p.x), z: q(p.z) });
       return;
     }
-    const taken = scaledDamage(amount);
+    // Bark Skin takes the edge off.
+    const taken = Math.max(1, Math.round(scaledDamage(amount) * (this.bark.left > 0 ? 1 - this.bark.reduce : 1)));
     this.health -= taken;
     this.numbers.show(taken, p.x, 2.4, p.z, 'hurt');
     this.events.push({ e: 'num', x: q(p.x), y: 2.4, z: q(p.z), n: taken, k: 2 });
@@ -1037,6 +1072,11 @@ export class Game {
   /** Uses whatever's in action slot `slot` (keys 1-9 by default, or a tap on the bar). */
   private useSlot(slot: number): void {
     const running = this.state === 'playing' && this.player.isActive;
+    const spell = this.spellbook.inSlot(slot);
+    if (running && spell) {
+      this.castElfSpell(spell);
+      return;
+    }
     const id = this.hud.actionBar.ability(slot);
     if (!running || !id) return;
     if (id === 'dash') {
@@ -1063,6 +1103,234 @@ export class Game {
       this.sfx.whoosh();
       this.hud.toast('🌬️ Wind Walk', 0xdff4ff);
     }
+  }
+
+  // ── Loot ─────────────────────────────────────────────────────────────────────────────────────
+
+  /** Scatters drops round (x, z): coin piles and spell books. */
+  private dropLoot(x: number, z: number, drops: Drop[]): void {
+    for (const d of drops) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 0.6 + Math.random() * 1.2;
+      const at = walkMap().nearestFloor(x + Math.cos(a) * r, z + Math.sin(a) * r);
+      const spot = walkMap().clear(x + Math.cos(a) * r, z + Math.sin(a) * r, 0.4) ? { x: x + Math.cos(a) * r, z: z + Math.sin(a) * r } : at;
+      if (d.kind === 'gold') this.pickups.spawn('gold', spot.x, spot.z, undefined, d.amount);
+      else this.pickups.spawn('book', spot.x, spot.z);
+    }
+  }
+
+  /** Something picked up by the elf (by 0) or the familiar (by 1): it all goes to the party. */
+  private collect(c: Collected): void {
+    if (c.type === 'gold') {
+      this.gold += c.amount;
+      this.hud.setGold(this.gold);
+      this.numbers.show(c.amount, c.x, 1.6, c.z, 'gold');
+      this.events.push({ e: 'loot', k: 0, x: q(c.x), z: q(c.z), n: c.amount });
+      this.sfx.coin();
+      return;
+    }
+    if (c.type === 'book') {
+      this.readBook(c.x, c.z);
+      return;
+    }
+    this.applyPowerUp(c.type, c.by === 1);
+  }
+
+  /** A spell book: a new spell in slots 4–9, or a rank up. */
+  private readBook(x: number, z: number): void {
+    const r = this.spellbook.read(Math.random);
+    let text: string;
+    if (r.kind === 'mastered') {
+      // Every spell known at its best: the book's worth gold instead.
+      this.gold += 50;
+      this.hud.setGold(this.gold);
+      text = '📖 You know it all — +50 🪙';
+    } else {
+      const key = r.key;
+      const rank = this.spellbook.rank(key);
+      const slot = this.spellbook.slots.indexOf(key) + FIRST_SPELL_SLOT;
+      const def = ELF_SPELLS[key];
+      this.hud.actionBar.setSlot(slot, { icon: def.icon, name: spellTitle(key, rank), description: def.describe(rank), kind: 'spell', cost: spellCost(key, rank), rank });
+      this.hud.actionBar.flash(slot);
+      const keyName = this.hud.actionBar.keys[slot]?.replace(/^Digit|^Key/, '') ?? String(slot + 1);
+      text = r.kind === 'learned' ? `📖 Learned ${def.icon} ${def.name}! (key ${keyName})` : `📖 ${def.icon} ${spellTitle(key, rank)}!`;
+    }
+    this.hud.toast(text, 0xc79bff);
+    this.banner(text);
+    this.effects.burst(x, 1.2, z, new THREE.Color(0xc79bff), 30, 6, 0.14);
+    this.events.push({ e: 'loot', k: 1, x: q(x), z: q(z), n: 0, t: text });
+    this.sfx.book();
+  }
+
+  /** Chests open when the elf or the familiar steps up to them. */
+  private openChests(collectors: readonly { x: number; z: number }[]): void {
+    this.level.chests.forEach((c, i) => {
+      if (this.chestsOpened & (1 << i)) return;
+      if (!collectors.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < 2.4)) return;
+      this.chestsOpened |= 1 << i;
+      this.dungeon.openChest(i);
+      this.dropLoot(c.x, c.z + 1.6, chestLoot(this.room + 1, Math.random));
+      this.effects.burst(c.x, 1.2, c.z, new THREE.Color(0xffd34d), 34, 6, 0.14);
+      this.events.push({ e: 'chest', i });
+      this.hud.toast('🧰 A treasure chest!', 0xffd34d);
+      this.sfx.chest();
+    });
+  }
+
+  // ── The elf's spells ────────────────────────────────────────────────────────────────────────
+
+  /** Enchantment bits for this shot (and one shot used up of each). */
+  private takeEnchant(): number {
+    let bits = 0;
+    const flags = { fire: ENCHANT_FIRE, frost: ENCHANT_FROST, chain: ENCHANT_CHAIN } as const;
+    for (const key of ['fire', 'frost', 'chain'] as const) {
+      const e = this.enchants[key];
+      if (e.shots <= 0) continue;
+      bits |= flags[key];
+      e.shots--;
+      this.hud.actionBar.setSlotCharges(this.spellbook.slots.indexOf(key) + FIRST_SPELL_SLOT, e.shots);
+    }
+    return bits;
+  }
+
+  /** An enchanted arrow struck: explode, chill, or arc lightning on. */
+  private enchantHit(hit: ArrowHit): void {
+    const t = hit.slime;
+    if (hit.enchant & ENCHANT_FIRE) {
+      const r = this.enchants.fire.rank - 1;
+      const radius = SPELL_POWER.fire.radius[r];
+      const near = this.enemies.all.filter((s) => s.alive && !s.hidden && Math.hypot(s.x - t.x, s.z - t.z) <= radius + s.radius);
+      for (const s of near) this.damage(s, s.x - t.x || hit.dirX, s.z - t.z || hit.dirZ, SPELL_POWER.fire.damage[r]);
+      this.spellFx(t.x, t.z, ELF_SPELLS.fire.color, radius, 26);
+      this.sfx.burst();
+    }
+    if (hit.enchant & ENCHANT_FROST && t.alive) {
+      const r = this.enchants.frost.rank - 1;
+      t.soak(SPELL_POWER.frost.seconds[r], SPELL_POWER.frost.slow[r]);
+      if (SPELL_POWER.frost.freeze[r] > 0) t.stun(SPELL_POWER.frost.freeze[r]);
+      this.spellFx(t.x, t.z, ELF_SPELLS.frost.color, 0, 14);
+    }
+    if (hit.enchant & ENCHANT_CHAIN) {
+      const r = this.enchants.chain.rank - 1;
+      const struck = new Set([t]);
+      let from = { x: t.x, z: t.z };
+      for (let j = 0; j < SPELL_POWER.chain.jumps[r]; j++) {
+        const next = this.enemies.all
+          .filter((s) => s.alive && !s.hidden && !struck.has(s) && Math.hypot(s.x - from.x, s.z - from.z) <= SPELL_POWER.chain.reach)
+          .sort((a, b) => Math.hypot(a.x - from.x, a.z - from.z) - Math.hypot(b.x - from.x, b.z - from.z))[0];
+        if (!next) break;
+        struck.add(next);
+        // Sparks along the arc, then the zap.
+        for (let k = 1; k <= 4; k++) this.effects.burst(from.x + ((next.x - from.x) * k) / 5, 1.3, from.z + ((next.z - from.z) * k) / 5, new THREE.Color(ELF_SPELLS.chain.color), 3, 1.5, 0.08);
+        this.damage(next, next.x - from.x, next.z - from.z, Math.round(HERO.arrowDamage * SPELL_POWER.chain.share[r] * 10) / 10);
+        this.spellFx(next.x, next.z, ELF_SPELLS.chain.color, 0, 10);
+        from = { x: next.x, z: next.z };
+      }
+    }
+  }
+
+  /** A spell's flash: a ring (if `radius`) and sparks, on both screens. */
+  private spellFx(x: number, z: number, color: number, radius: number, sparks: number): void {
+    if (radius > 0) {
+      this.effects.ring(x, z, color, radius);
+      this.events.push({ e: 'ring', x: q(x), z: q(z), r: radius, c: color });
+    }
+    this.effects.burst(x, 1.1, z, new THREE.Color(color), sparks, 5, 0.12);
+    this.events.push({ e: 'burst', x: q(x), z: q(z), c: color, n: sparks });
+  }
+
+  /** Where the elf is aiming (with the same gentle aim assist as shooting). */
+  private aimAt(): THREE.Vector3 {
+    const p = this.player.position;
+    const dir = this.player.aimDirection(this.aim);
+    const alive = this.enemies.all.filter((s) => s.alive && !s.hidden);
+    const assist = this.mode === 'touch' ? TOUCH_AIM_ASSIST_ANGLE : AIM_ASSIST_ANGLE;
+    const i = pickAimTarget(p, dir.x, dir.z, alive, assist, AIM_ASSIST_RANGE);
+    if (i >= 0) dir.set(alive[i].x - p.x, 0, alive[i].z - p.z).normalize();
+    return dir;
+  }
+
+  private castElfSpell(key: SpellKey): void {
+    const rank = this.spellbook.rank(key);
+    if (!rank) return;
+    if (!this.resources.spendMana(spellCost(key, rank))) {
+      this.hud.toast('✦ Not enough mana', 0x8fd0ff);
+      return;
+    }
+    const r = rank - 1;
+    const def = ELF_SPELLS[key];
+    const p = this.player.position;
+    const slot = this.spellbook.slots.indexOf(key) + FIRST_SPELL_SLOT;
+    switch (key) {
+      case 'fire':
+      case 'frost':
+      case 'chain': {
+        const e = this.enchants[key];
+        e.shots = SPELL_POWER[key].shots[r];
+        e.rank = rank;
+        this.hud.actionBar.setSlotCharges(slot, e.shots);
+        this.spellFx(p.x, p.z, def.color, 1.6, 18);
+        this.sfx.powerUp();
+        break;
+      }
+      case 'volley': {
+        const dir = this.aimAt();
+        this.player.faceShot(dir);
+        this.invisible = 0;
+        for (const d of spreadDirections(dir.x, dir.z, SPELL_POWER.volley.arrows[r], SPELL_POWER.volley.spread)) {
+          this.arrows.fire(p.x + d.x * 0.6, p.z + d.z * 0.6, d, true);
+        }
+        this.spellFx(p.x + dir.x * 1.5, p.z + dir.z * 1.5, def.color, 0, 24);
+        this.sfx.twang();
+        this.sfx.burst();
+        break;
+      }
+      case 'roots': {
+        const dir = this.aimAt();
+        const P = SPELL_POWER.roots;
+        // Where the roots burst up: ahead of the elf, short of any wall.
+        const t = walkMap().raycast(p.x, p.z, p.x + dir.x * P.ahead, p.z + dir.z * P.ahead) ?? 1;
+        const cx = p.x + dir.x * P.ahead * t;
+        const cz = p.z + dir.z * P.ahead * t;
+        this.enemies.stunAround(cx, cz, P.radius[r], P.seconds[r]);
+        this.spellFx(cx, cz, def.color, P.radius[r], 36);
+        this.sfx.calm();
+        break;
+      }
+      case 'nova': {
+        const P = SPELL_POWER.nova;
+        for (const s of this.enemies.stunAround(p.x, p.z, P.radius[r], P.seconds[r])) this.damage(s, s.x - p.x, s.z - p.z, P.damage[r]);
+        this.spellFx(p.x, p.z, def.color, P.radius[r], 40);
+        this.sfx.burst();
+        break;
+      }
+      case 'bloom':
+        this.bloom = { left: SPELL_POWER.bloom.seconds, rate: SPELL_POWER.bloom.heal[r] / SPELL_POWER.bloom.seconds };
+        this.spellFx(p.x, p.z, def.color, 2.2, 24);
+        this.sfx.spring();
+        break;
+      case 'bark':
+        this.bark = { left: SPELL_POWER.bark.seconds, reduce: SPELL_POWER.bark.reduce[r] };
+        this.spellFx(p.x, p.z, def.color, 1.8, 24);
+        this.sfx.land();
+        break;
+    }
+    this.hud.toast(`${def.icon} ${spellTitle(key, rank)}`, def.color);
+  }
+
+  /** Healing Bloom heals over time; Bark Skin wears off. */
+  private updateBlessings(dt: number): void {
+    if (this.bloom.left > 0) {
+      const before = Math.floor(this.health);
+      this.bloom.left = Math.max(0, this.bloom.left - dt);
+      this.health = Math.min(MAX_HEALTH, this.health + this.bloom.rate * dt);
+      if (Math.floor(this.health) !== before) this.hud.setHealth(this.health);
+      if (Math.floor(this.time * 3) !== Math.floor((this.time - dt) * 3)) {
+        const p = this.player.position;
+        this.effects.burst(p.x, 1, p.z, new THREE.Color(ELF_SPELLS.bloom.color), 6, 2, 0.1);
+      }
+    }
+    if (this.bark.left > 0) this.bark.left = Math.max(0, this.bark.left - dt);
   }
 
   /** Opens the exit door. */

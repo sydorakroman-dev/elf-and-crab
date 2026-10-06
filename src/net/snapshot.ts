@@ -12,6 +12,8 @@ export type GameState = 'ready' | 'playing' | 'paused' | 'over' | 'won';
 
 export { ENEMY_KIND_LIST as SLIME_KIND_CODES } from '../game/enemyKinds';
 export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart'] as const;
+/** Pickup codes on the wire: the power-ups (0–4), then loot. Append only. */
+export const PICKUP_CODES = [...POWER_CODES, 'gold', 'book'] as const;
 
 /** Any enemy: see EnemyTuple in game/enemies.ts. */
 export type SlimeTuple = [number, number, number, number, number, number, number, number, number, number, number, number, number];
@@ -80,6 +82,12 @@ export type GameEvent =
   /** A coloured ring (an orc shaman healing its friends). */
   | { e: 'ring'; x: number; z: number; r: number; c: number }
   | { e: 'door' }
+  /** A coloured burst of sparks (an elf spell). */
+  | { e: 'burst'; x: number; z: number; c: number; n: number }
+  /** Loot picked up: k 0 gold (n coins), 1 a spell book (t: what it taught). */
+  | { e: 'loot'; k: number; x: number; z: number; n: number; t?: string }
+  /** Chest `i` (in the level's list) was opened. */
+  | { e: 'chest'; i: number }
   /** A Rune Seal answer: right (1) or wrong (0); done 1 when the seal breaks. */
   | { e: 'riddle'; ok: number; done?: number };
 
@@ -115,6 +123,10 @@ export interface Snapshot {
   health: number;
   maxHealth: number;
   score: number;
+  /** The party's gold. */
+  gold?: number;
+  /** Chests opened so far (bit i: chest i). */
+  ch?: number;
   /** [power, secondsLeft] */
   powers: [number, number][];
   /** Familiar spell cooldowns: [spell index, seconds left]. */

@@ -285,7 +285,23 @@ export class FamiliarGame {
           break;
         case 'door':
           this.sfx.door();
-          this.hud.popups.toast('↑ The elf can head through the north door', 0xffe0a0);
+          this.hud.popups.toast('↑ The exit door is open', 0xffe0a0);
+          break;
+        case 'burst':
+          this.effects.burst(ev.x, 1.1, ev.z, new THREE.Color(ev.c), ev.n, 5, 0.12);
+          break;
+        case 'loot':
+          if (ev.k === 0) {
+            this.numbers.show(ev.n, ev.x, 1.6, ev.z, 'gold');
+            this.sfx.coin();
+          } else {
+            this.effects.burst(ev.x, 1.2, ev.z, new THREE.Color(0xc79bff), 30, 6, 0.14);
+            this.sfx.book();
+          }
+          break;
+        case 'chest':
+          this.sfx.chest();
+          this.hud.popups.toast('🧰 A treasure chest!', 0xffd34d);
           break;
         case 'twang':
           break; // the bow is the elf's sound; keep the tablet calmer
@@ -390,6 +406,8 @@ export class FamiliarGame {
   }
 
   private apply(s: Snapshot, dt: number): void {
+    // Chests the hero's side has opened.
+    for (let i = 0; i < this.dungeon.level.chests.length; i++) if ((s.ch ?? 0) & (1 << i)) this.dungeon.openChest(i);
     const e = this.dungeon.level.exit;
     const bossHall = this.dungeon.level.halls.find((hh) => hh.kind === 'boss');
     this.minimap.setVisible(!s.practice && (s.state === 'playing' || s.state === 'paused'));

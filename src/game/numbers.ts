@@ -37,8 +37,8 @@ export class DamageNumbers {
     }
   }
 
-  /** Shows `amount` at (x, y, z). `kind`: 'hit' (enemy), 'big' (heavy hit on an enemy), 'hurt' (the elf). */
-  show(amount: number, x: number, y: number, z: number, kind: 'hit' | 'big' | 'hurt' = 'hit'): void {
+  /** Shows `amount` at (x, y, z). `kind`: 'hit' (enemy), 'big' (heavy hit on an enemy), 'hurt' (the elf), 'gold' (+coins). */
+  show(amount: number, x: number, y: number, z: number, kind: 'hit' | 'big' | 'hurt' | 'gold' = 'hit'): void {
     if (!this.nums.length || amount <= 0) return;
     const n = this.nums[this.next];
     this.next = (this.next + 1) % this.nums.length;
@@ -49,13 +49,13 @@ export class DamageNumbers {
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 8;
     ctx.strokeStyle = 'rgba(20, 10, 10, 0.9)';
-    const text = String(Math.round(amount));
+    const text = kind === 'gold' ? `+${Math.round(amount)}` : String(Math.round(amount));
     ctx.strokeText(text, 64, 34);
-    ctx.fillStyle = kind === 'hurt' ? '#ff5050' : kind === 'big' ? '#ffb02e' : '#ffffff';
+    ctx.fillStyle = kind === 'hurt' ? '#ff5050' : kind === 'big' ? '#ffb02e' : kind === 'gold' ? '#ffd24a' : '#ffffff';
     ctx.fillText(text, 64, 34);
     n.texture.needsUpdate = true;
     n.sprite.position.set(x + (Math.random() - 0.5) * 0.4, y, z);
-    n.size = kind === 'hit' ? 0.9 : 1.3;
+    n.size = kind === 'hit' || kind === 'gold' ? 0.9 : 1.3;
     n.vx = (Math.random() - 0.5) * 0.8;
     n.age = 0;
     n.sprite.visible = true;

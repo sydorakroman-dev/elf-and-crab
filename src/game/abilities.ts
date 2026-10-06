@@ -69,6 +69,13 @@ export class Resources {
     return a.kind === 'skill' ? this.stamina >= a.cost : this.mana >= a.cost;
   }
 
+  /** Pays `cost` mana for a spell if there's enough; returns whether it was paid. */
+  spendMana(cost: number): boolean {
+    if (this.mana < cost) return false;
+    this.mana -= cost;
+    return true;
+  }
+
   /** Pays for an ability if there's enough; returns whether it was paid. */
   spend(id: AbilityId): boolean {
     if (!this.canAfford(id)) return false;

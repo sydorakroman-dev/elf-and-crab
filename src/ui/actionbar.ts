@@ -1,5 +1,20 @@
 import { ABILITIES, DEFAULT_KEYS, DEFAULT_SLOTS, RESOURCES, bindKey, keyLabel, loadKeys, saveKeys, type AbilityId, type Resources } from '../game/abilities';
 
+/** What a slot shows: an ability (skills) or a learned spell. */
+export interface SlotDef {
+  icon: string;
+  name: string;
+  description: string;
+  kind: 'skill' | 'spell';
+  /** Stamina charges (skills) or mana (spells). */
+  cost: number;
+  /** Spell rank (I–III), shown as pips. */
+  rank?: number;
+}
+
+const abilitySlot = (id: AbilityId): SlotDef => ({ ...ABILITIES[id], description: ABILITIES[id].description });
+const EMPTY_TITLE = 'Empty: read a spell book to learn a spell';
+
 /**
  * The elf's resources and abilities on screen: a mana bar and stamina pips (under the health
  * bar), the nine-slot action bar along the bottom (tap a slot on touch screens), and the
@@ -18,6 +33,8 @@ export class ActionBar {
   private readonly pips: HTMLElement;
   private readonly panel: HTMLElement;
   private lastKey = '';
+  /** What's in each of the nine slots. */
+  private readonly defs: (SlotDef | null)[] = DEFAULT_SLOTS.map((id) => (id ? abilitySlot(id) : null));
 
   constructor(hudLeft: HTMLElement, root: HTMLElement, touch: boolean) {
     hudLeft.insertAdjacentHTML(
@@ -31,16 +48,11 @@ export class ActionBar {
     this.manaText = hudLeft.querySelector('.mana-text')!;
     this.pips = hudLeft.querySelector('.stamina')!;
 
-    const slotHtml = DEFAULT_SLOTS.map((id, i) => {
-      const a = id ? ABILITIES[id] : null;
-      const cost = a ? `<span class="slot-cost ${a.kind}">${a.kind === 'skill' ? '⚡'.repeat(a.cost) : a.cost}</span>` : '';
-      return `<button type="button" class="slot${a ? '' : ' empty'}" data-slot="${i}" title="${a ? `${a.name} — ${a.description}` : 'Empty: spells from the magic book go here'}">
-          <span class="slot-key"></span><span class="slot-icon">${a ? a.icon : ''}</span>${cost}
-        </button>`;
-    }).join('');
+    const slotHtml = this.defs.map((_, i) => `<button type="button" class="slot" data-slot="${i}"></button>`).join('');
     root.insertAdjacentHTML('beforeend', `<div class="action-bar${touch ? ' touch-bar' : ''}" hidden>${slotHtml}</div>`);
     this.bar = root.querySelector('.action-bar')!;
     this.slots = [...this.bar.querySelectorAll<HTMLElement>('.slot')];
+    this.defs.forEach((_, i) => this.renderSlot(i));
     this.bar.addEventListener('pointerdown', (e) => {
       const slot = (e.target as HTMLElement).closest<HTMLElement>('[data-slot]');
       if (!slot) return;
@@ -106,13 +118,48 @@ export class ActionBar {
         const filling = i === r.stamina ? ` style="--p:${r.staminaProgress}"` : '';
         return `<span class="pip${full ? ' full' : ''}${filling ? ' filling' : ''}"${filling}></span>`;
       }).join('');
-      DEFAULT_SLOTS.forEach((id, i) => this.slots[i].classList.toggle('poor', !!id && !r.canAfford(id)));
     }
+    this.defs.forEach((d, i) => {
+      const poor = !!d && (d.kind === 'skill' ? r.stamina < d.cost : r.mana < d.cost);
+      if (this.slots[i].classList.contains('poor') !== poor) this.slots[i].classList.toggle('poor', poor);
+    });
+  }
+
+  /** Puts a learned spell (or nothing) in slot `i`. */
+  setSlot(i: number, def: SlotDef | null): void {
+    if (i < 0 || i >= this.defs.length) return;
+    this.defs[i] = def;
+    this.renderSlot(i);
+    if (!def) this.slots[i].classList.remove('poor');
+    if (!this.panel.hidden) this.renderPanel();
+  }
+
+  /** A quick glow on slot `i` (just learned / ranked up). */
+  flash(i: number): void {
+    const s = this.slots[i];
+    if (!s) return;
+    s.classList.remove('learned');
+    void s.offsetWidth;
+    s.classList.add('learned');
+  }
+
+  private renderSlot(i: number): void {
+    const d = this.defs[i];
+    const s = this.slots[i];
+    const cost = d ? `<span class="slot-cost ${d.kind}">${d.kind === 'skill' ? '⚡'.repeat(d.cost) : d.cost}</span>` : '';
+    const rank = d?.rank ? `<span class="slot-rank">${'•'.repeat(d.rank)}</span>` : '';
+    s.className = `slot${d ? '' : ' empty'}`;
+    s.title = d ? `${d.name} — ${d.description}` : EMPTY_TITLE;
+    s.innerHTML = `<span class="slot-key">${keyLabel(this.keys[i])}</span><span class="slot-icon">${d?.icon ?? ''}</span>${cost}${rank}`;
   }
 
   /** A little counter on an ability's slot (charges left; 0 hides it). */
   setCharges(id: AbilityId, n: number): void {
-    const i = DEFAULT_SLOTS.indexOf(id);
+    this.setSlotCharges(DEFAULT_SLOTS.indexOf(id), n);
+  }
+
+  /** A little counter on slot `i` (charges left; 0 hides it). */
+  setSlotCharges(i: number, n: number): void {
     if (i < 0) return;
     const slot = this.slots[i];
     let badge = slot.querySelector<HTMLElement>('.slot-charges');
@@ -140,8 +187,8 @@ export class ActionBar {
   }
 
   private renderPanel(): void {
-    this.panel.querySelector('.keys-list')!.innerHTML = DEFAULT_SLOTS.map((id, i) => {
-      const name = id ? `${ABILITIES[id].icon} ${ABILITIES[id].name}` : '<span class="keys-empty">empty (spells)</span>';
+    this.panel.querySelector('.keys-list')!.innerHTML = this.defs.map((d, i) => {
+      const name = d ? `${d.icon} ${d.name}` : '<span class="keys-empty">empty (spells)</span>';
       return `<button type="button" class="keys-row" data-bind="${i}"><span>Slot ${i + 1} · ${name}</span><kbd>${keyLabel(this.keys[i])}</kbd></button>`;
     }).join('');
     this.renderKeys();
