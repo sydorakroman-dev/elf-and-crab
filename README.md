@@ -72,7 +72,21 @@ first free slot (4–9), or raises one you know a rank (I → II → III); once 
 | 💚 Healing Bloom | 40 | heals 30 over 5 s |
 | 🌳 Bark Skin | 35 | take 40% less damage for 6 s |
 
-Gold is for the merchant between levels (coming next).
+### Gear, the bag and the merchant
+
+Monsters, guardians and chests also drop **gear** — common (white), rare (blue) or epic (purple), with more and
+bigger bonuses the rarer it is and the later the level — and **potions**. Everything goes into the party's
+**16-slot bag** (**I** or **B**, or the 🎒 button; on the tablet too). Tap an item to see it (compared with what's
+worn), then equip it, drink it or drop it. **Q** / **E** drink a health / mana potion.
+
+| Slot | Can roll |
+| --- | --- |
+| 🏹 Bow · 🦺 Armor · 👢 Boots · 📿 Amulet · 💍 Ring (the elf) | arrow damage, attack speed, critical shots, max health, armor, move speed, mana and stamina regen |
+| 🎀 Collar · 🍀 Charm (the familiar) | familiar damage, shorter familiar cooldowns, familiar speed |
+
+Through the exit door you reach the **merchant's camp**: four pieces of gear, two potions and a spell book for sale,
+and anything in the bag sells for 30% of its worth. Both players can buy from the shared purse; the elf decides when
+to move on. The bag pauses a solo game; with a familiar along, the game keeps going.
 
 ## The run
 

@@ -1,4 +1,7 @@
 import { FAMILIAR_KINDS, SPELL_IDS, type FamiliarKind, type SpellId } from '../game/familiars';
+import { MAX_ANSWER } from '../game/riddles';
+import { GEAR_SLOTS, type GearSlot } from '../game/items';
+import type { InvOp } from '../game/inventory';
 
 /**
  * Wire protocol shared by the browser and the Node server. The server only manages rooms and
@@ -109,15 +112,24 @@ export type FamiliarCommand =
   /** Practice room only: start a Rune Seal to try. */
   | { type: 'riddle' }
   /** Pick (or switch) creature. */
-  | { type: 'choose'; kind: FamiliarKind };
+  | { type: 'choose'; kind: FamiliarKind }
+  /** Something with the shared bag (equip, drink, buy…). */
+  | { type: 'inv'; req: InvOp };
 
 /** Validates a familiar command; null if malformed. */
 export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
   if (!isObject(v)) return null;
   if (v.type === 'spell' && (SPELL_IDS as unknown[]).includes(v.id)) return { type: 'spell', id: v.id as SpellId };
   if (v.type === 'choose' && (FAMILIAR_KINDS as unknown[]).includes(v.kind)) return { type: 'choose', kind: v.kind as FamiliarKind };
-  if (v.type === 'answer' && Number.isInteger(v.value) && (v.value as number) >= 0 && (v.value as number) <= 10) return { type: 'answer', value: v.value as number };
+  if (v.type === 'answer' && Number.isInteger(v.value) && (v.value as number) >= 0 && (v.value as number) <= MAX_ANSWER) return { type: 'answer', value: v.value as number };
   if (v.type === 'riddle') return { type: 'riddle' };
+  if (v.type === 'inv' && isObject(v.req)) {
+    const r = v.req;
+    const index = Number.isInteger(r.i) && (r.i as number) >= 0 && (r.i as number) < 32 ? (r.i as number) : -1;
+    if ((r.op === 'equip' || r.op === 'use' || r.op === 'drop' || r.op === 'sell' || r.op === 'buy') && index >= 0) return { type: 'inv', req: { op: r.op, i: index } };
+    if (r.op === 'unequip' && (GEAR_SLOTS as unknown[]).includes(r.slot)) return { type: 'inv', req: { op: 'unequip', slot: r.slot as GearSlot } };
+    return null;
+  }
   if (v.type === 'parade' && typeof v.kind === 'string' && v.kind.length <= 24) return { type: 'parade', kind: v.kind }; // the hero checks it's a real monster
   if (v.type === 'move' && Number.isFinite(v.x) && Number.isFinite(v.z)) return { type: 'move', x: v.x as number, z: v.z as number };
   if (v.type === 'steer' && Number.isFinite(v.dx) && Number.isFinite(v.dz)) {

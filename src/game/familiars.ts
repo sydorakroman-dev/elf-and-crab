@@ -161,10 +161,10 @@ export class SpellCooldowns {
     return Math.max(0, this.left.get(id) ?? 0);
   }
 
-  /** Starts the cooldown if the spell is ready; returns whether it was cast. */
-  tryCast(id: SpellId): boolean {
+  /** Starts the cooldown (× `scale`, from gear) if the spell is ready; returns whether it was cast. */
+  tryCast(id: SpellId, scale = 1): boolean {
     if (!this.ready(id)) return false;
-    this.left.set(id, SPELLS[id].cooldown);
+    this.left.set(id, SPELLS[id].cooldown * scale);
     return true;
   }
 

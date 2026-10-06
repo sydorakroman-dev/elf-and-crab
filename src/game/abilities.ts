@@ -51,13 +51,17 @@ export class Resources {
     this.staminaProgress = 0;
   }
 
+  /** Extra mana per second, and faster stamina (+share), from gear. */
+  manaBonus = 0;
+  staminaBonus = 0;
+
   tick(dt: number): void {
-    this.mana = Math.min(RESOURCES.maxMana, this.mana + RESOURCES.manaRegen * dt);
+    this.mana = Math.min(RESOURCES.maxMana, this.mana + (RESOURCES.manaRegen + this.manaBonus) * dt);
     if (this.stamina >= RESOURCES.maxStamina) {
       this.staminaProgress = 0;
       return;
     }
-    this.staminaProgress += dt / RESOURCES.staminaEvery;
+    this.staminaProgress += (dt * (1 + this.staminaBonus)) / RESOURCES.staminaEvery;
     while (this.staminaProgress >= 1 && this.stamina < RESOURCES.maxStamina) {
       this.staminaProgress -= 1;
       this.stamina++;
@@ -92,7 +96,7 @@ const STORAGE_KEY = 'elf-and-crab:keys';
 export const DEFAULT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
 
 /** Keys that are already taken by movement and the menus. */
-export const RESERVED_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'KeyM', 'Enter', 'NumpadEnter']);
+export const RESERVED_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'KeyM', 'Enter', 'NumpadEnter', 'KeyI', 'KeyB', 'KeyQ', 'KeyE']);
 
 /** "Digit1" → "1", "KeyQ" → "Q", "Space" → "Space". */
 export function keyLabel(code: string): string {
@@ -105,7 +109,9 @@ export function keyLabel(code: string): string {
 export function loadKeys(storage: Pick<Storage, 'getItem'> | null = safeStorage()): string[] {
   try {
     const saved = JSON.parse(storage?.getItem(STORAGE_KEY) ?? 'null') as unknown;
-    if (Array.isArray(saved) && saved.length === 9 && saved.every((k) => typeof k === 'string' && k.length < 32)) return saved as string[];
+    // Keys taken by something else since they were saved fall back to the default for that slot.
+    if (Array.isArray(saved) && saved.length === 9 && saved.every((k) => typeof k === 'string' && k.length < 32))
+      return (saved as string[]).map((k, i) => (RESERVED_KEYS.has(k) && !(saved as string[]).includes(DEFAULT_KEYS[i]) ? DEFAULT_KEYS[i] : k));
   } catch {
     // fall through to the defaults
   }

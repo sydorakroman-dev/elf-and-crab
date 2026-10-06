@@ -673,3 +673,88 @@ kbd {
   100% { box-shadow: 0 0 0 14px rgba(199, 155, 255, 0); transform: scale(1); }
 }
 .gold { font-weight: 800; color: #ffd24a; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+
+/* The bag (and the merchant): gear slots, the 16-slot bag, details of what's picked. */
+.bag-panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(860px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  z-index: 20;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(34, 26, 40, 0.97), rgba(20, 15, 24, 0.97));
+  border: 1px solid rgba(255, 220, 160, 0.25);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  color: #f4ead8;
+  font: 14px/1.35 system-ui, sans-serif;
+}
+.bag-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.bag-head h2 { margin: 0; font: 700 22px/1 'Cinzel', Georgia, serif; letter-spacing: 0.04em; }
+.bag-gold { font-weight: 800; color: #ffd24a; }
+.bag-close { margin-left: auto; width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: inherit; font-size: 16px; cursor: pointer; }
+.bag-body { display: grid; grid-template-columns: minmax(200px, 1fr) auto minmax(0, 1fr); gap: 14px; align-items: start; }
+.bag-panel:not(:has(.shop)) .bag-body { grid-template-columns: minmax(200px, 1fr) auto; }
+.bag-body h3 { margin: 6px 0 4px; font: 700 11px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.6; }
+.gear { display: flex; flex-direction: column; gap: 5px; }
+.gear-cell, .bag-cell, .shop-row {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.gear-cell { display: flex; align-items: center; gap: 8px; padding: 5px 8px; text-align: left; border-left: 3px solid var(--rc, rgba(255, 255, 255, 0.14)); }
+.gear-cell.empty { opacity: 0.55; }
+.gc-icon { font-size: 20px; }
+.gc-text { display: flex; flex-direction: column; min-width: 0; }
+.gc-text b { font-size: 11px; opacity: 0.7; font-weight: 600; }
+.gc-text i { font-style: normal; color: var(--rc, inherit); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bag-grid { display: grid; grid-template-columns: repeat(4, 52px); grid-auto-rows: 52px; gap: 6px; }
+.bag-cell { font-size: 24px; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--rc, transparent) 70%, transparent); }
+.bag-cell.empty { cursor: default; opacity: 0.45; }
+.gear-cell.on, .bag-cell.on, .shop-row.on { outline: 2px solid #ffd24a; outline-offset: 1px; }
+.bag-stats { margin: 6px 0 0; font-size: 12px; opacity: 0.8; }
+.shop-list { display: flex; flex-direction: column; gap: 5px; }
+.shop-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; text-align: left; border-left: 3px solid var(--rc); }
+.shop-row.sold { opacity: 0.35; cursor: default; }
+.shop-row.poor .sr-price { color: #ff7a7a; }
+.sr-icon { font-size: 20px; }
+.sr-name { flex: 1; min-width: 0; color: var(--rc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-price { font-weight: 800; color: #ffd24a; }
+.shop-go { margin-top: 10px; width: 100%; padding: 12px; border: 0; border-radius: 12px; background: #ffc24a; color: #2a1c08; font: 800 15px/1 system-ui, sans-serif; cursor: pointer; }
+.shop-wait { opacity: 0.7; font-size: 13px; }
+.bag-detail { margin-top: 12px; padding: 10px 12px; min-height: 64px; border-radius: 12px; background: rgba(0, 0, 0, 0.25); }
+.bag-detail .hint { margin: 0; opacity: 0.7; }
+.bd-title { display: flex; align-items: center; gap: 8px; font-size: 17px; color: var(--rc); }
+.bd-sub { margin: 2px 0 6px; font-size: 12px; opacity: 0.7; }
+.bag-detail ul { margin: 0 0 8px; padding-left: 18px; }
+.bag-detail li.up { color: #8dff9a; }
+.bag-detail li.down { color: #ff8a8a; }
+.bd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bd-actions button { padding: 8px 14px; border-radius: 10px; border: 0; background: #ffc24a; color: #2a1c08; font: 700 14px/1 system-ui, sans-serif; cursor: pointer; }
+.bd-actions button.ghost { background: rgba(255, 255, 255, 0.1); color: inherit; }
+.bd-actions button:disabled { opacity: 0.4; cursor: default; }
+.bag-btn {
+  position: fixed;
+  top: calc(240px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(10, 8, 14, 0.6);
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 6;
+}
+@media (max-width: 700px), (max-height: 500px) {
+  .bag-btn { top: calc(172px + env(safe-area-inset-top, 0px)); width: 42px; height: 42px; font-size: 20px; }
+  .bag-body { grid-template-columns: 1fr; }
+  .bag-panel:not(:has(.shop)) .bag-body { grid-template-columns: 1fr; }
+  .bag-grid { grid-template-columns: repeat(8, 1fr); grid-auto-rows: 44px; }
+}

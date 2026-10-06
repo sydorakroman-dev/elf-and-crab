@@ -3,6 +3,7 @@ import type { Point } from './combat';
 import { POWER_UPS, type PowerUpType } from './powerups';
 import { PICKUP_CODES, q, type PickupTuple } from '../net/snapshot';
 import { glowTexture } from '../util/glow';
+import type { BagEntry } from './items';
 
 const LIFETIME = 14; // power-ups; loot stays until picked up
 const BLINK_AT = 3; // seconds left when it starts blinking
@@ -12,7 +13,8 @@ const MAGNET_RADIUS = 3.5;
 const MAGNET_SPEED = 14;
 
 /** Anything lying on the floor to pick up: a power-up, or loot (gold, a spell book). */
-export type PickupKind = PowerUpType | 'gold' | 'book';
+export type LootKind = 'gold' | 'book' | 'item_common' | 'item_rare' | 'item_epic' | 'potion_health' | 'potion_mana';
+export type PickupKind = PowerUpType | LootKind;
 
 export interface Collected {
   type: PickupKind;
@@ -20,18 +22,30 @@ export interface Collected {
   by: number;
   /** Gold in a coin pile. */
   amount: number;
+  /** The gear or potion itself (host side). */
+  payload?: BagEntry;
   x: number;
   z: number;
 }
 
-const LOOT_COLORS: Record<'gold' | 'book', number> = { gold: 0xffc93d, book: 0xb78aff };
-const colorOf = (k: PickupKind) => (k === 'gold' || k === 'book' ? LOOT_COLORS[k] : POWER_UPS[k].color);
+const LOOT_COLORS: Record<LootKind, number> = {
+  gold: 0xffc93d,
+  book: 0xb78aff,
+  item_common: 0xf2ecdc,
+  item_rare: 0x5ea8ff,
+  item_epic: 0xc77dff,
+  potion_health: 0xff4d5e,
+  potion_mana: 0x5ea8ff,
+};
+const isLoot = (k: PickupKind): k is LootKind => k in LOOT_COLORS;
+const colorOf = (k: PickupKind) => (isLoot(k) ? LOOT_COLORS[k] : POWER_UPS[k].color);
 const FLOAT_HEIGHT = 1.1;
 
 interface Pickup {
   id: number;
   type: PickupKind;
   amount: number;
+  payload?: BagEntry;
   group: THREE.Group;
   icon: THREE.Object3D;
   life: number;
@@ -150,16 +164,56 @@ export class Pickups {
       return g;
     };
 
-    this.icons = { multishot, rapid, pierce, shield, heart, gold, book };
+    // Gear: a leather pouch with a beam of light in its rarity's colour.
+    const pouchMat = new THREE.MeshStandardMaterial({ color: 0x9a6438, roughness: 0.7, flatShading: true });
+    const item = (color: number) => () => {
+      const g = new THREE.Group();
+      const pouch = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), pouchMat);
+      pouch.scale.y = 0.85;
+      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.05, 5, 10).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }));
+      tie.position.y = 0.26;
+      const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.3, 4, 10, 1, true).translate(0, 1.4, 0),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      );
+      g.add(pouch, tie, beam);
+      return g;
+    };
+    // Potions: a round bottle with a cork.
+    const glass = (color: number) => () => {
+      const g = new THREE.Group();
+      const bottle = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5, roughness: 0.15, transparent: true, opacity: 0.85 }));
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.22, 8), new THREE.MeshStandardMaterial({ color: 0xdff4ff, roughness: 0.1, transparent: true, opacity: 0.7 }));
+      neck.position.y = 0.32;
+      const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.1, 8), new THREE.MeshStandardMaterial({ color: 0x9a6438 }));
+      cork.position.y = 0.46;
+      g.add(bottle, neck, cork);
+      return g;
+    };
+
+    this.icons = {
+      multishot,
+      rapid,
+      pierce,
+      shield,
+      heart,
+      gold,
+      book,
+      item_common: item(LOOT_COLORS.item_common),
+      item_rare: item(LOOT_COLORS.item_rare),
+      item_epic: item(LOOT_COLORS.item_epic),
+      potion_health: glass(LOOT_COLORS.potion_health),
+      potion_mana: glass(LOOT_COLORS.potion_mana),
+    };
   }
 
   /** Power-ups on the floor (loot doesn't count). */
   get count(): number {
-    return this.items.filter((p) => p.type !== 'gold' && p.type !== 'book').length;
+    return this.items.filter((p) => !isLoot(p.type)).length;
   }
 
   /** Puts a pickup on the floor; loot (gold, books) never expires. Returns its id. */
-  spawn(type: PickupKind, x: number, z: number, id = this.nextId++, amount = 0): number {
+  spawn(type: PickupKind, x: number, z: number, id = this.nextId++, amount = 0, payload?: BagEntry): number {
     const color = colorOf(type);
     const group = new THREE.Group();
     group.position.set(x, 0, z);
@@ -180,8 +234,7 @@ export class Pickups {
     group.scale.setScalar(0.01);
     this.group.add(group);
     if (type === 'gold') glow.scale.setScalar(2);
-    const loot = type === 'gold' || type === 'book';
-    this.items.push({ id, type, amount, group, icon, life: loot ? Infinity : LIFETIME, age: 0 });
+    this.items.push({ id, type, amount, payload, group, icon, life: isLoot(type) ? Infinity : LIFETIME, age: 0 });
     return id;
   }
 
@@ -219,7 +272,8 @@ export class Pickups {
    * Animates, expires, and returns what was collected this step: the type, and which of
    * `collectors` (the elf first, then the familiar) touched it.
    */
-  update(dt: number, time: number, collectors: readonly Point[]): Collected[] {
+  /** `canTake`: whether a pickup can be taken now (gear and potions wait while the bag is full). */
+  update(dt: number, time: number, collectors: readonly Point[], canTake: (type: PickupKind) => boolean = () => true): Collected[] {
     const collected: Collected[] = [];
     for (let i = this.items.length - 1; i >= 0; i--) {
       const p = this.items[i];
@@ -243,9 +297,9 @@ export class Pickups {
           gp.z += ((best.z - gp.z) / bestD) * step;
         }
       }
-      const by = p.age > 0.25 ? collectors.findIndex((c) => Math.hypot(gp.x - c.x, gp.z - c.z) < PICKUP_RADIUS) : -1;
+      const by = p.age > 0.25 && canTake(p.type) ? collectors.findIndex((c) => Math.hypot(gp.x - c.x, gp.z - c.z) < PICKUP_RADIUS) : -1;
       if (by >= 0) {
-        collected.push({ type: p.type, by, amount: p.amount, x: gp.x, z: gp.z });
+        collected.push({ type: p.type, by, amount: p.amount, payload: p.payload, x: gp.x, z: gp.z });
         this.group.remove(p.group);
         this.items.splice(i, 1);
         continue;

@@ -45,6 +45,8 @@ export class Player {
   readonly mode: InputMode;
   /** Fires when play starts or stops (pointer lock gained/lost, or touch play toggled). */
   onActiveChange?: (active: boolean) => void;
+  /** Walking speed multiplier (boots and other gear). */
+  speedScale = 1;
   onDash?: () => void;
   /** Asked before each dash; return false to refuse (e.g. out of stamina — it pays for the dash). */
   canDash?: () => boolean;
@@ -257,7 +259,7 @@ export class Player {
       this.velocity.copy(this.dashDir).multiplyScalar(DASH_SPEED);
     } else {
       const slow = this.slowTimer > 0 ? this.slowFactor : 1;
-      const speed = wlen > 0 ? (WALK_SPEED * magnitude * slow) / wlen : 0;
+      const speed = wlen > 0 ? (WALK_SPEED * this.speedScale * magnitude * slow) / wlen : 0;
       const blend = 1 - Math.exp(-14 * dt);
       this.velocity.x += (wx * speed - this.velocity.x) * blend;
       this.velocity.z += (wz * speed - this.velocity.z) * blend;
@@ -283,7 +285,7 @@ export class Player {
     g.position.copy(pos);
     g.rotation.y = this.facing;
     const m = this.motion;
-    m.speed = Math.min(groundSpeed, WALK_SPEED);
+    m.speed = Math.min(groundSpeed, WALK_SPEED * this.speedScale);
     m.moveYaw = groundSpeed > 0.3 ? Math.atan2(this.velocity.x, this.velocity.z) : this.facing;
     m.facing = this.facing;
     m.aiming = aiming;

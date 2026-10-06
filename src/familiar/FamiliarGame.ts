@@ -3,6 +3,8 @@ import { Dungeon } from '../world/dungeon';
 import { ROOMS } from '../world/rooms';
 import { generateLevel } from '../world/levelgen';
 import { Minimap } from '../ui/minimap';
+import { InventoryPanel } from '../ui/inventory';
+import type { InvState, StockEntry } from '../game/inventory';
 import { TelegraphRings } from '../game/telegraph';
 import { BeastVisual } from '../game/beastVisual';
 import { ElementalVisual } from '../game/elementalVisual';
@@ -97,6 +99,10 @@ export class FamiliarGame {
   private status: FamiliarStatus = 'connecting';
   private onFrame?: () => void;
   private minimap!: Minimap;
+  private bagPanel!: InventoryPanel;
+  private invState: InvState | null = null;
+  private shopStock: StockEntry[] | null = null;
+  private lastPhase = '';
 
   constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarLink) {
     this.renderer = renderer;
@@ -106,6 +112,19 @@ export class FamiliarGame {
     this.dungeon = new Dungeon(this.scene, ROOMS[0], generateLevel({ ...ROOMS[0], layout: 'practice' }, 1), 1024);
     for (const b of Object.values(bodies)) b.group.visible = false;
     this.minimap = new Minimap(root);
+    this.bagPanel = new InventoryPanel(root, 'familiar');
+    this.bagPanel.onAction = (req) => this.session.send({ type: 'inv', req });
+    root.insertAdjacentHTML('beforeend', '<button type="button" class="bag-btn" data-f-bag hidden title="Bag">🎒</button>');
+    const bagBtn = root.querySelector<HTMLElement>('[data-f-bag]')!;
+    bagBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (this.bagPanel.isOpen) this.bagPanel.close();
+      else {
+        this.bagPanel.update(this.invState, this.shopStock);
+        this.bagPanel.open();
+      }
+    });
 
     const additive = (color: number, opacity: number) =>
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -291,7 +310,10 @@ export class FamiliarGame {
           this.effects.burst(ev.x, 1.1, ev.z, new THREE.Color(ev.c), ev.n, 5, 0.12);
           break;
         case 'loot':
-          if (ev.k === 0) {
+          if (ev.k === 2 && ev.t) {
+            this.hud.popups.toast(ev.t, 0xffd24a);
+            this.sfx.powerUp();
+          } else if (ev.k === 0) {
             this.numbers.show(ev.n, ev.x, 1.6, ev.z, 'gold');
             this.sfx.coin();
           } else {
@@ -406,6 +428,19 @@ export class FamiliarGame {
   }
 
   private apply(s: Snapshot, dt: number): void {
+    // The shared bag and the merchant (opens by itself at the merchant's camp).
+    if (s.inv) this.invState = s.inv;
+    if (s.shop) this.shopStock = s.shop;
+    if (s.phase !== 'shop') this.shopStock = null;
+    if (s.phase !== this.lastPhase) {
+      if (s.phase === 'shop') this.bagPanel.open();
+      else if (this.lastPhase === 'shop') this.bagPanel.close();
+      this.lastPhase = s.phase;
+    }
+    if (s.inv || s.shop || s.phase !== 'shop') this.bagPanel.update(this.invState, this.shopStock);
+    const bagBtn = document.querySelector<HTMLElement>('[data-f-bag]');
+    const showBag = (s.state === 'playing' || s.state === 'paused') && !s.practice;
+    if (bagBtn && bagBtn.hidden === showBag) bagBtn.hidden = !showBag;
     // Chests the hero's side has opened.
     for (let i = 0; i < this.dungeon.level.chests.length; i++) if ((s.ch ?? 0) & (1 << i)) this.dungeon.openChest(i);
     const e = this.dungeon.level.exit;

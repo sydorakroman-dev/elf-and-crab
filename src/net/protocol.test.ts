@@ -51,4 +51,18 @@ describe('parseFamiliarCommand', () => {
     expect(full.dz).toBeCloseTo(0.8);
     expect(parseFamiliarCommand({ type: 'steer', dx: NaN, dz: 0 })).toBeNull();
   });
+
+  it('accepts rune answers up to the biggest sum', () => {
+    expect(parseFamiliarCommand({ type: 'answer', value: 15 })).toEqual({ type: 'answer', value: 15 });
+    expect(parseFamiliarCommand({ type: 'answer', value: 16 })).toBeNull();
+  });
+
+  it('accepts bag requests, rejects malformed ones', () => {
+    expect(parseFamiliarCommand({ type: 'inv', req: { op: 'equip', i: 3 } })).toEqual({ type: 'inv', req: { op: 'equip', i: 3 } });
+    expect(parseFamiliarCommand({ type: 'inv', req: { op: 'unequip', slot: 'collar' } })).toEqual({ type: 'inv', req: { op: 'unequip', slot: 'collar' } });
+    expect(parseFamiliarCommand({ type: 'inv', req: { op: 'buy', i: 2 } })).toEqual({ type: 'inv', req: { op: 'buy', i: 2 } });
+    expect(parseFamiliarCommand({ type: 'inv', req: { op: 'equip', i: -1 } })).toBeNull();
+    expect(parseFamiliarCommand({ type: 'inv', req: { op: 'unequip', slot: 'hat' } })).toBeNull();
+    expect(parseFamiliarCommand({ type: 'inv', req: { op: 'steal', i: 0 } })).toBeNull();
+  });
 });

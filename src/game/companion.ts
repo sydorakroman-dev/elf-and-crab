@@ -33,6 +33,9 @@ export interface CompanionResult {
 export class Companion {
   readonly position = new THREE.Vector3();
   readonly cooldowns = new SpellCooldowns();
+  /** From the familiar's gear: cooldowns × this, speed × that. */
+  cooldownScale = 1;
+  speedScale = 1;
   private readonly bodies: Record<FamiliarKind, FamiliarBody>;
   private readonly velocity = new THREE.Vector3();
   private readonly target = new THREE.Vector3();
@@ -146,7 +149,7 @@ export class Companion {
     // Spells requested since last step.
     for (const id of this.queued) {
       if (this.leap) continue; // can't cast mid-air
-      if (!this.cooldowns.tryCast(id)) continue;
+      if (!this.cooldowns.tryCast(id, this.cooldownScale)) continue;
       result.cast.push(id);
       body.pinch();
       if (id === 'pounce') this.startPounce();
@@ -156,7 +159,7 @@ export class Companion {
     if (this.leap) {
       this.updateLeap(dt, slimes, def.radius, obstacles, result);
     } else {
-      this.walk(dt, def.speed, def.radius, obstacles);
+      this.walk(dt, def.speed * this.speedScale, def.radius, obstacles);
     }
 
     // Bite whatever's within reach, even on the move (not mid-leap).

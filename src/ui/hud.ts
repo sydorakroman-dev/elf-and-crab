@@ -40,7 +40,7 @@ export class Hud {
   private readonly codeEl: HTMLElement;
   private readonly linkEl: HTMLElement;
   private readonly inviteStatus: HTMLElement;
-  private readonly maxHealth: number;
+  private maxHealth: number;
   private readonly startPrompt: HTMLElement;
 
   constructor(root: HTMLElement, maxHealth: number, mode: InputMode, onPlay: () => void, onStart: () => void) {
@@ -300,6 +300,11 @@ export class Hud {
   setBest(best: Best | null): void {
     this.best.hidden = !best;
     if (best) this.best.textContent = `Best: ${best.score} points · wave ${best.wave}`;
+  }
+
+  /** Max health changed (gear): redraws the bar at its new length. */
+  setMaxHealth(max: number): void {
+    this.maxHealth = max;
   }
 
   setScore(score: number): void {

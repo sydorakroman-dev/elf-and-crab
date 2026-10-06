@@ -44,12 +44,14 @@ describe('key bindings', () => {
 
   it('rebinding swaps with a slot that already had the key; movement keys are refused', () => {
     const keys = [...DEFAULT_KEYS];
-    expect(bindKey(keys, 0, 'KeyQ')).toBe(true);
-    expect(keys[0]).toBe('KeyQ');
-    expect(bindKey(keys, 1, 'KeyQ')).toBe(true);
-    expect(keys[1]).toBe('KeyQ');
+    expect(bindKey(keys, 0, 'KeyR')).toBe(true);
+    expect(keys[0]).toBe('KeyR');
+    expect(bindKey(keys, 1, 'KeyR')).toBe(true);
+    expect(keys[1]).toBe('KeyR');
     expect(keys[0]).toBe('Digit2'); // swapped
     expect(bindKey(keys, 2, 'KeyW')).toBe(false);
+    expect(bindKey(keys, 2, 'KeyQ')).toBe(false); // potions
+    expect(bindKey(keys, 2, 'KeyI')).toBe(false); // the bag
     expect(bindKey(keys, 2, 'Space')).toBe(false);
   });
 

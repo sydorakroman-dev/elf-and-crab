@@ -65,7 +65,7 @@ export class ActionBar {
       'beforeend',
       `<div class="keys-panel" data-keys-panel hidden>
          <div class="keys-head"><h2>⚙️ Keys</h2><button type="button" data-keys-close>✕</button></div>
-         <p class="keys-note">Click a slot, then press the key you want. Space always dashes; WASD, Esc, M and Enter are taken.</p>
+         <p class="keys-note">Click a slot, then press the key you want. Space always dashes; WASD, Esc, M, Enter, I / B (bag) and Q / E (potions) are taken.</p>
          <div class="keys-list"></div>
          <button type="button" class="keys-reset" data-keys-reset>Reset to 1–9</button>
        </div>`,

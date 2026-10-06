@@ -1,3 +1,4 @@
+import type { InvState, StockEntry } from '../game/inventory';
 /**
  * World snapshots streamed from the hero (who runs the game) to the familiar's tablet, plus the
  * interpolation the tablet uses to render smoothly between them. Pure; unit tested.
@@ -13,7 +14,7 @@ export type GameState = 'ready' | 'playing' | 'paused' | 'over' | 'won';
 export { ENEMY_KIND_LIST as SLIME_KIND_CODES } from '../game/enemyKinds';
 export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart'] as const;
 /** Pickup codes on the wire: the power-ups (0–4), then loot. Append only. */
-export const PICKUP_CODES = [...POWER_CODES, 'gold', 'book'] as const;
+export const PICKUP_CODES = [...POWER_CODES, 'gold', 'book', 'item_common', 'item_rare', 'item_epic', 'potion_health', 'potion_mana'] as const;
 
 /** Any enemy: see EnemyTuple in game/enemies.ts. */
 export type SlimeTuple = [number, number, number, number, number, number, number, number, number, number, number, number, number];
@@ -84,7 +85,7 @@ export type GameEvent =
   | { e: 'door' }
   /** A coloured burst of sparks (an elf spell). */
   | { e: 'burst'; x: number; z: number; c: number; n: number }
-  /** Loot picked up: k 0 gold (n coins), 1 a spell book (t: what it taught). */
+  /** Loot picked up: k 0 gold (n coins), 1 a spell book (t: what it taught), 2 gear or a potion (t: what). */
   | { e: 'loot'; k: number; x: number; z: number; n: number; t?: string }
   /** Chest `i` (in the level's list) was opened. */
   | { e: 'chest'; i: number }
@@ -127,6 +128,10 @@ export interface Snapshot {
   gold?: number;
   /** Chests opened so far (bit i: chest i). */
   ch?: number;
+  /** The party's gear and bag (sent when it changes). */
+  inv?: InvState;
+  /** The merchant's wares (while at the merchant's camp). */
+  shop?: StockEntry[];
   /** [power, secondsLeft] */
   powers: [number, number][];
   /** Familiar spell cooldowns: [spell index, seconds left]. */

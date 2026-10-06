@@ -217,14 +217,15 @@ export const ROOMS: RoomDef[] = [
 ];
 
 
-/** ready: in the first level, waiting for the hero to start · fight · cleared (exit open) · transition (walking through). */
-export type RunPhase = 'ready' | 'fight' | 'cleared' | 'transition';
+/** ready: in the first level, waiting for the hero to start · fight · cleared (exit open) · shop (the merchant, between levels) · transition (walking through). */
+export type RunPhase = 'ready' | 'fight' | 'cleared' | 'shop' | 'transition';
 
 /** Top-of-screen label for where the run is. `foes`: monsters still alive in the level. */
 export function runLabel(room: number, foes: number, phase: RunPhase, bossName: string | null): string {
   const name = ROOMS[room]?.name ?? '';
   if (phase === 'cleared') return `${name} cleared — the exit door is open ↑`;
   if (phase === 'transition') return 'Onward…';
+  if (phase === 'shop') return '🛒 The merchant’s camp';
   if (phase === 'ready') return `${name} · ready when you are`;
   if (bossName) return `${name} · ${bossName}`;
   const guard = ROOMS[room]?.hasExit ? 'its guardian waits by the exit, to the north' : 'the Ash King waits to the north';

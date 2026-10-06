@@ -33,4 +33,17 @@ describe('loot', () => {
     expect(books(runs(() => rollLoot('guardian', 3, rng)))).toBe(1);
     expect(books(runs(() => chestLoot(2, rng)))).toBeGreaterThan(0.5);
   });
+
+  it('drops gear now and then (guardians always, never common), and potions', () => {
+    const rng = mulberry32(5);
+    const runs = (f: () => Drop[]) => Array.from({ length: 4000 }, f);
+    const rate = (r: Drop[][], kind: string) => r.filter((d) => d.some((x) => x.kind === kind)).length / r.length;
+    const normal = runs(() => rollLoot('normal', 1, rng));
+    expect(rate(normal, 'item')).toBeGreaterThan(0.02);
+    expect(rate(normal, 'item')).toBeLessThan(0.07);
+    expect(rate(normal, 'potion')).toBeGreaterThan(0.03);
+    const guardian = runs(() => rollLoot('guardian', 2, rng));
+    expect(rate(guardian, 'item')).toBe(1);
+    expect(guardian.flat().some((x) => x.kind === 'item' && x.rarity === 'common')).toBe(false);
+  });
 });

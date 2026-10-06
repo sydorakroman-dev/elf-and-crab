@@ -28,19 +28,21 @@ import { pickAimTarget, walkMap } from './combat';
 import { fireAmbience } from './ambience';
 import { Hud } from '../ui/hud';
 import { Minimap } from '../ui/minimap';
+import { InventoryPanel } from '../ui/inventory';
 import { Sfx } from './audio';
 import { loadBest, recordRun } from './highscore';
 import { ActivePowers, POWER_UPS, pickPowerUp, randomSpawnPoint, spreadDirections, type PowerUpType } from './powerups';
 import { Pickups, type Collected } from './pickups';
 import { ELF_SPELLS, FIRST_SPELL_SLOT, SPELL_POWER, Spellbook, spellCost, spellTitle, type SpellKey } from './spells';
 import { chestLoot, rollLoot, tierOf, type Drop } from './loot';
+import { Inventory, makeStock, type InvOp, type StockEntry } from './inventory';
+import { POTIONS, RARITY_INFO, makeItem, makePotion, type BagEntry } from './items';
 import { ENCHANT_CHAIN, ENCHANT_FIRE, ENCHANT_FROST, type ArrowHit } from './arrows';
 import type { HeroLink } from '../net/client';
 import { POWER_CODES, q, type GameEvent, type Snapshot } from '../net/snapshot';
 
 const STEP = 1 / 60; // fixed simulation step
 const MAX_FRAME = 0.1; // clamp long frames (tab switches) so physics doesn't explode
-const MAX_HEALTH = HERO.maxHp;
 const FIRE_INTERVAL = 0.36;
 const AIM_ASSIST_ANGLE = 0.3; // radians
 const TOUCH_AIM_ASSIST_ANGLE = 0.65; // aiming with a thumb is much harder
@@ -119,6 +121,12 @@ export class Game {
   private readonly effects = new Effects();
   private readonly hud: Hud;
   private readonly minimap: Minimap;
+  private readonly bagPanel: InventoryPanel;
+  /** The merchant's wares while the party is at the camp between levels. */
+  private shop: StockEntry[] | null = null;
+  /** What the familiar's tablet last got (inventory version, shop state). */
+  private sentInv = -1;
+  private sentShop = '';
   private readonly touch: TouchControls | null = null;
   private readonly mode: InputMode;
   private readonly sfx = new Sfx();
@@ -134,7 +142,7 @@ export class Game {
   private accumulator = 0;
   private time = 0;
   private state: State = 'ready';
-  private health = MAX_HEALTH;
+  private health: number = HERO.maxHp;
   private score = 0;
   private wave = 0;
   private fireCooldown = 0;
@@ -159,7 +167,12 @@ export class Game {
   private doubleShots = 0;
   /** Spells learned from books this run, and the party's gold. */
   private readonly spellbook = new Spellbook();
-  private gold = 0;
+  /** Gear, the 16-slot bag and the gold purse (shared by the elf and the familiar). */
+  private readonly inv = new Inventory();
+  /** Stats from what the elf and the familiar wear (recomputed when the gear changes). */
+  private heroGear = this.inv.heroStats();
+  private famGear = this.inv.familiarStats();
+  private gearVersion = -1;
   /** Arrow enchantments waiting: shots left, and the rank they were cast at. */
   private readonly enchants: Record<'fire' | 'frost' | 'chain', { shots: number; rank: number }> = {
     fire: { shots: 0, rank: 1 },
@@ -219,16 +232,30 @@ export class Game {
       mode,
     );
 
-    this.hud = new Hud(root, MAX_HEALTH, mode, () => {
+    this.hud = new Hud(root, HERO.maxHp, mode, () => {
       this.sfx.unlock();
       if (this.state !== 'playing') this.newGame(this.hud.startRoom);
       this.banner(`${ROOMS[this.room].name}`);
       this.player.activate();
     }, () => this.beginFight());
     this.minimap = new Minimap(root);
+    this.bagPanel = new InventoryPanel(root, 'hero');
+    this.bagPanel.onAction = (req) => this.applyInv(req, false);
+    this.bagPanel.onClose = () => this.closeBag();
+    this.bagPanel.onContinue = () => this.leaveShop();
+    if (!this.headless) {
+      root.insertAdjacentHTML('beforeend', '<button type="button" class="bag-btn" data-bag-btn hidden title="Bag (I)">🎒</button>');
+      const btn = root.querySelector<HTMLElement>('[data-bag-btn]')!;
+      btn.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        this.toggleBag();
+      });
+    }
     this.minimap.setLevel(this.level.map);
     if (mode === 'touch') this.touch = new TouchControls(root, this.player);
     this.player.onActiveChange = (active) => {
+      if (!active && this.bagPanel.isOpen) return; // the bag or the merchant took the mouse
       this.hud.setPaused(!active, this.state === 'playing');
       this.touch?.setVisible(active);
     };
@@ -247,6 +274,8 @@ export class Game {
     familiars.wolf.onStep = (strength) => this.sfx.scuttle(strength * 0.6);
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
+      else if ((e.code === 'KeyI' || e.code === 'KeyB') && !e.repeat && !this.hud.actionBar.rebinding) this.toggleBag();
+      else if ((e.code === 'KeyQ' || e.code === 'KeyE') && !e.repeat && this.state === 'playing') this.quickPotion(e.code === 'KeyQ' ? 'health' : 'mana');
       else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && this.phase === 'ready') this.beginFight();
       else {
         this.cardSkip = true;
@@ -324,7 +353,7 @@ export class Game {
     this.loadRoom(room); // a freshly generated level every run
     this.resetWorld();
     this.state = 'playing';
-    this.health = MAX_HEALTH;
+    this.health = this.maxHealth;
     this.resources.reset();
     this.invisible = 0;
     this.doubleShots = 0;
@@ -336,8 +365,8 @@ export class Game {
     }
     for (const e of Object.values(this.enchants)) e.shots = 0;
     this.bloom.left = this.bark.left = 0;
-    this.gold = 0;
-    this.hud.setGold(0);
+    this.inv.clear();
+    this.refreshGear();
     this.ward = 0;
     this.riddle = null;
     this.elf.setGhost(false);
@@ -409,12 +438,16 @@ export class Game {
     this.time += dt;
     this.dungeon.update(this.time, dt, this.player.position);
     this.updateAmbience(dt);
-    const running = this.state === 'playing' && (this.player.isActive || this.practice);
+    // The bag pauses a solo game; with a familiar along (or at the merchant) the game keeps going.
+    const menu = this.bagPanel.isOpen && (this.phase === 'shop' || !!this.net?.familiarConnected);
+    const running = this.state === 'playing' && (this.player.isActive || this.practice || menu);
+    if (this.inv.version !== this.gearVersion) this.refreshGear();
     this.steps++;
     if (this.net?.familiarConnected && this.steps % (running ? SNAPSHOT_EVERY : IDLE_SNAPSHOT_EVERY) === 0) {
       this.net.sendSnapshot(this.snapshot(running));
     }
     this.hud.actionBar.setVisible(running && !this.headless);
+    this.setBagButton(this.state === 'playing' && !this.headless && !this.practice);
     this.minimap.setVisible(running && !this.headless && !this.practice);
     if (running) this.updateMinimap(dt);
     if (!running) {
@@ -429,7 +462,7 @@ export class Game {
     this.invisible = Math.max(0, this.invisible - dt);
     this.elf.setGhost(this.invisible > 0);
     this.hud.actionBar.update(this.resources);
-    this.player.update(dt, true);
+    this.player.update(dt, !this.bagPanel.isOpen);
     this.playTime += dt;
     this.invulnerable = Math.max(0, this.invulnerable - dt);
     this.elf.group.visible = this.invulnerable === 0 || Math.floor(this.time * 16) % 2 === 0;
@@ -439,7 +472,7 @@ export class Game {
     // Wind Walk: enemies lose track and head for the spot where the elf vanished.
     const seen = this.invisible > 0 ? this.vanishSpot : this.player.position;
     // Nothing stirs before the hero starts, or while walking between levels.
-    const still = !this.practice && (this.phase === 'ready' || this.phase === 'transition');
+    const still = !this.practice && (this.phase === 'ready' || this.phase === 'transition' || this.phase === 'shop');
     const { spits, strikes } = still ? { spits: [], strikes: [] } : this.enemies.update(dt, seen, this.dungeon.obstacles);
     for (const spit of spits) {
       this.globs.fire(spit);
@@ -453,7 +486,7 @@ export class Game {
     this.updateGlobs(dt);
 
     for (const hit of this.arrows.update(dt, this.enemies.all, this.dungeon.obstacles)) {
-      this.damage(hit.slime, hit.dirX, hit.dirZ);
+      this.damage(hit.slime, hit.dirX, hit.dirZ, this.arrowDamage());
       if (hit.enchant) this.enchantHit(hit);
     }
 
@@ -477,7 +510,7 @@ export class Game {
   private shoot(dt: number): void {
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
     if (!this.player.trigger || this.fireCooldown > 0) return;
-    this.fireCooldown = this.powers.has('rapid') ? FIRE_INTERVAL / 2 : FIRE_INTERVAL;
+    this.fireCooldown = (this.powers.has('rapid') ? FIRE_INTERVAL / 2 : FIRE_INTERVAL) / (1 + this.heroGear.attackSpeed);
     this.invisible = 0; // shooting gives you away
 
     const p = this.player.position;
@@ -519,7 +552,7 @@ export class Game {
       const dx = s.x - c.x;
       const dz = s.z - c.z;
       const d = Math.hypot(dx, dz) || 1;
-      this.damage(s, dx / d, dz / d, amount);
+      this.damage(s, dx / d, dz / d, amount * (1 + this.famGear.famPower));
     };
     if (r.bitten) {
       push(r.bitten, r.biteDamage);
@@ -591,7 +624,7 @@ export class Game {
         const dz = Math.cos(h);
         for (const s of [...this.enemies.all]) {
           if (!s.alive || s.hidden || !inJet(c, h, s, s.radius)) continue;
-          this.damage(s, dx, dz, JET.damage);
+          this.damage(s, dx, dz, JET.damage * (1 + this.famGear.famPower));
           s.shove(dx, dz, JET.shove);
           s.soak(spell.duration, JET.slow);
           this.effects.burst(s.x, s.radius, s.z, WATER_BLUE, 8, 4, 0.1);
@@ -669,7 +702,7 @@ export class Game {
       for (const s of this.enemies.all) {
         if (Math.hypot(s.x - z.x, s.z - z.z) <= z.r + s.radius * 0.5) s.slow = Math.min(s.slow, SPRING_SLOW);
       }
-      if (!z.healed && this.health < MAX_HEALTH && Math.hypot(p.x - z.x, p.z - z.z) <= z.r) {
+      if (!z.healed && this.health < this.maxHealth && Math.hypot(p.x - z.x, p.z - z.z) <= z.r) {
         z.healed = true;
         this.heal(HEALING.spring);
         this.hud.toast(`♨️ +${HEALING.spring} HP`, 0x8fe8f5);
@@ -749,6 +782,10 @@ export class Game {
       this.events.push({ e: 'poof', x: q(e.x), z: q(e.z) });
       return;
     }
+    if (cmd.type === 'inv') {
+      this.applyInv(cmd.req, true);
+      return;
+    }
     if (cmd.type !== 'choose') {
       this.companion.command(cmd);
       return;
@@ -805,9 +842,10 @@ export class Game {
       wave: this.wave,
       remaining: this.enemies.remaining,
       health: Math.max(0, this.health),
-      maxHealth: MAX_HEALTH,
+      maxHealth: this.maxHealth,
       score: this.score,
-      gold: this.gold,
+      gold: this.inv.gold,
+      ...this.invForSnapshot(),
       ch: this.chestsOpened,
       powers: this.powers.list().map((pw) => [POWER_CODES.indexOf(pw.type), q(pw.remaining)]),
       cds: c.kind ? FAMILIARS[c.kind].spells.map((id) => [SPELL_IDS.indexOf(id), q(c.cooldowns.remaining(id))]) : [],
@@ -820,11 +858,11 @@ export class Game {
   /** Out of a fight for a few seconds (nobody hunting nearby), the elf gets health back. */
   private rest(dt: number): void {
     this.sinceHurt += dt;
-    if (this.sinceHurt < HEALING.restAfter || this.health >= MAX_HEALTH || this.health <= 0) return;
+    if (this.sinceHurt < HEALING.restAfter || this.health >= this.maxHealth || this.health <= 0) return;
     const p = this.player.position;
     if (this.enemies.all.some((s) => s.alive && !this.enemies.isAsleep(s) && Math.hypot(s.x - p.x, s.z - p.z) < 24)) return;
     const before = Math.floor(this.health);
-    this.health = Math.min(MAX_HEALTH, this.health + HEALING.rest * dt);
+    this.health = Math.min(this.maxHealth, this.health + HEALING.rest * dt);
     if (Math.floor(this.health) !== before) this.hud.setHealth(this.health);
   }
 
@@ -881,7 +919,7 @@ export class Game {
       this.dropLoot(slime.x, slime.z, rollLoot(tierOf(slime), this.room + 1, Math.random));
       const drop = (slime as Enemy & { def?: { drop: number } }).def?.drop ?? 0; // each kind carries its own chance
       if (Math.random() < drop && this.pickups.count < MAX_PICKUPS + 1) {
-        this.pickups.spawn(pickPowerUp(Math.random, this.health, MAX_HEALTH), slime.x, slime.z);
+        this.pickups.spawn(pickPowerUp(Math.random, this.health, this.maxHealth), slime.x, slime.z);
       }
     } else {
       this.effects.burst(slime.x, y, slime.z, slime.color, 6, 4, 0.12);
@@ -918,13 +956,14 @@ export class Game {
       this.nextPickup = this.practice ? 3 + Math.random() * 2 : PICKUP_INTERVAL_MIN + Math.random() * (PICKUP_INTERVAL_MAX - PICKUP_INTERVAL_MIN);
       if (this.pickups.count < MAX_PICKUPS + (this.practice ? 1 : 0)) {
         const at = randomSpawnPoint(Math.random, p, this.dungeon.obstacles, [p], 7);
-        this.pickups.spawn(pickPowerUp(Math.random, this.health, MAX_HEALTH), at.x, at.z);
+        this.pickups.spawn(pickPowerUp(Math.random, this.health, this.maxHealth), at.x, at.z);
       }
     }
 
     // The elf and the familiar can both grab power-ups; either way they go to the elf.
     const collectors = this.companion.present && this.companion.height < 0.5 ? [p, this.companion.position] : [p];
-    for (const c of this.pickups.update(dt, this.time, collectors)) this.collect(c);
+    const bagFull = this.inv.full;
+    for (const c of this.pickups.update(dt, this.time, collectors, (t) => !bagFull || !(t.startsWith('item_') || t.startsWith('potion_')))) this.collect(c);
     this.openChests(collectors);
 
     const shielded = this.powers.has('shield');
@@ -950,7 +989,7 @@ export class Game {
       this.events.push({ e: 'pickup', p: POWER_CODES.indexOf(type), x: q(f.x), z: q(f.z), fam: 1 });
     }
     if (type === 'heart') {
-      if (this.health < MAX_HEALTH) this.health = Math.min(MAX_HEALTH, this.health + HEALING.heartPickup);
+      if (this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + HEALING.heartPickup);
       else this.score += 25; // full health: a little score instead
       this.hud.setHealth(this.health);
       this.hud.setScore(this.score);
@@ -1038,7 +1077,7 @@ export class Game {
       return;
     }
     // Bark Skin takes the edge off.
-    const taken = Math.max(1, Math.round(scaledDamage(amount) * (this.bark.left > 0 ? 1 - this.bark.reduce : 1)));
+    const taken = Math.max(1, Math.round(scaledDamage(amount) * (this.bark.left > 0 ? 1 - this.bark.reduce : 1) * (1 - this.heroGear.armor)));
     this.health -= taken;
     this.numbers.show(taken, p.x, 2.4, p.z, 'hurt');
     this.events.push({ e: 'num', x: q(p.x), y: 2.4, z: q(p.z), n: taken, k: 2 });
@@ -1063,7 +1102,7 @@ export class Game {
     this.wardRing.position.set(p.x, 0, p.z);
     this.wardRing.rotation.y += dt * 0.6;
     const before = Math.ceil(this.health);
-    this.health = Math.min(MAX_HEALTH, this.health + WARD.heal * dt);
+    this.health = Math.min(this.maxHealth, this.health + WARD.heal * dt);
     if (Math.ceil(this.health) !== before) this.hud.setHealth(this.health);
     const r = SPELLS.ward.radius;
     for (const s of this.enemies.all) if (Math.hypot(s.x - p.x, s.z - p.z) <= r + s.radius * 0.5) s.slow = Math.min(s.slow, WARD.slow);
@@ -1105,6 +1144,147 @@ export class Game {
     }
   }
 
+  // ── Gear, the bag and the merchant ────────────────────────────────────────────────────────
+
+  /** Max health: the elf's own, plus gear. */
+  private get maxHealth(): number {
+    return HERO.maxHp + this.heroGear.maxHp;
+  }
+
+  /** An arrow's damage with gear: more damage, and sometimes a critical (double) shot. */
+  private arrowDamage(): number {
+    const base = HERO.arrowDamage * (1 + this.heroGear.damage);
+    return Math.random() < this.heroGear.crit ? base * 2 : base;
+  }
+
+  /** Gear changed (or the gold): recompute stats and pass them on to everything that uses them. */
+  private refreshGear(): void {
+    this.gearVersion = this.inv.version;
+    this.heroGear = this.inv.heroStats();
+    this.famGear = this.inv.familiarStats();
+    this.player.speedScale = 1 + this.heroGear.moveSpeed;
+    this.resources.manaBonus = this.heroGear.manaRegen;
+    this.resources.staminaBonus = this.heroGear.staminaRegen;
+    this.companion.cooldownScale = 1 - this.famGear.famCooldown;
+    this.companion.speedScale = 1 + this.famGear.famSpeed;
+    this.hud.setMaxHealth(this.maxHealth);
+    this.health = Math.min(this.health, this.maxHealth);
+    this.hud.setHealth(this.health);
+    this.hud.setGold(this.inv.gold);
+    this.bagPanel?.update(this.inv.encode(), this.shop, this.gearSummary());
+  }
+
+  /** A line of what the elf's gear adds up to (for the bag). */
+  private gearSummary(): string {
+    const g = this.heroGear;
+    const parts: string[] = [];
+    if (g.damage) parts.push(`+${Math.round(g.damage * 100)}% damage`);
+    if (g.attackSpeed) parts.push(`+${Math.round(g.attackSpeed * 100)}% attack speed`);
+    if (g.crit) parts.push(`${Math.round(g.crit * 100)}% crits`);
+    if (g.maxHp) parts.push(`+${g.maxHp} health`);
+    if (g.armor) parts.push(`−${Math.round(g.armor * 100)}% damage taken`);
+    if (g.moveSpeed) parts.push(`+${Math.round(g.moveSpeed * 100)}% speed`);
+    return parts.length ? `Elf: ${parts.join(' · ')}` : '';
+  }
+
+  /** A bag request from the elf's panel or the familiar's tablet. */
+  private applyInv(req: InvOp, fromFamiliar: boolean): void {
+    if (this.state !== 'playing') return;
+    if ((req.op === 'buy' || req.op === 'sell') && this.phase !== 'shop') return;
+    const res = this.inv.apply(req, this.phase === 'shop' ? this.shop : null);
+    if (!res) return;
+    if (res.used?.kind === 'potion') this.drink(res.used.potion);
+    if (res.bought) {
+      const p = this.player.position;
+      if (res.bought.kind === 'book') this.readBook(p.x, p.z);
+      else this.hud.toast(`🛒 ${res.bought.kind === 'item' ? res.bought.name : POTIONS[res.bought.potion].name}`, 0xffd24a);
+      this.sfx.coin();
+    }
+    if (req.op === 'sell') this.sfx.coin();
+    if (req.op === 'equip') this.sfx.powerUp();
+    if (fromFamiliar && req.op === 'equip' && this.companion.kind) this.hud.toast(`${FAMILIARS[this.companion.kind].emoji} The familiar changed gear`, 0xc79bff);
+    this.refreshGear();
+  }
+
+  private drink(potion: 'health' | 'mana'): void {
+    const p = this.player.position;
+    const def = POTIONS[potion];
+    if (potion === 'health') this.heal(def.amount);
+    else this.resources.mana = Math.min(100, this.resources.mana + def.amount);
+    this.effects.burst(p.x, 1.2, p.z, new THREE.Color(def.color), 20, 4, 0.12);
+    this.events.push({ e: 'burst', x: q(p.x), z: q(p.z), c: def.color, n: 20 });
+    this.hud.toast(`${def.icon} ${def.name}`, def.color);
+    this.sfx.spring();
+  }
+
+  /** Q / E: drink the first health / mana potion in the bag. */
+  private quickPotion(potion: 'health' | 'mana'): void {
+    const i = this.inv.bag.findIndex((e) => e?.kind === 'potion' && e.potion === potion);
+    if (i < 0) {
+      this.hud.toast(`No ${POTIONS[potion].name.toLowerCase()}s`, 0x9a9a9a);
+      return;
+    }
+    this.applyInv({ op: 'use', i }, false);
+  }
+
+  private setBagButton(show: boolean): void {
+    const btn = document.querySelector<HTMLElement>('[data-bag-btn]');
+    if (btn && btn.hidden === show) btn.hidden = !show;
+  }
+
+  /** Opens / closes the bag (the mouse is freed while it's open). */
+  private toggleBag(): void {
+    if (this.state !== 'playing' || this.phase === 'shop' || this.headless) return;
+    if (this.bagPanel.isOpen) {
+      this.closeBag();
+      return;
+    }
+    this.bagPanel.update(this.inv.encode(), null, this.gearSummary());
+    this.bagPanel.open();
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  private closeBag(): void {
+    this.bagPanel.close();
+    if (this.state === 'playing') this.player.activate(); // back to the game (the close is a click or a key: allowed to take the mouse)
+  }
+
+  /** Through the exit door: the merchant's camp first (then the next level). */
+  private enterShop(): void {
+    if (!ROOMS[this.room + 1]) {
+      this.enterDoor();
+      return;
+    }
+    this.phase = 'shop';
+    this.shop = makeStock(this.room + 1, Math.random);
+    this.bagPanel.update(this.inv.encode(), this.shop, this.gearSummary());
+    this.bagPanel.open();
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.banner('🛒 The merchant’s camp');
+    this.sfx.door();
+  }
+
+  private leaveShop(): void {
+    if (this.phase !== 'shop') return;
+    this.shop = null;
+    this.bagPanel.close();
+    this.enterDoor();
+    this.player.activate();
+  }
+
+  /** The inventory (when it changed, or now and then) and the shop, for the familiar's tablet. */
+  private invForSnapshot(): Partial<Snapshot> {
+    const out: Partial<Snapshot> = {};
+    if (this.inv.version !== this.sentInv || this.steps % 120 === 0) {
+      this.sentInv = this.inv.version;
+      out.inv = this.inv.encode();
+    }
+    const shopKey = this.shop ? this.shop.map((e) => (e.sold ? 1 : 0)).join('') + this.shop.length : '';
+    if (this.shop && (shopKey !== this.sentShop || this.steps % 60 === 0)) out.shop = this.shop;
+    this.sentShop = shopKey;
+    return out;
+  }
+
   // ── Loot ─────────────────────────────────────────────────────────────────────────────────────
 
   /** Scatters drops round (x, z): coin piles and spell books. */
@@ -1115,15 +1295,17 @@ export class Game {
       const at = walkMap().nearestFloor(x + Math.cos(a) * r, z + Math.sin(a) * r);
       const spot = walkMap().clear(x + Math.cos(a) * r, z + Math.sin(a) * r, 0.4) ? { x: x + Math.cos(a) * r, z: z + Math.sin(a) * r } : at;
       if (d.kind === 'gold') this.pickups.spawn('gold', spot.x, spot.z, undefined, d.amount);
-      else this.pickups.spawn('book', spot.x, spot.z);
+      else if (d.kind === 'book') this.pickups.spawn('book', spot.x, spot.z);
+      else if (d.kind === 'item') this.pickups.spawn(`item_${d.rarity}`, spot.x, spot.z, undefined, 0, makeItem(Math.random, d.rarity, this.room + 1));
+      else this.pickups.spawn(`potion_${d.potion}`, spot.x, spot.z, undefined, 0, makePotion(d.potion));
     }
   }
 
   /** Something picked up by the elf (by 0) or the familiar (by 1): it all goes to the party. */
   private collect(c: Collected): void {
     if (c.type === 'gold') {
-      this.gold += c.amount;
-      this.hud.setGold(this.gold);
+      this.inv.addGold(c.amount);
+      this.hud.setGold(this.inv.gold);
       this.numbers.show(c.amount, c.x, 1.6, c.z, 'gold');
       this.events.push({ e: 'loot', k: 0, x: q(c.x), z: q(c.z), n: c.amount });
       this.sfx.coin();
@@ -1133,7 +1315,17 @@ export class Game {
       this.readBook(c.x, c.z);
       return;
     }
-    this.applyPowerUp(c.type, c.by === 1);
+    if (c.payload) {
+      this.inv.add(c.payload);
+      const e: BagEntry = c.payload;
+      const name = e.kind === 'item' ? e.name : POTIONS[e.potion].name;
+      const color = e.kind === 'item' ? parseInt(RARITY_INFO[e.rarity].color.slice(1), 16) : POTIONS[e.potion].color;
+      this.hud.toast(`🎒 ${name}`, color);
+      this.events.push({ e: 'loot', k: 2, x: q(c.x), z: q(c.z), n: 0, t: `🎒 ${name}` });
+      this.sfx.powerUp();
+      return;
+    }
+    if (c.type in POWER_UPS) this.applyPowerUp(c.type as PowerUpType, c.by === 1);
   }
 
   /** A spell book: a new spell in slots 4–9, or a rank up. */
@@ -1142,8 +1334,8 @@ export class Game {
     let text: string;
     if (r.kind === 'mastered') {
       // Every spell known at its best: the book's worth gold instead.
-      this.gold += 50;
-      this.hud.setGold(this.gold);
+      this.inv.addGold(50);
+      this.hud.setGold(this.inv.gold);
       text = '📖 You know it all — +50 🪙';
     } else {
       const key = r.key;
@@ -1323,7 +1515,7 @@ export class Game {
     if (this.bloom.left > 0) {
       const before = Math.floor(this.health);
       this.bloom.left = Math.max(0, this.bloom.left - dt);
-      this.health = Math.min(MAX_HEALTH, this.health + this.bloom.rate * dt);
+      this.health = Math.min(this.maxHealth, this.health + this.bloom.rate * dt);
       if (Math.floor(this.health) !== before) this.hud.setHealth(this.health);
       if (Math.floor(this.time * 3) !== Math.floor((this.time - dt) * 3)) {
         const p = this.player.position;
@@ -1402,9 +1594,10 @@ export class Game {
     }
     if (this.phase === 'cleared') {
       const p = this.player.position;
-      if (this.dungeon.inExit(p.x, p.z)) this.enterDoor();
+      if (this.dungeon.inExit(p.x, p.z)) this.enterShop();
       return;
     }
+    if (this.phase === 'shop') return;
     if (this.practice) return;
     // The guardian wakes: its name across the screen and its health bar.
     const boss = this.enemies.boss;
@@ -1429,7 +1622,7 @@ export class Game {
   }
 
   private heal(amount: number): void {
-    this.health = Math.min(MAX_HEALTH, this.health + amount);
+    this.health = Math.min(this.maxHealth, this.health + amount);
     this.hud.setHealth(this.health);
   }
 
@@ -1459,7 +1652,7 @@ export class Game {
       const e = this.dungeon.entry;
       this.player.spawn(e.x, e.z, 0);
       if (this.companion.kind) this.companion.appear(this.companion.kind, e.x + 2.5, e.z + 0.5);
-      this.heal(MAX_HEALTH); // a fresh start in every level
+      this.heal(this.maxHealth); // a fresh start in every level
       this.nextPickup = 8;
       this.cardSkip = false;
       this.hud.fade.set(true, this.room);
@@ -1542,7 +1735,7 @@ export class Game {
   private gameOver(): void {
     if (this.practice) {
       // The practice room: the elf can't die — back to full health.
-      this.health = MAX_HEALTH;
+      this.health = this.maxHealth;
       this.hud.setHealth(this.health);
       const p = this.player.position;
       this.effects.burst(p.x, 1.2, p.z, new THREE.Color(0xff4d5e), 20, 5, 0.12);
