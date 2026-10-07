@@ -34,11 +34,19 @@ describe('RoomManager', () => {
     expect(host.inbox).toContainEqual({ t: 'relay', d: { cmd: 2 } });
   });
 
-  it('rejects unknown codes and a second familiar', () => {
+  it('rejects unknown codes; a familiar reconnecting replaces its old (dead) connection', () => {
     const { rooms } = setup();
-    const { code } = rooms.create(conn()) as { code: string };
-    rooms.join(code, conn());
-    expect(rooms.join(code, conn())).toEqual({ error: 'room-full' });
+    const host = conn();
+    const { code } = rooms.create(host) as { code: string };
+    const old = conn();
+    rooms.join(code, old);
+    const fresh = conn();
+    expect(rooms.join(code, fresh)).toEqual({ ok: true });
+    // The old socket closing later doesn't knock the new familiar out.
+    rooms.leave(old);
+    rooms.relay(host, 'hi');
+    expect(fresh.inbox).toContainEqual({ t: 'relay', d: 'hi' });
+    expect(host.inbox.some((m) => m.t === 'peer-left')).toBe(false);
     expect(rooms.join('ZZZZ', conn())).toEqual({ error: 'no-room' });
   });
 

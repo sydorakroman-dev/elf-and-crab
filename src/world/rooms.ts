@@ -224,7 +224,7 @@ export type RunPhase = 'ready' | 'fight' | 'cleared' | 'shop' | 'transition';
 /** Top-of-screen label for where the run is. `foes`: monsters still alive in the level. */
 export function runLabel(room: number, foes: number, phase: RunPhase, bossName: string | null): string {
   const name = ROOMS[room]?.name ?? '';
-  if (phase === 'cleared') return `${name} cleared — the exit door is open ↑`;
+  if (phase === 'cleared') return ROOMS[room]?.hasExit ? `${name} cleared — the exit door is open ↑` : '👑 The Ash King is slain! Gather the spoils, then finish the run';
   if (phase === 'transition') return 'Onward…';
   if (phase === 'shop') return '🛒 The merchant’s camp';
   if (phase === 'ready') return `${name} · ready when you are`;

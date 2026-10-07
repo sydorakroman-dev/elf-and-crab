@@ -341,7 +341,7 @@ export class FamiliarHud {
       this.powersKey = key;
       this.powers.innerHTML = powerChipsHtml(list);
     }
-    const w = s.rid && !s.practice ? `🔮 Break the rune seal to open the door (${s.rid.n}/${s.rid.t})` : s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.remaining, s.phase, s.boss?.name ?? null);
+    const w = s.seal ? '🔮 Go to the exit door (follow the light) to break the rune seal' : s.rid && !s.practice ? `🔮 Break the rune seal to open the door (${s.rid.n}/${s.rid.t})` : s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.remaining, s.phase, s.boss?.name ?? null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
     const g = `🪙 ${s.gold ?? 0}`;

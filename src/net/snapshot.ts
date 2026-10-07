@@ -134,6 +134,8 @@ export interface Snapshot {
   gold?: number;
   /** Chests opened so far (bit i: chest i). */
   ch?: number;
+  /** The exit is rune-sealed, waiting for the familiar to come to the door. */
+  seal?: number;
   /** Sarcophagi that have burst open (prop indices). */
   amb?: number[];
   /** The beast master's wolf: [x, z, yaw, speed, mode, y]. */

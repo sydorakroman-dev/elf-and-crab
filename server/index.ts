@@ -78,6 +78,9 @@ wss.on('connection', (ws: WebSocket & { alive?: boolean }) => {
     send(msg: ServerMsg) {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
     },
+    close() {
+      ws.terminate();
+    },
   };
   let tokens = BURST;
   let last = Date.now();

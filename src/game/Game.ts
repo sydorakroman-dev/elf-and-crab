@@ -57,6 +57,8 @@ const PICKUP_INTERVAL_MAX = 18;
 const MAX_PICKUPS = 2;
 const SNAPSHOT_EVERY = 3; // steps → 20 Hz while playing
 const IDLE_SNAPSHOT_EVERY = 12; // 5 Hz on menus / pause
+/** The familiar breaks the rune seal once it comes this close (m) to the exit door. */
+const SEAL_REACH = 7;
 const STUN_STAR = new THREE.Color(0xfff27a);
 const CALM_PINK = new THREE.Color(0xffb8dc);
 const SPRING_BLUE = new THREE.Color(0x8fe8f5);
@@ -178,6 +180,10 @@ export class Game {
   private sealSolved = 0;
   /** Wrong answers so far on this seal (the familiar's view uses it to say the riddle changed). */
   private sealMisses = 0;
+  /** The guardian is down and runes seal the door, waiting for the familiar to come to it. */
+  private sealPending = false;
+  /** The last boss is down: the run ends when the hero presses Enter / Finish. */
+  private victoryPending = false;
   /** Double Shot: charged shots left. */
   private doubleShots = 0;
   /** Spells learned from books this run, and the party's gold. */
@@ -252,7 +258,7 @@ export class Game {
       if (this.state !== 'playing') this.newGame(this.hud.startRoom);
       this.banner(`${ROOMS[this.room].name}`);
       this.player.activate();
-    }, () => this.beginFight());
+    }, () => this.pressStart());
     this.minimap = new Minimap(root);
     this.bagPanel = new InventoryPanel(root, 'hero');
     this.bagPanel.onAction = (req) => this.applyInv(req, false);
@@ -285,7 +291,7 @@ export class Game {
       else if ((e.code === 'KeyI' || e.code === 'KeyB') && !e.repeat && !this.hud.actionBar.rebinding) this.toggleBag();
       else if (e.code === 'Escape' && this.bagPanel.isOpen && this.phase !== 'shop') this.closeBag();
       else if ((e.code === 'KeyQ' || e.code === 'KeyE') && !e.repeat && this.state === 'playing') this.quickPotion(e.code === 'KeyQ' ? 'health' : 'mana');
-      else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && this.phase === 'ready') this.beginFight();
+      else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && (this.phase === 'ready' || this.victoryPending)) this.pressStart();
       else {
         this.cardSkip = true;
         const slot = this.hud.actionBar.rebinding || e.repeat ? -1 : this.hud.actionBar.slotFor(e.code);
@@ -309,6 +315,11 @@ export class Game {
     addEventListener('resize', () => this.resize());
     this.resize();
     if (this.practice) this.startPractice();
+    // With this tab in the background the game loop sleeps: keep the familiar's link alive.
+    if (net)
+      setInterval(() => {
+        if (document.hidden && net.familiarConnected) net.sendSnapshot(this.snapshot(false));
+      }, 2000);
   }
 
   /** The practice room: straight into the Woodland, no intro card, no waves; the elf a bit hurt so heals show. */
@@ -379,6 +390,8 @@ export class Game {
     this.setHero(this.hud.hero);
     this.ward = 0;
     this.riddle = null;
+    this.sealPending = false;
+    this.victoryPending = false;
     this.elf.setGhost(false);
     this.elf.setPose('none');
     this.score = 0;
@@ -415,6 +428,7 @@ export class Game {
     this.bossAnnounced = false;
     this.chestsOpened = 0;
     this.landmarksSeen.clear();
+    this.sealPending = false;
     this.ambushed = [];
     this.alarmsShown = 0;
     this.enemies.alarmRadius = ROOMS[index].alarm ?? 0;
@@ -806,6 +820,10 @@ export class Game {
 
   /** A familiar connected or left. They pick a creature next (a 'choose' command); leaving poofs it away. */
   private familiarChanged(connected: boolean): void {
+    if (!connected && this.sealPending) {
+      this.sealPending = false;
+      if (this.phase === 'cleared' && !this.practice) this.openDoor();
+    }
     if (!connected && this.riddle) {
       // Nobody left to solve it: the runes fade.
       this.riddle = null;
@@ -912,6 +930,7 @@ export class Game {
       gold: this.inv.gold,
       ...this.invForSnapshot(),
       ch: this.chestsOpened,
+      ...(this.sealPending ? { seal: 1 } : {}),
       ...(this.pet ? { pet: this.pet.tuple() } : {}),
       ...(this.ambushed.length ? { amb: this.ambushed } : {}),
       powers: this.powers.list().map((pw) => [POWER_CODES.indexOf(pw.type), q(pw.remaining)]),
@@ -1821,6 +1840,16 @@ export class Game {
     if (this.phase === 'cleared') this.openDoor();
   }
 
+  /** Enter / the big button: starts the hunt — or, after the last boss, finishes the run. */
+  private pressStart(): void {
+    if (this.victoryPending && this.state === 'playing') {
+      this.victoryPending = false;
+      this.victory();
+      return;
+    }
+    this.beginFight();
+  }
+
   /** The hero pressed Start (Enter / the button): the hunt begins. */
   private beginFight(): void {
     if (this.state !== 'playing' || this.phase !== 'ready') return;
@@ -1833,8 +1862,8 @@ export class Game {
 
   /** The level: hunt down its guardian; then the exit opens (or, in the lair, you win). */
   private updateWaves(dt: number): void {
-    this.hud.setWave(this.riddle && !this.practice ? `🔮 Rune seal — your familiar is solving it (${this.sealSolved}/${SEAL_RIDDLES})` : runLabel(this.room, this.enemies.remaining, this.phase, this.enemies.boss?.bossName ?? null));
-    this.hud.setStartPrompt(this.phase === 'ready');
+    this.hud.setWave(this.sealPending ? '🔮 The exit door is sealed — your familiar must go to it' : this.riddle && !this.practice ? `🔮 Rune seal — your familiar is solving it (${this.sealSolved}/${SEAL_RIDDLES})` : runLabel(this.room, this.enemies.remaining, this.phase, this.enemies.boss?.bossName ?? null));
+    this.hud.setStartPrompt(this.phase === 'ready' || (this.victoryPending && this.state === 'playing'), this.victoryPending);
     if (this.phase === 'ready') return; // nothing stirs until the hero starts
     if (this.phase === 'transition') {
       this.updateDoor(dt);
@@ -1842,6 +1871,13 @@ export class Game {
     }
     if (this.phase === 'cleared') {
       const p = this.player.position;
+      // The familiar reaches the sealed door: the riddles begin.
+      const e = this.level.exit;
+      const c = this.companion;
+      if (this.sealPending && e && c.present && Math.hypot(c.position.x - e.x, c.position.z - (e.z + 2)) < SEAL_REACH) {
+        this.sealPending = false;
+        this.startSeal();
+      }
       if (this.dungeon.inExit(p.x, p.z)) this.enterShop();
       return;
     }
@@ -1860,13 +1896,23 @@ export class Game {
     // Guardian down: a breather, and the way on.
     this.heal(HEALING.waveClear);
     if (!ROOMS[this.room].hasExit) {
-      this.victory();
+      // The Ash King is slain: the spoils lie about — gather them, then finish when ready.
+      this.phase = 'cleared';
+      this.victoryPending = true;
+      this.banner('👑 The Ash King is slain!');
+      this.hud.toast('Gather the spoils — press Enter (or Finish) to end the run', 0xffd24a);
+      this.sfx.wave();
       return;
     }
     this.phase = 'cleared';
-    // With a familiar along, runes seal the door until it solves their riddles.
-    if (this.companion.present && this.net?.familiarConnected) this.startSeal();
-    else this.openDoor();
+    // With a familiar along, runes seal the door: the familiar breaks the seal once it reaches it.
+    if (this.companion.present && this.net?.familiarConnected) {
+      this.sealPending = true;
+      this.dungeon.beaconToExit(); // the light marks the sealed door
+      this.banner('🔮 Runes seal the exit door');
+      this.hud.toast('Your familiar must go to the door to break the seal', 0xc79bff);
+      this.sfx.calm();
+    } else this.openDoor();
   }
 
   private heal(amount: number): void {
@@ -1965,6 +2011,7 @@ export class Game {
   }
 
   private victory(): void {
+    this.victoryPending = false;
     this.state = 'won';
     this.elf.group.visible = true;
     this.elf.setPose('victory');

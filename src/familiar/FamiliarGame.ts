@@ -32,7 +32,7 @@ import { jadeRing } from '../game/Game';
 
 const FOV = 45;
 /** Third-person follow camera: always looking north, this far back (m) and this steep (radians). */
-const FOLLOW_DISTANCE = 17;
+const FOLLOW_DISTANCE = 22; // (30% further back than it was: more of the level in view)
 const FOLLOW_PITCH = 0.95;
 const FOLLOW_LAG = 6; // higher = tighter follow
 /** Screen-edge arrows (elf, boss) sit this far in from the edge (fraction of half the screen). */

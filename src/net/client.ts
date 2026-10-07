@@ -74,6 +74,28 @@ class Socket {
     this.ws = null;
   }
 
+  get isOpen(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  /** Drops the current connection (it looks dead) and connects again straight away. */
+  reconnectNow(): void {
+    if (this.closed) return;
+    clearTimeout(this.timer);
+    const old = this.ws;
+    this.ws = null;
+    if (old) {
+      old.onclose = null;
+      try {
+        old.close();
+      } catch {
+        // already gone
+      }
+    }
+    this.attempts = 0;
+    this.connect();
+  }
+
   private retry(): void {
     this.attempts++;
     // A free-tier server can take up to a minute to wake: keep trying, slower over time.
@@ -107,6 +129,9 @@ export class HeroSession {
     };
     this.socket.onMessage = (msg) => this.handle(msg);
     this.socket.connect();
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !this.socket.isOpen) this.socket.reconnectNow();
+    });
   }
 
   /** Sends a snapshot if a familiar is listening. */
@@ -172,12 +197,17 @@ export interface FamiliarLink {
 }
 
 /** Familiar side: joins a room by code, receives snapshots, sends commands. */
+/** No update from the hero for this long (ms) while in the room: the link is dead, reconnect. */
+const SILENCE_MS = 6000;
+
 export class FamiliarSession {
   onSnapshot?: (s: Snapshot) => void;
   onStatus?: (s: FamiliarStatus) => void;
   readonly code: string;
   private readonly socket: Socket;
   private gaveUp = false;
+  private lastHeard = Date.now();
+  private heroAway = false;
 
   constructor(code: string, url = serverUrl()) {
     this.code = code;
@@ -185,9 +215,32 @@ export class FamiliarSession {
     this.socket.onStatus = (s) => {
       if (!this.gaveUp) this.onStatus?.(s);
     };
-    this.socket.onOpen = () => this.socket.send({ t: 'join', code });
-    this.socket.onMessage = (msg) => this.handle(msg);
+    this.socket.onOpen = () => {
+      this.lastHeard = Date.now();
+      this.socket.send({ t: 'join', code });
+    };
+    this.socket.onMessage = (msg) => {
+      this.lastHeard = Date.now();
+      this.handle(msg);
+    };
     this.socket.connect();
+    // Watchdog: a connection can die without closing (Wi-Fi drops, the tablet dozes). The hero
+    // sends at least 5 updates a second, so silence means the link is gone: reconnect at once.
+    setInterval(() => {
+      if (this.gaveUp || this.heroAway || !this.socket.isOpen) return;
+      if (Date.now() - this.lastHeard > SILENCE_MS) {
+        this.lastHeard = Date.now();
+        this.socket.reconnectNow();
+      }
+    }, 1000);
+    // Back from the background / the screen waking: reconnect now rather than after a back-off.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || this.gaveUp) return;
+      if (!this.socket.isOpen || Date.now() - this.lastHeard > 2000) {
+        this.lastHeard = Date.now();
+        this.socket.reconnectNow();
+      }
+    });
   }
 
   send(cmd: FamiliarCommand): void {
@@ -202,9 +255,11 @@ export class FamiliarSession {
     switch (msg.t) {
       case 'joined':
       case 'peer-joined':
+        this.heroAway = false;
         this.onStatus?.('joined');
         break;
       case 'peer-left':
+        this.heroAway = !!msg.temporary; // the hero is reconnecting: silence is expected
         this.onStatus?.(msg.temporary ? 'hero-away' : 'hero-left');
         if (!msg.temporary) this.stop();
         break;

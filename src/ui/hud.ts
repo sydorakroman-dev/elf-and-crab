@@ -167,7 +167,7 @@ export class Hud {
     // Its own layer (not inside the HUD bar), so it sits above the touch controls.
     root.insertAdjacentHTML(
       'beforeend',
-      `<button type="button" class="start-prompt" data-start hidden>${mode === 'touch' ? '▶ Start' : 'Press <kbd>Enter</kbd> to start'}</button>`,
+      `<button type="button" class="start-prompt" data-start data-touch="${mode === 'touch' ? 1 : 0}" hidden>${mode === 'touch' ? '▶ Start' : 'Press <kbd>Enter</kbd> to start'}</button>`,
     );
     this.startPrompt = root.querySelector('[data-start]')!;
     // pointerdown, not click: the touch controls cancel the click a tap would make.
@@ -354,8 +354,15 @@ export class Hud {
   }
 
   /** The "Start" prompt before the first wave: a button on touch screens, a hint for Enter with a mouse (the pointer is locked). */
-  setStartPrompt(visible: boolean): void {
-    if (this.startPrompt.hidden === visible) this.startPrompt.hidden = !visible;
+  /** The big prompt at the bottom: "Press Enter to start" — or, after the last boss, to finish. */
+  setStartPrompt(visible: boolean, finish = false): void {
+    if (this.startPrompt.hidden === visible && this.startPrompt.dataset.finish === String(finish)) return;
+    this.startPrompt.hidden = !visible;
+    this.startPrompt.dataset.finish = String(finish);
+    const touch = this.startPrompt.dataset.touch === '1';
+    this.startPrompt.innerHTML = finish
+      ? touch ? '👑 Finish the run' : 'Press <kbd>Enter</kbd> to finish the run'
+      : touch ? '▶ Start' : 'Press <kbd>Enter</kbd> to start';
   }
 
   /** The run label (room, wave, foes left…). */

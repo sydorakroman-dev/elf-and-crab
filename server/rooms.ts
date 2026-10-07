@@ -3,6 +3,8 @@ import { CODE_ALPHABET, CODE_LENGTH, type ErrorReason, type ServerMsg } from '..
 /** Anything we can send a message to (a WebSocket in production, a fake in tests). */
 export interface Conn {
   send(msg: ServerMsg): void;
+  /** Drops the connection (a newer one took its place). */
+  close?(): void;
 }
 
 interface Room {
@@ -80,7 +82,13 @@ export class RoomManager {
     this.leave(guest);
     const room = this.rooms.get(code);
     if (!room) return { error: 'no-room' };
-    if (room.guest) return { error: 'room-full' };
+    if (room.guest) {
+      // A familiar reconnecting after a network blip often arrives before the server has noticed
+      // its old, dead socket: the newest familiar takes the place (the old connection is dropped).
+      const old = room.guest;
+      this.roomOf.delete(old);
+      old.close?.();
+    }
     room.guest = guest;
     room.lastActive = this.now();
     this.roomOf.set(guest, room);
