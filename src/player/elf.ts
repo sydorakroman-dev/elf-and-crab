@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { attachAtPivot, loadParts } from './rig';
-import { toonify } from './toon';
+import { toonify, toonifyMeshes } from './toon';
 import { Spring, angleDelta, cadence, damp, legPose, splitBody } from './gait';
 import { HEROES, type HeroClass, type WeaponLook } from '../game/heroes';
 
@@ -111,37 +111,76 @@ export class Elf {
     return new Elf(await loadParts(url));
   }
 
+  /** Loads the other heroes' models (they share the elf's skeleton), to swap in with setHeroClass. */
+  async loadHeroModels(base: string): Promise<void> {
+    await Promise.all(
+      (['knight', 'mage', 'barbarian', 'beastmaster'] as const).map(async (h) => {
+        const parts = await loadParts(`${base}models/${h}.glb`).catch(() => null);
+        if (parts) this.models.set(h, this.partition(parts));
+      }),
+    );
+  }
+
+  /** Where each model's parts go: [pivot, its model-space position, name prefix]; the rest ride the torso. */
+  private readonly slots: [THREE.Group, THREE.Vector3, string][] = [];
+  /** Each loaded model's parts, sorted into the slots (last entry: the torso's). */
+  private readonly models = new Map<string, THREE.Mesh[][]>();
+  private modelKey = '';
+
+  /** Sorts a model's parts into the skeleton's slots (and gives them the cartoon look). */
+  private partition(parts: Map<string, THREE.Mesh>): THREE.Mesh[][] {
+    const out = this.slots.map(([, , prefix]) => takePrefix(parts, prefix));
+    out.push([...parts.values()]);
+    toonifyMeshes(out.flat(), NO_OUTLINE);
+    return out;
+  }
+
+  /** Puts model `key` on the skeleton (taking the current one off). */
+  private useModel(key: string): void {
+    const next = this.models.get(key);
+    if (!next || key === this.modelKey) return;
+    const current = this.models.get(this.modelKey);
+    if (current) for (const list of current) for (const m of list) m.removeFromParent();
+    next.forEach((list, i) => {
+      const [pivot, at] = i < this.slots.length ? this.slots[i] : [this.torso, TORSO];
+      for (const m of list) {
+        m.position.copy(at).negate();
+        pivot.add(m);
+      }
+    });
+    this.modelKey = key;
+  }
+
   private constructor(parts: Map<string, THREE.Mesh>) {
     this.body.scale.setScalar(MODEL_SCALE);
     this.group.add(this.body);
 
-    // Lower body: hips carry the skirt and both legs (thigh → knee → shin and boot).
-    this.hips = attachAtPivot(this.body, ORIGIN, HIPS, takePrefix(parts, 'hips_'));
+    // The skeleton (shared by every hero's model): hips and legs (thigh → knee), torso →
+    // shoulders → elbows (weapons ride the +X hand), cloak, head → ponytail.
+    const slot = (pivot: THREE.Group, at: THREE.Vector3, prefix: string) => {
+      this.slots.push([pivot, at, prefix]);
+      return pivot;
+    };
+    this.hips = slot(attachAtPivot(this.body, ORIGIN, HIPS, []), HIPS, 'hips_');
     for (const side of [1, -1]) {
-      const hip = attachAtPivot(this.hips, HIPS, hipJoint(side), takePrefix(parts, `thigh_${side}`));
-      const knee = attachAtPivot(hip, hipJoint(side), kneeJoint(side), takePrefix(parts, `shin_${side}`));
+      const hip = slot(attachAtPivot(this.hips, HIPS, hipJoint(side), []), hipJoint(side), `thigh_${side}`);
+      const knee = slot(attachAtPivot(hip, hipJoint(side), kneeJoint(side), []), kneeJoint(side), `shin_${side}`);
       this.legs.push({ side, hip, knee });
     }
-
-    // Upper body: torso → shoulders → elbows (the bow rides the bow hand), cloak, head → ponytail.
     this.torso = attachAtPivot(this.body, ORIGIN, TORSO, []);
-    this.drawShoulder = attachAtPivot(this.torso, TORSO, DRAW_SHOULDER, takePrefix(parts, 'armL_upper'));
-    this.drawElbow = attachAtPivot(this.drawShoulder, DRAW_SHOULDER, DRAW_ELBOW, takePrefix(parts, 'armL_lower'));
-    this.bowShoulder = attachAtPivot(this.torso, TORSO, BOW_SHOULDER, takePrefix(parts, 'armR_upper'));
-    this.bowElbow = attachAtPivot(this.bowShoulder, BOW_SHOULDER, BOW_ELBOW, takePrefix(parts, 'armR_lower'));
-    this.cloak = attachAtPivot(this.torso, TORSO, new THREE.Vector3(0, 3.55, -0.35), takePrefix(parts, 'cloak'));
-    this.head = attachAtPivot(this.torso, TORSO, NECK, takePrefix(parts, 'head'));
+    this.drawShoulder = slot(attachAtPivot(this.torso, TORSO, DRAW_SHOULDER, []), DRAW_SHOULDER, 'armL_upper');
+    this.drawElbow = slot(attachAtPivot(this.drawShoulder, DRAW_SHOULDER, DRAW_ELBOW, []), DRAW_ELBOW, 'armL_lower');
+    this.bowShoulder = slot(attachAtPivot(this.torso, TORSO, BOW_SHOULDER, []), BOW_SHOULDER, 'armR_upper');
+    this.bowElbow = slot(attachAtPivot(this.bowShoulder, BOW_SHOULDER, BOW_ELBOW, []), BOW_ELBOW, 'armR_lower');
+    const cloakAt = new THREE.Vector3(0, 3.55, -0.35);
+    this.cloak = slot(attachAtPivot(this.torso, TORSO, cloakAt, []), cloakAt, 'cloak');
+    this.head = slot(attachAtPivot(this.torso, TORSO, NECK, []), NECK, 'head');
     const tailAt = new THREE.Vector3(0, 4.4, -0.2);
-    this.ponytail = attachAtPivot(this.head, NECK, tailAt, takePrefix(parts, 'tail'));
+    this.ponytail = slot(attachAtPivot(this.head, NECK, tailAt, []), tailAt, 'tail');
 
-    // Everything else (tunic, belt, quiver, arrows, neck…) rides on the torso.
-    for (const mesh of parts.values()) {
-      mesh.position.copy(TORSO).negate();
-      this.torso.add(mesh);
-    }
-
-    // Cartoon look: toon shading, and outlines on everything but the small face details and trims.
-    toonify(this.group, NO_OUTLINE);
+    // The elf's own model (cartoon look: toon shading, outlines but on small details).
+    this.models.set('elf', this.partition(parts));
+    this.useModel('elf');
   }
 
   private ghostly = false;
@@ -200,6 +239,13 @@ export class Elf {
     this.heroClass = h;
     const def = HEROES[h];
     this.weaponLook = def.weapon;
+    // Its own model where there is one; otherwise the elf's, recoloured, with a placeholder weapon.
+    const own = this.models.has(h);
+    this.useModel(own ? h : 'elf');
+    if (own) {
+      this.buildWeapons('bow', 0); // (clears any placeholder weapon: the model holds its own)
+      return;
+    }
     this.group.traverse((o) => {
       if (!(o instanceof THREE.Mesh) || o.userData.outline || o.parent === this.weapons || o.parent === this.offWeapons) return;
       const name = o.name;
@@ -270,6 +316,10 @@ export class Elf {
       case 'twinBlades':
         blade(this.weapons, 1.7, 0.2);
         blade(this.offWeapons, 1.7, 0.2);
+        break;
+      case 'greatAxe':
+        add(this.weapons, new THREE.CylinderGeometry(0.07, 0.07, 4.6, 7), wood, 0, 0.9, 0);
+        add(this.weapons, new THREE.BoxGeometry(0.08, 0.9, 0.9), steel, 0, 2.8, 0.35);
         break;
       case 'spear':
         add(this.weapons, new THREE.CylinderGeometry(0.06, 0.06, 4.6, 6), wood, 0, 0.9, 0);
@@ -355,6 +405,15 @@ export class Elf {
     let bz = -0.25;
     let ex = -0.5;
     switch (this.weaponLook) {
+      case 'greatAxe':
+        if (active) {
+          // A big two-handed chop: raised high, brought down across.
+          bx = -2.7 + 3.1 * p;
+          by = 0.5 - 1.2 * p;
+          bz = -0.2;
+          ex = -0.2;
+        }
+        break;
       case 'swordShield':
       case 'twinBlades': {
         if (active && (this.weaponLook === 'swordShield' || this.swingSide > 0)) {
@@ -383,7 +442,12 @@ export class Elf {
     this.bowShoulder.rotation.set(bx, by, bz);
     this.bowElbow.rotation.set(ex, 0, 0);
     // The other arm: the knight's shield, the barbarian's second blade, otherwise a free swing.
-    if (this.weaponLook === 'swordShield') {
+    if (this.weaponLook === 'swordShield' && this.modelKey !== 'elf') {
+      // The knight's own shield is modelled on the hanging arm: keep it near that, raise it to guard.
+      const g = this.guardAmount;
+      this.drawShoulder.rotation.set(-0.1 - 1.1 * g, 0.1 + 0.5 * g, -0.12);
+      this.drawElbow.rotation.x = -0.25 - 0.5 * g;
+    } else if (this.weaponLook === 'swordShield') {
       const g = this.guardAmount;
       this.drawShoulder.rotation.set(-0.4 - 0.9 * g, 0.3 + 0.4 * g, -0.2);
       this.drawElbow.rotation.x = -1.1 - 0.3 * g;

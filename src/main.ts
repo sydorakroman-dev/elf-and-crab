@@ -53,7 +53,7 @@ async function boot(): Promise<void> {
   const base = import.meta.env.BASE_URL;
   const loaded = showLoading(root);
   const [elf, familiars] = await Promise.all([
-    Elf.load(`${base}models/elf.glb`),
+    Elf.load(`${base}models/elf.glb`).then(async (e) => (await e.loadHeroModels(base), e)),
     loadFamiliarBodies(base, CRAB_SCALE),
     loadBeastTemplates(base),
     loadElementalTemplates(base),
@@ -65,7 +65,7 @@ async function boot(): Promise<void> {
     // Practice room: the hero's game runs hidden in this browser (its own elf and creatures,
     // nothing drawn), linked straight to the familiar's view — no server, no monsters.
     const link = practiceLink();
-    const [simElf, simFamiliars] = await Promise.all([Elf.load(`${base}models/elf.glb`), loadFamiliarBodies(base, CRAB_SCALE)]);
+    const [simElf, simFamiliars] = await Promise.all([Elf.load(`${base}models/elf.glb`).then(async (e) => (await e.loadHeroModels(base), e)), loadFamiliarBodies(base, CRAB_SCALE)]);
     const sim = new Game(renderer, document.createElement('div'), simElf, simFamiliars, 'mouse', link.hero, { headless: true, practice: true });
     sim.start();
     game = new FamiliarGame(renderer, root, elf, familiars, link.familiar);

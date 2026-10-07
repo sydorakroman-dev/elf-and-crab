@@ -12,7 +12,7 @@ export const HERO_CLASSES: HeroClass[] = ['elf', 'knight', 'mage', 'barbarian', 
 export type AttackKind = 'arrow' | 'bolt' | 'spear' | 'melee';
 
 /** What the hero holds (the placeholder weapon models). */
-export type WeaponLook = 'bow' | 'swordShield' | 'staff' | 'twinBlades' | 'spear';
+export type WeaponLook = 'bow' | 'swordShield' | 'staff' | 'twinBlades' | 'greatAxe' | 'spear';
 
 export interface HeroDef {
   name: string;
@@ -82,13 +82,13 @@ export const HEROES: Record<HeroClass, HeroDef> = {
   barbarian: {
     name: 'Barbarian',
     icon: '🪓',
-    blurb: 'Twin blades, fast and furious.',
+    blurb: 'A great axe: heavy, wide chops.',
     hp: 125,
     armor: 0.1,
     mana: 0,
-    attack: { kind: 'melee', damage: 14, interval: 0.32, range: 2.9, arc: 1.1 },
+    attack: { kind: 'melee', damage: 22, interval: 0.5, range: 3.4, arc: 1.2 },
     skills: ['dash', 'whirlwind', 'rage'],
-    weapon: 'twinBlades',
+    weapon: 'greatAxe',
     colors: [0x9a2a24, 0x6a4a30],
   },
   beastmaster: {

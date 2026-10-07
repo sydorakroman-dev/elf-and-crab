@@ -44,15 +44,15 @@ play and the final level have no seal. In the practice room, the 🔮 button sta
 ## Heroes
 
 Pick your hero on the title screen (remembered). Each fights differently; skills sit in slots 1–3
-(stamina), spells from books in 4–9 (mana). Placeholder looks for now (the elf model recoloured,
-holding the hero's weapon) until each hero gets its own model.
+(stamina), spells from books in 4–9 (mana). Each hero has its own model, built in code after its art
+(`scripts/models/build-heroes.mjs`), on the elf's skeleton so the same rig animates them all.
 
 | Hero | Attack | Skills | |
 | --- | --- | --- | --- |
 | 🏹 Elf Archer | arrows | Dash, Wind Walk, Double Shot | 100 health |
 | 🛡️ Knight | sword swing hitting everything in an arc in front | Dash, Shield Wall (−60% damage, 4 s), Shield Bash (stun in front) | 150 health, 25% armour |
 | 🔮 Mage | magic bolts that pierce | Blink (8 m), Fireball (32 round where it lands), Frost Ring (freeze within 5 m) | 85 health, +4 mana/s |
-| 🪓 Barbarian | fast twin-blade swings | Dash, Whirlwind (26 to all around), Rage (+50% speed, +30% damage, 6 s) | 125 health, 10% armour |
+| 🪓 Barbarian | heavy great-axe chops | Dash, Whirlwind (26 to all around), Rage (+50% speed, +30% damage, 6 s) | 125 health, 10% armour |
 | 🐺 Beast Master | thrown spears, and a wolf that fights beside you | Dash, Sic ’Em (wolf leaps at a foe, 30), Mend (heal 25 and the wolf) | 105 health |
 
 ## Skills and spells
