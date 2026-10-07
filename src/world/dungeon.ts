@@ -79,6 +79,8 @@ export class Dungeon {
   private exitBars: THREE.Group | null = null;
   private exitPortal: THREE.Mesh | null = null;
   private exitLight: THREE.PointLight | null = null;
+  /** The light column showing where to go (over the guardian's hall, then the exit door). */
+  private beacon: THREE.Group | null = null;
   private exitOpen = 0;
   /** Chest lids (in the level's chest order): how open (0 → 1), and where they're heading. */
   private readonly chestLids: { lid: THREE.Object3D; open: number; target: number; glow: THREE.Sprite }[] = [];
@@ -112,6 +114,7 @@ export class Dungeon {
     this.buildWalls(rng);
     this.buildExit();
     this.buildChests();
+    this.buildBeacon();
     for (const p of level.props) this.buildProp(p, rng);
     this.buildFeature(rng);
     this.buildRubble(rng);
@@ -130,6 +133,14 @@ export class Dungeon {
 
   setExitOpen(open: boolean): void {
     this.exitTarget = open ? 1 : 0;
+  }
+
+  /** The guardian is beaten: the light column moves to the open exit door. */
+  beaconToExit(): void {
+    const e = this.level.exit;
+    if (!this.beacon || !e) return;
+    this.beacon.position.set(e.x, 0, e.z + 2);
+    for (const c of this.beacon.children) ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).color.setHex(0xfff1c0);
   }
 
   /** Swings chest `i`'s lid open. */
@@ -213,6 +224,11 @@ export class Dungeon {
       e.sprite.material.opacity = Math.min(1, y / 2) * Math.max(0, 1 - y / 16);
     }
 
+    if (this.beacon) {
+      const pulse = 0.85 + Math.sin(time * 2.2) * 0.15;
+      this.beacon.children.forEach((c, i) => ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = (i === 0 ? 0.22 : 0.9) * pulse);
+      this.beacon.rotation.y = time * 0.3;
+    }
     for (const c of this.chestLids) {
       c.open += (c.target - c.open) * (1 - Math.exp(-6 * dt));
       c.lid.rotation.x = -c.open * 1.9;
@@ -460,6 +476,145 @@ export class Dungeon {
     this.group.add(gate);
   }
 
+  /**
+   * A tall column of light over the guardian's hall, seen through the fog from anywhere, so "north"
+   * always has a goal in it.
+   */
+  private buildBeacon(): void {
+    const boss = this.level.halls.find((h) => h.kind === 'boss');
+    if (!boss || this.level.halls.length < 3) return;
+    const color = this.room.outdoor ? 0xffd27a : this.room.torchFlame;
+    const g = new THREE.Group();
+    const column = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.6, 3.2, 70, 16, 1, true).translate(0, 35, 0),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+    );
+    const top = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
+    top.position.y = 40;
+    top.scale.setScalar(16);
+    g.add(column, top);
+    g.position.set(boss.x, 0, boss.z);
+    this.beacon = g;
+    this.group.add(g);
+  }
+
+  /**
+   * A landmark: unique, tall and lit, in the level's look (a giant oak, a geode, an obelisk, a war
+   * banner, a lamp tower, a forge stack), with a glow on top seen from afar.
+   */
+  private buildLandmark(obj: THREE.Group, rng: () => number): void {
+    const room = this.room;
+    const mat = (color: number, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, ...extra });
+    let glowColor = 0xffe0a0;
+    let top = 14;
+    switch (room.feature) {
+      case 'woodland': {
+        // A giant oak in autumn colours, standing out from the green woods.
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.2, 11, 9).translate(0, 5.5, 0), mat(0x6a3e1e));
+        obj.add(trunk);
+        const leaves = [0xe0702a, 0xd9a03a, 0xc04a2a].map((c) => mat(c));
+        for (let i = 0; i < 6; i++) {
+          const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), leaves[i % 3]);
+          blob.scale.setScalar(3.4 + rng() * 1.6);
+          const a = (i / 6) * Math.PI * 2;
+          blob.position.set(Math.cos(a) * 2.6, 12 + (i % 2) * 2.2, Math.sin(a) * 2.6);
+          blob.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+          obj.add(blob);
+        }
+        glowColor = 0xffc36b;
+        top = 17;
+        break;
+      }
+      case 'crystals': {
+        // A huge geode: tall magenta shards round a glowing heart.
+        const shard = this.glow(0xff5fd8, 0xff3fc8, 0.9, { roughness: 0.2 });
+        for (let i = 0; i < 7; i++) {
+          const m = new THREE.Mesh(new THREE.OctahedronGeometry(1, 0), shard);
+          const a = (i / 7) * Math.PI * 2;
+          m.position.set(Math.cos(a) * 1.4, 3 + rng() * 2, Math.sin(a) * 1.4);
+          m.scale.set(1.2, 5 + rng() * 4, 1.2);
+          m.rotation.set((rng() - 0.5) * 0.5, rng() * 3, (rng() - 0.5) * 0.5);
+          obj.add(m);
+        }
+        this.flame(obj.position.x, 4, obj.position.z, 0, 40, 30, 0xff6ae0, 0xff6ae0, 0);
+        glowColor = 0xff7ae8;
+        top = 12;
+        break;
+      }
+      case 'brazier': {
+        // A rune obelisk with a ghostly green flame.
+        const stone = mat(0x3a3640);
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.7, 13, 4).translate(0, 6.5, 0), stone);
+        shaft.rotation.y = Math.PI / 4;
+        const base = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1, 4.2), stone);
+        base.position.y = 0.5;
+        const rune = this.glow(0x0a2a14, 0x5dff8a, 1.4);
+        for (let i = 0; i < 4; i++) {
+          const strip = new THREE.Mesh(new THREE.BoxGeometry(0.25, 8, 0.25), rune);
+          const a = (i / 4) * Math.PI * 2;
+          strip.position.set(Math.cos(a) * 1.15, 6, Math.sin(a) * 1.15);
+          obj.add(strip);
+        }
+        obj.add(shaft, base);
+        this.flame(obj.position.x, 13.5, obj.position.z, 3.5, 30, 30, 0x6dff9a, 0x8dffb0, 0);
+        glowColor = 0x6dff9a;
+        top = 15;
+        break;
+      }
+      case 'throne': {
+        // A towering war banner of the orc horde.
+        const wood = mat(0x4a3020);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 15, 8).translate(0, 7.5, 0), wood);
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(5, 0.35, 0.35), wood);
+        bar.position.y = 13.5;
+        const cloth = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 8, 1, 4), mat(0x9a1a24, { side: THREE.DoubleSide }));
+        cloth.position.set(0, 9.4, 0.1);
+        const skull = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), mat(0xe8dcc0));
+        skull.position.set(0, 11, 0.4);
+        const finial = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 5), mat(0xd8a83a, { metalness: 0.7, roughness: 0.3 }));
+        finial.position.y = 15.6;
+        obj.add(pole, bar, cloth, skull, finial);
+        this.flame(obj.position.x + 2, 1.5, obj.position.z + 2, 2.4, 24, 24, room.torchLight, room.torchFlame, 0);
+        glowColor = 0xff6a4a;
+        top = 16.5;
+        break;
+      }
+      case 'puddles': {
+        // An old lamp tower rising out of the water.
+        const stone = mat(0x5a6070);
+        const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 2.2, 12, 10).translate(0, 6, 0), stone);
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 8), this.glow(0x2a8aa8, 0x7fe8ff, 1.6));
+        lamp.position.y = 13;
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.6, 10), mat(0x3a3f4a));
+        roof.position.y = 14.6;
+        obj.add(tower, lamp, roof);
+        this.flame(obj.position.x, 13, obj.position.z, 0, 34, 34, 0x7fe8ff, 0x7fe8ff, 0);
+        glowColor = 0x8fefff;
+        top = 15.5;
+        break;
+      }
+      case 'lava': {
+        // A great forge stack, glowing at the top, embers rising.
+        const stone = mat(0x2a2224);
+        const stack = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.8, 15, 8).translate(0, 7.5, 0), stone);
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.35, 6, 16).rotateX(Math.PI / 2), this.glow(0x4a1004, 0xff6a1a, 1.8));
+        rim.position.y = 15;
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.5, 0.6, 8, 1, true), this.glow(0x4a1004, 0xff5010, 1.2, { side: THREE.DoubleSide }));
+        band.position.y = 5;
+        obj.add(stack, rim, band);
+        this.flame(obj.position.x, 15.5, obj.position.z, 4, 30, 34, 0xff6a20, 0xff8a30, 0);
+        glowColor = 0xff7a30;
+        top = 17;
+        break;
+      }
+    }
+    // A glow on top, seen through the fog from far away.
+    const crown = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: glowColor, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false, opacity: 0.85 }));
+    crown.position.y = top;
+    crown.scale.setScalar(7);
+    obj.add(crown);
+  }
+
   /** Treasure chests in the side rooms: wood, gold bands, a lid that swings open. */
   private buildChests(): void {
     const wood = new THREE.MeshStandardMaterial({ color: 0x8a5530, roughness: 0.8, flatShading: true });
@@ -612,6 +767,9 @@ export class Dungeon {
         }
         break;
       }
+      case 'landmark':
+        this.buildLandmark(obj, rng);
+        break;
       case 'throne': {
         const stone = this.once('stone', () => new THREE.MeshStandardMaterial({ color: room.stone, roughness: 0.85, flatShading: true }));
         const gold = this.once('gold', () => new THREE.MeshStandardMaterial({ color: 0xd8a83a, metalness: 0.7, roughness: 0.35, flatShading: true }));
@@ -652,7 +810,7 @@ export class Dungeon {
     }
     obj.traverse((o) => (o.castShadow = o.receiveShadow = true));
     this.group.add(obj);
-    this.nearOnly.push([obj, 58]);
+    if (p.kind !== 'landmark') this.nearOnly.push([obj, 58]); // landmarks are seen from afar
     if (tall) this.occluders.push(obj);
     if (blocks) this.obstacles.push(blocks);
   }

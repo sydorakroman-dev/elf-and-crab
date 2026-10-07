@@ -103,6 +103,7 @@ export class FamiliarGame {
   private invState: InvState | null = null;
   private shopStock: StockEntry[] | null = null;
   private lastPhase = '';
+  private beaconMoved = false;
 
   constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarLink) {
     this.renderer = renderer;
@@ -321,6 +322,9 @@ export class FamiliarGame {
             this.sfx.book();
           }
           break;
+        case 'note':
+          this.hud.popups.toast(ev.t, 0x9fe0ff);
+          break;
         case 'chest':
           this.sfx.chest();
           this.hud.popups.toast('🧰 A treasure chest!', 0xffd34d);
@@ -397,6 +401,7 @@ export class FamiliarGame {
     this.effects.clear();
     this.camPlaced = false; // snap to the new level's spot instead of gliding across
     this.minimap.setLevel(this.dungeon.level.map);
+    this.beaconMoved = false;
     this.resize();
   }
 
@@ -452,7 +457,13 @@ export class FamiliarGame {
       exit: e ? { ...e, open: s.phase === 'cleared' && !s.rid } : null,
       chests: this.dungeon.level.chests,
       boss: bossHall && s.phase === 'fight' ? bossHall : null,
+      landmarks: this.dungeon.level.landmarks,
+      goal: s.phase === 'cleared' && e ? e : bossHall ?? null,
     });
+    if (s.phase === 'cleared' && !this.beaconMoved) {
+      this.beaconMoved = true;
+      this.dungeon.beaconToExit();
+    }
     // Elf: placed and animated from the hero's motion.
     const h = s.hero;
     // The camera follows our creature (or the elf, before a creature is picked).

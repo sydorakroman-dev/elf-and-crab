@@ -48,11 +48,17 @@ export function rollLoot(tier: Tier, level: number, rng: () => number): Drop[] {
   return drops;
 }
 
-/** Loot from a chest on level `level`. */
-export function chestLoot(level: number, rng: () => number): Drop[] {
+/**
+ * Loot from a chest on level `level`. `detour`: how far (m) off the shortest way to the guardian
+ * it lies — the further out of the way, the richer (more gold, likelier books, rarer gear).
+ */
+export function chestLoot(level: number, rng: () => number, detour = 0): Drop[] {
   const extra = LOOT.chestGoldPerLevel * Math.max(0, level - 1);
-  const drops: Drop[] = [{ kind: 'gold', amount: between(rng, LOOT.chestGold[0] + extra, LOOT.chestGold[1] + extra) }];
-  if (rng() < LOOT.chestBook) drops.push({ kind: 'book' });
-  if (rng() < LOOT.chestItem) drops.push({ kind: 'item', rarity: rollRarity(rng, LOOT.chestRarity) });
+  const far = Math.min(1, detour / 150); // 0 on the way … 1 at 150 m or more out of the way
+  const gold = between(rng, LOOT.chestGold[0] + extra, LOOT.chestGold[1] + extra);
+  const drops: Drop[] = [{ kind: 'gold', amount: Math.round(gold * (1 + far)) }];
+  if (rng() < LOOT.chestBook + far * 0.3) drops.push({ kind: 'book' });
+  const [c, r, e] = LOOT.chestRarity;
+  if (rng() < LOOT.chestItem + far * 0.4) drops.push({ kind: 'item', rarity: rollRarity(rng, [c * (1 - far), r, e * (1 + far * 2)]) });
   return drops;
 }

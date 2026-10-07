@@ -12,7 +12,7 @@ import { mulberry32 } from '../util/rng';
 /** Halls joined by corridors · one open area with clearings · a long approach to one vast hall. */
 export type LayoutStyle = 'halls' | 'open' | 'lair' | 'practice';
 
-export type PropKind = 'tree' | 'crystal' | 'pillar' | 'brazier' | 'lavapit' | 'spire' | 'pool' | 'throne';
+export type PropKind = 'tree' | 'crystal' | 'pillar' | 'brazier' | 'lavapit' | 'spire' | 'pool' | 'throne' | 'landmark';
 
 export interface LevelTheme {
   layout: LayoutStyle;
@@ -53,7 +53,19 @@ export interface Prop {
   r: number;
   /** Facing (radians), for things that face a way (the throne). */
   angle?: number;
+  /** A landmark's name ("the Great Oak"). */
+  name?: string;
 }
+
+/** Named landmarks per level look (feature): unique, tall and lit, to find your way by. */
+export const LANDMARK_NAMES: Record<string, string[]> = {
+  woodland: ['the Great Oak', 'the Hollow Oak', 'the Ember Oak'],
+  crystals: ['the Violet Geode', 'the Singing Crystal', 'the Moon Geode'],
+  brazier: ['the Grave Obelisk', 'the Weeping Obelisk', 'the Bone Obelisk'],
+  throne: ['the War Banner', 'the Chieftain’s Standard', 'the Blood Banner'],
+  puddles: ['the Drowned Beacon', 'the Old Lamp Tower', 'the Tide Beacon'],
+  lava: ['the Great Forge Stack', 'the Ember Chimney', 'the Smelter Stack'],
+};
 
 export interface Level {
   seed: number;
@@ -65,7 +77,10 @@ export interface Level {
   exit: { x: number; z: number } | null;
   packs: Pack[];
   props: Prop[];
-  chests: { x: number; z: number }[];
+  /** Treasure chests, with how far (m) off the shortest way to the guardian they lie (more detour, better loot). */
+  chests: { x: number; z: number; detour: number }[];
+  /** The level's named landmarks. */
+  landmarks: { x: number; z: number; name: string }[];
 }
 
 /** Tiles across and from south to north: a tall rectangle, 200 m × 400 m. */
@@ -73,7 +88,7 @@ const COLS = 100;
 const ROWS = 200;
 const HALF_W = (COLS * TILE) / 2; // 100 m
 const HALF_H = (ROWS * TILE) / 2; // 200 m
-const BLOCKING: Record<PropKind, number> = { tree: 0.9, crystal: 1.4, pillar: 1.3, brazier: 1.3, lavapit: 3.6, spire: 1.6, pool: 3.3, throne: 3 };
+const BLOCKING: Record<PropKind, number> = { tree: 0.9, crystal: 1.4, pillar: 1.3, brazier: 1.3, lavapit: 3.6, spire: 1.6, pool: 3.3, throne: 3, landmark: 2.4 };
 
 export function generateLevel(theme: LevelTheme, seed: number): Level {
   const rng = mulberry32(seed);
@@ -178,6 +193,74 @@ class Gen {
     for (const [i, j] of edges) this.corridor(halls[i], halls[j], width);
   }
 
+  /**
+   * Two ways north: a west lane and an east lane, each joining the start to the guardian through
+   * the halls on its side, with a few crossings between them (so there's always a second route).
+   */
+  lanes(halls: Hall[], start: Hall, boss: Hall, width: number): void {
+    const westLane = halls.filter((h) => h.kind === 'normal' && h.x < 0);
+    const eastLane = halls.filter((h) => h.kind === 'normal' && h.x >= 0);
+    this.connect([start, ...westLane, boss], 1, width);
+    this.connect([start, ...eastLane, boss], 1, width);
+    for (let i = 0; i < 3 && westLane.length && eastLane.length; i++) {
+      const a = this.pick(westLane);
+      const b = eastLane.slice().sort((p, q) => Math.abs(p.z - a.z) - Math.abs(q.z - a.z))[0];
+      this.corridor(a, b, width);
+    }
+  }
+
+  /**
+   * Makes sure there's a second way to the guardian: wall off (in a copy) a band along the
+   * shortest way; if that cuts the guardian off, dig an outer road up the far side of the map
+   * (leaving the start from its south side, which the usual way never uses), and check again.
+   */
+  ensureSecondRoute(start: Hall, boss: Hall, width: number): void {
+    const m = this.map;
+    let side = 0;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { cut, meanX } = this.shortestWayCut(start, boss);
+      if (!cut) return;
+      side = attempt === 0 ? (meanX > 0 ? -1 : 1) : -side;
+      const sc = m.col(side * (HALF_W - 10));
+      const south = m.row(Math.min(HALF_H - 6, start.z + start.r + 3));
+      this.run(m.col(start.x), m.row(start.z), m.col(start.x), south, width);
+      this.run(m.col(start.x), south, sc, south, width);
+      this.run(sc, south, sc, m.row(boss.z), width);
+      this.run(sc, m.row(boss.z), m.col(boss.x), m.row(boss.z), width);
+    }
+  }
+
+  /** Walls off a band along the shortest way start → guardian (in a copy): is the guardian cut off? */
+  shortestWayCut(start: Hall, boss: Hall): { cut: boolean; meanX: number } {
+    const m = this.map;
+    const field = m.distanceField(boss.x, boss.z);
+    const tiles = new Uint8Array(m.tiles);
+    let c = m.col(start.x);
+    let r = m.row(start.z);
+    let sumX = 0;
+    let n = 0;
+    for (let steps = 0; field[r * m.cols + c] > 0 && steps < 5000; steps++) {
+      let best = [c, r];
+      let low = field[r * m.cols + c];
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++) {
+          const d = field[(r + dr) * m.cols + c + dc];
+          if (m.isFloor(c + dc, r + dr) && d >= 0 && d < low) {
+            low = d;
+            best = [c + dc, r + dr];
+          }
+        }
+      [c, r] = best;
+      const p = m.centre(c, r);
+      sumX += p.x;
+      n++;
+      if (Math.hypot(p.x - start.x, p.z - start.z) > 25 && Math.hypot(p.x - boss.x, p.z - boss.z) > boss.r + 6)
+        for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) if (m.isFloor(c + a, r + b)) tiles[(r + b) * m.cols + c + a] = WALL;
+    }
+    const after = new WalkMap(m.cols, m.rows, m.originX, m.originZ, tiles).distanceField(start.x, start.z);
+    return { cut: after[m.row(boss.z) * m.cols + m.col(boss.x)] < 0, meanX: n ? sumX / n : 0 };
+  }
+
   /** Is a hall at (x, z) of apothem r clear of the others (with a gap) and inside the map? */
   fits(halls: Hall[], x: number, z: number, r: number, gap: number): boolean {
     const pad = TILE * 2 + r * 1.42;
@@ -225,12 +308,12 @@ class Gen {
   }
 
   /** A prop at (x, z), if it's on clear floor and away from other props, the start and the exit. */
-  prop(kind: PropKind, x: number, z: number, keepClear: { x: number; z: number; r: number }[], angle?: number): boolean {
+  prop(kind: PropKind, x: number, z: number, keepClear: { x: number; z: number; r: number }[], angle?: number, name?: string): boolean {
     const r = BLOCKING[kind];
     if (!this.map.clear(x, z, r + 0.8)) return false;
     if (this.props.some((p) => Math.hypot(p.x - x, p.z - z) < p.r + r + 2.2)) return false;
     if (keepClear.some((k) => Math.hypot(k.x - x, k.z - z) < k.r + r)) return false;
-    this.props.push({ kind, x, z, r, angle });
+    this.props.push({ kind, x, z, r, angle, ...(name ? { name } : {}) });
     return true;
   }
 
@@ -296,6 +379,28 @@ class Gen {
     }
   }
 
+  /**
+   * Three named landmarks, one in each third of the way north (in the biggest hall there), so you
+   * can always tell where you are. Placed before other props; nothing else crowds them.
+   */
+  landmarks(theme: LevelTheme, halls: Hall[], keepClear: { x: number; z: number; r: number }[]): { x: number; z: number; name: string }[] {
+    const names = LANDMARK_NAMES[theme.feature];
+    if (!names || theme.layout === 'practice') return [];
+    const out: { x: number; z: number; name: string }[] = [];
+    const bands: [number, number][] = [[HALF_H * 0.33, HALF_H], [-HALF_H * 0.33, HALF_H * 0.33], [-HALF_H, -HALF_H * 0.33]];
+    bands.forEach(([lo, hi], i) => {
+      const pool = halls.filter((h) => h.kind === 'normal' && h.z >= lo && h.z < hi).sort((a, b) => b.r - a.r);
+      for (const h of pool) {
+        if (this.prop('landmark', h.x, h.z, keepClear, undefined, names[i])) {
+          out.push({ x: h.x, z: h.z, name: names[i] });
+          keepClear.push({ x: h.x, z: h.z, r: BLOCKING.landmark + 4 });
+          break;
+        }
+      }
+    });
+    return out;
+  }
+
   /** Packs of monsters around the level, the miniboss and its escort in the boss hall. */
   populate(theme: LevelTheme, halls: Hall[], start: { x: number; z: number }): Pack[] {
     const packs: Pack[] = [];
@@ -312,6 +417,8 @@ class Gen {
       return pool[pool.length - 1][0];
     };
     let left = theme.foes;
+    // Open ground: more, smaller packs (more to meet along the way); halls: fewer, bigger ones.
+    const [minPack, maxPack] = theme.layout === 'open' ? [2, 4] : [3, 6];
     if (!pool.length) return packs;
     const spots: { x: number; z: number }[] = [];
     const ok = (x: number, z: number) =>
@@ -334,14 +441,14 @@ class Gen {
         i++;
       }
     }
-    for (let tries = 0; tries < 1200 && spots.length * 4.5 < theme.foes; tries++) {
+    for (let tries = 0; tries < 1500 && spots.length * ((minPack + maxPack) / 2) < theme.foes; tries++) {
       const p = this.map.randomFloor(this.rng, 2);
       if (ok(p.x, p.z)) spots.push(p);
     }
-    // Share the foes out: 3–6 a pack.
+    // Share the foes out.
     for (let i = 0; i < spots.length && left > 0; i++) {
       const fair = Math.ceil(left / (spots.length - i));
-      const size = Math.max(1, Math.min(left, Math.round(Math.min(6, Math.max(3, fair + this.range(-1, 1))))));
+      const size = Math.max(1, Math.min(left, Math.round(Math.min(maxPack, Math.max(minPack, fair + this.range(-1, 1))))));
       left -= size;
       packs.push({ ...spots[i], kinds: Array.from({ length: size }, draw), boss: false });
     }
@@ -358,12 +465,15 @@ class Gen {
     const want = 24 + Math.floor(this.rng() * 6);
     for (let tries = 0; tries < 3000 && halls.length < want + 2; tries++) {
       const r = Math.round(this.range(9, 15));
-      const x = this.range(-HALF_W + 16, HALF_W - 16);
+      // Alternate sides, so both the west and the east lane get their halls.
+      const west = halls.length % 2 === 0;
+      const x = west ? this.range(-HALF_W + 16, -14) : this.range(14, HALF_W - 16);
       const z = this.range(-HALF_H + 60, HALF_H - 40);
       if (this.fits(halls, x, z, r, 5)) halls.push({ x, z, r, shape: shape(), kind: 'normal' });
     }
     for (const h of halls) this.stamp(h);
-    this.connect(halls, 5);
+    this.lanes(halls, start, boss, 3);
+    this.ensureSecondRoute(start, boss, 3);
     this.treasureRooms(halls, 3 + Math.floor(this.rng() * 3));
     const exit = this.exitAlcove(boss);
     const begin = { x: this.map.centre(this.map.col(start.x), 0).x, z: start.z + 4 };
@@ -375,7 +485,7 @@ class Gen {
     const m = this.map;
     // Rough ground: random noise smoothed into caves / glades.
     for (let r = 2; r < m.rows - 2; r++)
-      for (let c = 2; c < m.cols - 2; c++) if (this.rng() < 0.56) m.tiles[r * m.cols + c] = FLOOR;
+      for (let c = 2; c < m.cols - 2; c++) if (this.rng() < 0.5) m.tiles[r * m.cols + c] = FLOOR; // ~half rock: woods and caverns, not one big field
     for (let pass = 0; pass < 4; pass++) {
       const next = new Uint8Array(m.tiles);
       for (let r = 1; r < m.rows - 1; r++)
@@ -393,12 +503,15 @@ class Gen {
     halls.push(start, boss);
     for (let tries = 0; tries < 2000 && halls.length < 30; tries++) {
       const r = Math.round(this.range(8, 13));
-      const x = this.range(-HALF_W + 14, HALF_W - 14);
+      const west = halls.length % 2 === 0;
+      const x = west ? this.range(-HALF_W + 14, -12) : this.range(12, HALF_W - 14);
       const z = this.range(-HALF_H + 60, HALF_H - 40);
       if (this.fits(halls, x, z, r, 4)) halls.push({ x, z, r, shape: this.pick(theme.shapes), kind: 'normal' });
     }
     for (const h of halls) this.stamp(h);
-    this.connect(halls, 6, 4);
+    this.lanes(halls, start, boss, 4);
+    this.ensureSecondRoute(start, boss, 4);
+    this.treasureRooms(halls, 10); // candidate groves; only those well off the way keep a chest
     const exit = this.exitAlcove(boss);
     const begin = { x: start.x, z: start.z + 4 };
     this.keepReachable(begin.x, begin.z);
@@ -426,13 +539,38 @@ class Gen {
 
   finish(theme: LevelTheme, seed: number, halls: Hall[], start: { x: number; z: number }, exit: { x: number; z: number } | null): Level {
     const keepClear = [{ ...start, r: 9 }, ...(exit ? [{ x: exit.x, z: exit.z + 2, r: 7 }] : [])];
-    const chests = halls.filter((h) => h.kind === 'treasure').map((h) => ({ x: h.x, z: h.z }));
-    for (const c of chests) keepClear.push({ ...c, r: 2.5 });
     const bossHall = halls.find((h) => h.kind === 'boss');
+    // How far off the shortest way to the guardian each chest lies.
+    const fromStart = this.map.distanceField(start.x, start.z);
+    const fromBoss = bossHall ? this.map.distanceField(bossHall.x, bossHall.z) : fromStart;
+    const at = (f: Int32Array, x: number, z: number) => f[this.map.row(z) * this.map.cols + this.map.col(x)];
+    const shortest = bossHall ? at(fromStart, bossHall.x, bossHall.z) : 0;
+    // A treasure room right on the way isn't off the path: it becomes an ordinary hall.
+    const chests: { x: number; z: number; detour: number }[] = [];
+    for (const h of halls) {
+      if (h.kind !== 'treasure') continue;
+      const detour = Math.max(0, (at(fromStart, h.x, h.z) + at(fromBoss, h.x, h.z) - shortest) * TILE);
+      if (detour >= 30 && chests.length < 6) chests.push({ x: h.x, z: h.z, detour });
+      else h.kind = 'normal';
+    }
+    // Too few? The halls / clearings furthest off the way become treasure spots too.
+    if (theme.layout !== 'lair' && theme.layout !== 'practice' && chests.length < 3) {
+      const far = halls
+        .filter((h) => h.kind === 'normal')
+        .map((h) => ({ h, detour: Math.max(0, (at(fromStart, h.x, h.z) + at(fromBoss, h.x, h.z) - shortest) * TILE) }))
+        .filter((c) => c.detour >= 30)
+        .sort((a, b) => b.detour - a.detour);
+      for (const { h, detour } of far.slice(0, 3 - chests.length)) {
+        h.kind = 'treasure';
+        chests.push({ x: h.x, z: h.z, detour });
+      }
+    }
+    for (const c of chests) keepClear.push({ ...c, r: 2.5 });
+    const landmarks = this.landmarks(theme, halls, keepClear);
     // Room to fight the guardian (the lair keeps its spires and lava pools: the Ash King flies).
     if (bossHall) keepClear.push({ x: bossHall.x, z: bossHall.z, r: theme.layout === 'lair' ? 6 : bossHall.r * 0.7 });
     this.decorate(theme, halls, keepClear);
     const packs = this.populate(theme, halls, start);
-    return { seed, map: this.map, halls, start, exit, packs, props: this.props, chests };
+    return { seed, map: this.map, halls, start, exit, packs, props: this.props, chests, landmarks };
   }
 }

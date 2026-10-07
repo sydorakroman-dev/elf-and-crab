@@ -16,6 +16,10 @@ export interface MinimapMarks {
   chests?: readonly { x: number; z: number }[];
   /** The guardian, when its hall has been seen. */
   boss?: { x: number; z: number } | null;
+  /** Landmarks (shown once seen). */
+  landmarks?: readonly { x: number; z: number }[];
+  /** Where to head (the guardian, then the exit): an arrow on the map's edge while it's off the map. */
+  goal?: { x: number; z: number } | null;
 }
 
 /**
@@ -89,6 +93,51 @@ export class Minimap {
       ctx.stroke();
     };
     for (const c of marks.chests ?? []) if (this.explored(c.x, c.z)) dot(c.x, c.z, 3, '#ffd34d');
+    for (const l of marks.landmarks ?? []) {
+      if (!this.explored(l.x, l.z)) continue;
+      // A little diamond for a landmark.
+      const x = sx(l.x);
+      const y = sz(l.z);
+      ctx.beginPath();
+      ctx.moveTo(x, y - 6);
+      ctx.lineTo(x + 5, y);
+      ctx.lineTo(x, y + 6);
+      ctx.lineTo(x - 5, y);
+      ctx.closePath();
+      ctx.fillStyle = '#9fe0ff';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.stroke();
+    }
+    const goal = marks.goal;
+    if (goal) {
+      const gx = sx(goal.x);
+      const gy = sz(goal.z);
+      const size = VIEW * PX;
+      if (gx < 0 || gy < 0 || gx > size || gy > size) {
+        // Off the map: an arrow on the edge, pointing the way.
+        const hx = sx(marks.hero.x);
+        const hy = sz(marks.hero.z);
+        const a = Math.atan2(gy - hy, gx - hx);
+        const half = size / 2 - 9;
+        const k = half / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)));
+        ctx.save();
+        ctx.translate(size / 2 + Math.cos(a) * k, size / 2 + Math.sin(a) * k);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.moveTo(8, 0);
+        ctx.lineTo(-5, -6);
+        ctx.lineTo(-5, 6);
+        ctx.closePath();
+        ctx.fillStyle = '#ff6a5a';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     if (marks.exit && (marks.exit.open || this.explored(marks.exit.x, marks.exit.z + 2))) dot(marks.exit.x, marks.exit.z, 4, marks.exit.open ? '#fff1c0' : '#8a7a5a');
     if (marks.boss && this.explored(marks.boss.x, marks.boss.z)) dot(marks.boss.x, marks.boss.z, 4, '#ff4d5e');
     if (marks.familiar) dot(marks.familiar.x, marks.familiar.z, 3, '#7dffcf');

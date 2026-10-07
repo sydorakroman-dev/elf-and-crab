@@ -61,7 +61,7 @@ export const ROOMS: RoomDef[] = [
     pool: { beetle: 14, snake: 4, vine: 3, direwolf: 2, boar: 1, treant: 1 },
     boss: 'bear',
     escort: { beetle: 3 },
-    foes: 102,
+    foes: 140,
   },
   {
     name: 'The Crystal Cave',
@@ -86,7 +86,7 @@ export const ROOMS: RoomDef[] = [
     pool: { spider: 12, ooze: 5, sporecrawler: 4, mushroom: 2, mold: 1 },
     boss: 'caveworm',
     escort: { spider: 3 },
-    foes: 114,
+    foes: 140,
   },
   {
     name: 'The Crypt',

@@ -87,6 +87,8 @@ export type GameEvent =
   | { e: 'burst'; x: number; z: number; c: number; n: number }
   /** Loot picked up: k 0 gold (n coins), 1 a spell book (t: what it taught), 2 gear or a potion (t: what). */
   | { e: 'loot'; k: number; x: number; z: number; n: number; t?: string }
+  /** Something worth a note on the tablet too (a landmark seen). */
+  | { e: 'note'; t: string }
   /** Chest `i` (in the level's list) was opened. */
   | { e: 'chest'; i: number }
   /** A Rune Seal answer: right (1) or wrong (0); done 1 when the seal breaks. */

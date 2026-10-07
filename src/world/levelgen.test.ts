@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateLevel, type Level } from './levelgen';
 import { ROOMS } from './rooms';
+import { WalkMap } from '../game/walkmap';
 
 const SEEDS = [1, 2, 3, 77, 1234, 99991];
 
@@ -52,6 +53,63 @@ describe('level generator', () => {
       }
     });
   }
+
+  it('gives every level (but the lair) named landmarks spread from south to north', () => {
+    for (const room of ROOMS) {
+      if (room.layout === 'lair') continue;
+      for (const seed of SEEDS) {
+        const l = generateLevel(room, seed);
+        expect(l.landmarks.length).toBeGreaterThanOrEqual(2);
+        expect(new Set(l.landmarks.map((m) => m.name)).size).toBe(l.landmarks.length);
+        const zs = l.landmarks.map((m) => m.z);
+        expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(100); // not bunched together
+        for (const m of l.landmarks) expect(l.props.some((p) => p.kind === 'landmark' && p.name === m.name)).toBe(true);
+      }
+    }
+  });
+
+  it('has a second way to the guardian when the shortest one is blocked', () => {
+    for (const room of ROOMS) {
+      if (room.layout === 'lair') continue;
+      for (const seed of SEEDS) {
+        const l = generateLevel(room, seed);
+        const m = l.map;
+        const boss = l.halls.find((h) => h.kind === 'boss')!;
+        const field = m.distanceField(boss.x, boss.z);
+        const tiles = new Uint8Array(m.tiles);
+        let c = m.col(l.start.x);
+        let r = m.row(l.start.z);
+        // Walk the shortest way and wall it off (a band 5 tiles wide), except right by the ends.
+        for (let steps = 0; field[r * m.cols + c] > 0 && steps < 5000; steps++) {
+          let best = [c, r];
+          let low = field[r * m.cols + c];
+          for (let dr = -1; dr <= 1; dr++)
+            for (let dc = -1; dc <= 1; dc++) {
+              const d = field[(r + dr) * m.cols + c + dc];
+              if (m.isFloor(c + dc, r + dr) && d >= 0 && d < low) {
+                low = d;
+                best = [c + dc, r + dr];
+              }
+            }
+          [c, r] = best;
+          const p = m.centre(c, r);
+          if (Math.hypot(p.x - l.start.x, p.z - l.start.z) > 25 && Math.hypot(p.x - boss.x, p.z - boss.z) > boss.r + 6)
+            for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) if (m.isFloor(c + a, r + b)) tiles[(r + b) * m.cols + c + a] = 0;
+        }
+        const blocked = new WalkMap(m.cols, m.rows, m.originX, m.originZ, tiles).distanceField(l.start.x, l.start.z);
+        expect(blocked[m.row(boss.z) * m.cols + m.col(boss.x)], `${room.name} seed ${seed}`).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('puts treasure rooms in every level but the lair, and rates how far off the way each lies', () => {
+    for (const room of ROOMS) {
+      if (room.layout === 'lair') continue;
+      const l = generateLevel(room, 5);
+      expect(l.chests.length).toBeGreaterThanOrEqual(3);
+      for (const c of l.chests) expect(c.detour).toBeGreaterThan(0);
+    }
+  });
 
   it('uses halls and corridors in the dungeon levels, open ground in the woodland', () => {
     const cave = generateLevel(ROOMS[1], 5);

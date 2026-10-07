@@ -129,6 +129,8 @@ export class Game {
   private sentShop = '';
   /** Seconds until the "bag is full" note may show again. */
   private bagFullNote = 0;
+  /** Landmarks named so far in this level. */
+  private readonly landmarksSeen = new Set<string>();
   private readonly touch: TouchControls | null = null;
   private readonly mode: InputMode;
   private readonly sfx = new Sfx();
@@ -399,6 +401,7 @@ export class Game {
     this.enemies.spawnPacks(this.level.packs, this.dungeon.obstacles);
     this.bossAnnounced = false;
     this.chestsOpened = 0;
+    this.landmarksSeen.clear();
     this.minimap?.setLevel(this.level.map);
   }
 
@@ -873,7 +876,22 @@ export class Game {
       exit: e ? { ...e, open: this.dungeon.exitTarget === 1 } : null,
       chests: this.level.chests,
       boss: bossHall && this.enemies.guardianAlive ? bossHall : null,
+      landmarks: this.level.landmarks,
+      goal: this.phase === 'cleared' && e ? e : bossHall ?? null,
     });
+    this.spotLandmarks();
+  }
+
+  /** A landmark comes into view for the first time: name it. */
+  private spotLandmarks(): void {
+    const p = this.player.position;
+    for (const l of this.level.landmarks) {
+      if (this.landmarksSeen.has(l.name) || Math.hypot(l.x - p.x, l.z - p.z) > 45 || !walkMap().lineOfSight(p, l)) continue;
+      this.landmarksSeen.add(l.name);
+      const text = `🗿 You see ${l.name}`;
+      this.hud.toast(text, 0x9fe0ff);
+      this.events.push({ e: 'note', t: text });
+    }
   }
 
   /** Is (x, z) within `range` m of the elf or the familiar? */
@@ -1365,7 +1383,7 @@ export class Game {
       if (!collectors.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < 2.4)) return;
       this.chestsOpened |= 1 << i;
       this.dungeon.openChest(i);
-      this.dropLoot(c.x, c.z + 1.6, chestLoot(this.room + 1, Math.random));
+      this.dropLoot(c.x, c.z + 1.6, chestLoot(this.room + 1, Math.random, c.detour));
       this.effects.burst(c.x, 1.2, c.z, new THREE.Color(0xffd34d), 34, 6, 0.14);
       this.events.push({ e: 'chest', i });
       this.hud.toast('🧰 A treasure chest!', 0xffd34d);
@@ -1532,6 +1550,7 @@ export class Game {
   /** Opens the exit door. */
   private openDoor(): void {
     this.dungeon.setExitOpen(true);
+    this.dungeon.beaconToExit();
     this.banner('The way is open!');
     this.hud.toast('↑ The exit door is open, north of the guardian’s hall', 0xffe0a0);
     this.sfx.door();

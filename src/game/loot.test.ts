@@ -46,4 +46,15 @@ describe('loot', () => {
     expect(rate(guardian, 'item')).toBe(1);
     expect(guardian.flat().some((x) => x.kind === 'item' && x.rarity === 'common')).toBe(false);
   });
+
+  it('pays more for chests far off the way to the guardian', () => {
+    const rng = mulberry32(8);
+    const value = (detour: number) => {
+      let s = 0;
+      for (let i = 0; i < 2000; i++)
+        for (const d of chestLoot(3, rng, detour)) s += d.kind === 'gold' ? d.amount : d.kind === 'item' ? (d.rarity === 'epic' ? 150 : d.rarity === 'rare' ? 60 : 20) : 40;
+      return s / 2000;
+    };
+    expect(value(150)).toBeGreaterThan(value(0) * 1.6);
+  });
 });
