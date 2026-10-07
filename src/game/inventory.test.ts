@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BAG_SIZE, Inventory, makeStock } from './inventory';
-import { ITEM_SLOTS, RARITY_INFO, SLOT_INFO, STAT_INFO, makeItem, makePotion, rollRarity, sellPrice, statLines, totalStats, type StatKey } from './items';
+import { ITEM_SLOTS, itemScore, RARITY_INFO, SLOT_INFO, STAT_INFO, makeItem, makePotion, rollRarity, sellPrice, statLines, totalStats, type StatKey } from './items';
 import { mulberry32 } from '../util/rng';
 
 describe('items', () => {
@@ -129,6 +129,34 @@ describe('inventory', () => {
     expect(inv.apply({ op: 'equip', i: 3, to: 'boots' }, null)).toBeNull(); // a helmet isn't boots
     for (const i of [3, 4, 5]) inv.apply({ op: 'equip', i }, null);
     expect(inv.gear.helmet && inv.gear.gloves && inv.gear.offhand).toBeTruthy();
+  });
+
+  it('sorts the bag: gear by kind, the best first, potions last, gaps at the end', () => {
+    const inv = new Inventory();
+    const rng = mulberry32(31);
+    inv.add(makePotion('mana'));
+    inv.add(makeItem(rng, 'common', 1, 'boots'));
+    inv.add(makePotion('health'));
+    inv.add(makeItem(rng, 'common', 1, 'bow'));
+    inv.add(makeItem(rng, 'epic', 1, 'bow'));
+    inv.apply({ op: 'drop', i: 1 }, null);
+    inv.add(makeItem(rng, 'rare', 1, 'boots'));
+    inv.apply({ op: 'sort' }, null);
+    const order = inv.bag.map((e) => (e ? (e.kind === 'item' ? `${e.rarity} ${e.slot}` : e.potion) : '-'));
+    expect(order.slice(0, 5)).toEqual(['epic bow', 'common bow', 'rare boots', 'health', 'mana']);
+    expect(order.slice(5).every((x) => x === '-')).toBe(true);
+  });
+
+  it('scores gear: rarer and later is better', () => {
+    const rng = mulberry32(32);
+    let epic = 0;
+    let common = 0;
+    for (let i = 0; i < 100; i++) {
+      epic += itemScore(makeItem(rng, 'epic', 3, 'bow'));
+      common += itemScore(makeItem(rng, 'common', 3, 'bow'));
+    }
+    expect(epic).toBeGreaterThan(common * 3);
+    expect(itemScore(null)).toBe(0);
   });
 
   it('holds 16 things; a full bag takes no more', () => {

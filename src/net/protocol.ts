@@ -134,6 +134,7 @@ export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
     }
     const j = Number.isInteger(r.j) && (r.j as number) >= 0 && (r.j as number) < 32 ? (r.j as number) : -1;
     if (r.op === 'move' && index >= 0 && j >= 0) return { type: 'inv', req: { op: 'move', i: index, j } };
+    if (r.op === 'sort') return { type: 'inv', req: { op: 'sort' } };
     return null;
   }
   if (v.type === 'parade' && typeof v.kind === 'string' && v.kind.length <= 24) return { type: 'parade', kind: v.kind }; // the hero checks it's a real monster

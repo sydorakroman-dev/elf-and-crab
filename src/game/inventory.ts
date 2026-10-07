@@ -3,7 +3,7 @@
  * shared by both, and the gold purse. Plus the merchant's stock between levels. Pure rules, unit
  * tested; the hero's game owns the one true inventory and the familiar's tablet sends requests.
  */
-import { FAM_SLOTS, HERO_SLOTS, fits, makeItem, makePotion, rollRarity, sellPrice, totalStats, type BagEntry, type GearSlot, type Item, type Stats } from './items';
+import { FAM_SLOTS, HERO_SLOTS, ITEM_SLOTS, RARITIES, fits, itemScore, makeItem, makePotion, rollRarity, sellPrice, totalStats, type BagEntry, type GearSlot, type Item, type Stats } from './items';
 
 export const BAG_SIZE = 16;
 
@@ -11,6 +11,7 @@ export type InvOp =
   | { op: 'equip'; i: number; to?: GearSlot } // bag slot → a place it fits (what was worn there goes back to that bag slot)
   | { op: 'unequip'; slot: GearSlot; to?: number } // gear slot → bag slot `to` (or the first free one)
   | { op: 'move'; i: number; j: number } // bag slot i ↔ bag slot j
+  | { op: 'sort' } // gear by kind (best first), then potions, gaps at the end
   | { op: 'use'; i: number } // drink a potion
   | { op: 'drop'; i: number }
   | { op: 'sell'; i: number } // only at the merchant
@@ -96,6 +97,14 @@ export class Inventory {
           this.bag[free] = it;
           this.gear[req.slot] = null;
         }
+        break;
+      }
+      case 'sort': {
+        const rank = (e: BagEntry) =>
+          e.kind === 'item' ? ITEM_SLOTS.indexOf(e.slot) * 1000 - RARITIES.indexOf(e.rarity) * 100 - Math.min(99, itemScore(e)) : 100000 + (e.potion === 'health' ? 0 : 1);
+        const things = this.bag.filter((e): e is BagEntry => e !== null).sort((a, b) => rank(a) - rank(b));
+        this.bag.fill(null);
+        things.forEach((e, i) => (this.bag[i] = e));
         break;
       }
       case 'move': {

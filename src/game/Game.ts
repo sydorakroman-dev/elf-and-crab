@@ -127,6 +127,8 @@ export class Game {
   /** What the familiar's tablet last got (inventory version, shop state). */
   private sentInv = -1;
   private sentShop = '';
+  /** Seconds until the "bag is full" note may show again. */
+  private bagFullNote = 0;
   private readonly touch: TouchControls | null = null;
   private readonly mode: InputMode;
   private readonly sfx = new Sfx();
@@ -267,6 +269,7 @@ export class Game {
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
       else if ((e.code === 'KeyI' || e.code === 'KeyB') && !e.repeat && !this.hud.actionBar.rebinding) this.toggleBag();
+      else if (e.code === 'Escape' && this.bagPanel.isOpen && this.phase !== 'shop') this.closeBag();
       else if ((e.code === 'KeyQ' || e.code === 'KeyE') && !e.repeat && this.state === 'playing') this.quickPotion(e.code === 'KeyQ' ? 'health' : 'mana');
       else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && this.phase === 'ready') this.beginFight();
       else {
@@ -959,6 +962,12 @@ export class Game {
     const bagFull = this.inv.full;
     for (const c of this.pickups.update(dt, this.time, collectors, (t) => !bagFull || !(t.startsWith('item_') || t.startsWith('potion_')))) this.collect(c);
     this.openChests(collectors);
+    // Walking over gear with a full bag: say so (now and then).
+    this.bagFullNote = Math.max(0, this.bagFullNote - dt);
+    if (bagFull && this.bagFullNote === 0 && this.pickups.bagLootNear(p, 1.6)) {
+      this.bagFullNote = 6;
+      this.hud.toast('🎒 Your bag is full — drop or sell something (I)', 0xff8a8a);
+    }
 
     const shielded = this.powers.has('shield');
     this.shieldBubble.visible = shielded;

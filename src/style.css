@@ -688,10 +688,11 @@ kbd {
 .bag-panel {
   position: fixed;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  /* Anchored near the top (not centred), so it doesn't jump when the details below grow. */
+  top: max(12px, 5vh);
+  transform: translateX(-50%);
   width: min(860px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
+  max-height: calc(100vh - max(24px, 10vh));
   overflow: auto;
   z-index: 20;
   padding: 16px 18px;
@@ -731,7 +732,7 @@ kbd {
 .sr-price { font-weight: 800; color: #ffd24a; }
 .shop-go { margin-top: 10px; width: 100%; padding: 12px; border: 0; border-radius: 12px; background: #ffc24a; color: #2a1c08; font: 800 15px/1 system-ui, sans-serif; cursor: pointer; }
 .shop-wait { opacity: 0.7; font-size: 13px; }
-.bag-detail { margin-top: 12px; padding: 10px 12px; min-height: 64px; border-radius: 12px; background: rgba(0, 0, 0, 0.25); }
+.bag-detail { margin-top: 12px; padding: 10px 12px; min-height: 150px; border-radius: 12px; background: rgba(0, 0, 0, 0.25); }
 .bag-detail .hint { margin: 0; opacity: 0.7; }
 .bd-title { display: flex; align-items: center; gap: 8px; font-size: 17px; color: var(--rc); }
 .bd-sub { margin: 2px 0 6px; font-size: 12px; opacity: 0.7; }
@@ -836,3 +837,24 @@ kbd {
   background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--rc) 38%, #241b15) 0%, color-mix(in srgb, var(--rc) 14%, #17120e) 70%, #120e0b 100%);
 }
 .shop-row .sr-icon:has(.item-art) { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: radial-gradient(circle, color-mix(in srgb, var(--rc) 35%, #241b15), #120e0b); }
+
+/* The hover card, bag count, sort button, "better" and "new" marks. */
+.bag-tip {
+  position: fixed; z-index: 45; width: 250px; padding: 10px 12px; border-radius: 12px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(36, 28, 42, 0.98), rgba(20, 15, 24, 0.98));
+  border: 1px solid color-mix(in srgb, var(--rc, #fff) 55%, transparent);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6); color: #f4ead8; font: 13px/1.35 system-ui, sans-serif;
+}
+.bag-tip ul { margin: 4px 0 6px; padding-left: 16px; }
+.bag-tip li.up, .bag-detail li.up { color: #8dff9a; }
+.bag-tip li.down, .bag-detail li.down { color: #ff8a8a; }
+.bd-worth { margin: 0; font-size: 12px; color: #ffd24a; }
+.bd-how { margin: 4px 0 0; font-size: 11px; opacity: 0.6; }
+.bag-count { font-size: 12px; opacity: 0.7; font-weight: 700; }
+.bag-count.full { color: #ff8a8a; opacity: 1; }
+.bag-sort { padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: inherit; font: 600 12px/1 system-ui, sans-serif; cursor: pointer; }
+.bag-head .bag-close { margin-left: auto; }
+.bag-head:not(:has(.bag-close)) .bag-sort { margin-left: auto; }
+.bag-cell { position: relative; }
+.bag-cell .up-mark { position: absolute; right: 2px; top: 1px; font-size: 11px; color: #5dff7a; text-shadow: 0 0 4px #000, 0 0 2px #000; }
+.bag-cell.new::after { content: ''; position: absolute; left: 4px; top: 4px; width: 7px; height: 7px; border-radius: 50%; background: #ffd24a; box-shadow: 0 0 6px #ffd24a; }

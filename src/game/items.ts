@@ -224,6 +224,12 @@ export function statLines(stats: Stats): string[] {
   return (Object.entries(stats) as [StatKey, number][]).map(([k, v]) => STAT_INFO[k].label(v));
 }
 
+/** One number for how good a piece of gear is: each stat against a common level-1 roll, added up. */
+export function itemScore(it: Item | null): number {
+  if (!it) return 0;
+  return (Object.entries(it.stats) as [StatKey, number][]).reduce((sum, [k, v]) => sum + v / STAT_INFO[k].base, 0);
+}
+
 /** What the merchant pays for something (a share of its worth). */
 export function sellPrice(e: BagEntry): number {
   return Math.max(1, Math.floor(e.value * 0.3));

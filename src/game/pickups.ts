@@ -209,6 +209,11 @@ export class Pickups {
     };
   }
 
+  /** Is there gear or a potion lying within `r` m of `p`? */
+  bagLootNear(p: Point, r: number): boolean {
+    return this.items.some((it) => (it.type.startsWith('item_') || it.type.startsWith('potion_')) && Math.hypot(it.group.position.x - p.x, it.group.position.z - p.z) < r);
+  }
+
   /** Power-ups on the floor (loot doesn't count). */
   get count(): number {
     return this.items.filter((p) => !isLoot(p.type)).length;
