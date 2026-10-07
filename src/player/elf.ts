@@ -432,10 +432,11 @@ export class Elf {
         break;
       case 'spear':
         if (active) {
-          // Overhand throw.
-          bx = -2.8 + 3.4 * p;
-          by = 0.2;
-          ex = -0.6 + 0.6 * p;
+          // A wide sweep of the spear-staff, across the body.
+          bx = -1.6 + 1.2 * p;
+          by = 1.0 - 2.2 * p;
+          bz = -0.5;
+          ex = -0.2;
         }
         break;
     }

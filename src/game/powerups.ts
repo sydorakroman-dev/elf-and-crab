@@ -2,7 +2,12 @@ import { insideArena, walkMap, type Circle, type Point } from './combat';
 
 /** Pure power-up rules: catalogue, timers, random choice and placement (no three.js; unit tested). */
 
-export type PowerUpType = 'multishot' | 'rapid' | 'pierce' | 'shield' | 'heart';
+/**
+ * Every power-up works for every hero: multishot = Frenzy (three shots, or swings that hit all
+ * around), rapid = Haste, pierce = Might (+50% damage; shots fly through), swift = Swiftness.
+ * (The ids stay as they were: they're on the wire.)
+ */
+export type PowerUpType = 'multishot' | 'rapid' | 'pierce' | 'shield' | 'heart' | 'swift';
 
 export interface PowerUpDef {
   label: string;
@@ -15,11 +20,12 @@ export interface PowerUpDef {
 }
 
 export const POWER_UPS: Record<PowerUpType, PowerUpDef> = {
-  multishot: { label: 'Multishot', icon: '🔱', color: 0xff9a3d, duration: 12, weight: 3 },
-  rapid: { label: 'Rapid fire', icon: '⚡', color: 0xffe14d, duration: 10, weight: 3 },
-  pierce: { label: 'Piercing arrows', icon: '➶', color: 0xc77dff, duration: 12, weight: 2 },
+  multishot: { label: 'Frenzy', icon: '🌀', color: 0xff9a3d, duration: 12, weight: 3 },
+  rapid: { label: 'Haste', icon: '⚡', color: 0xffe14d, duration: 10, weight: 3 },
+  pierce: { label: 'Might', icon: '💥', color: 0xc77dff, duration: 12, weight: 2 },
   shield: { label: 'Shield', icon: '🛡️', color: 0x5ee0ff, duration: 20, weight: 2 },
   heart: { label: 'Heart', icon: '❤️', color: 0xff4d5e, duration: 0, weight: 3 },
+  swift: { label: 'Swiftness', icon: '👟', color: 0x7dffb0, duration: 12, weight: 2 },
 };
 
 /** Timed effects stack by extending, up to this many seconds. */

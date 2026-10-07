@@ -76,18 +76,21 @@ export class Pickups {
       return g.center();
     };
 
-    // Multishot: three arrowheads fanned out.
+    // Frenzy (multishot): three curved blades in a whirl.
+    const frenzyBlade = new THREE.Shape();
+    frenzyBlade.moveTo(0, 0);
+    frenzyBlade.quadraticCurveTo(0.35, 0.15, 0.55, 0.55);
+    frenzyBlade.quadraticCurveTo(0.2, 0.35, -0.08, 0.12);
+    frenzyBlade.closePath();
+    const frenzyGeo = extrude(frenzyBlade, 0.12);
     const multishot = () => {
       const g = new THREE.Group();
       const m = mat('multishot');
-      const head = new THREE.ConeGeometry(0.16, 0.5, 5);
-      const shaft = new THREE.CylinderGeometry(0.035, 0.035, 0.45, 5).translate(0, -0.45, 0);
-      for (const a of [-0.45, 0, 0.45]) {
-        const arrow = new THREE.Group();
-        arrow.add(new THREE.Mesh(head, m), new THREE.Mesh(shaft, m));
-        arrow.position.y = 0.15;
-        arrow.rotation.z = a;
-        g.add(arrow);
+      for (let i = 0; i < 3; i++) {
+        const b = new THREE.Mesh(frenzyGeo, m);
+        b.position.set(Math.cos((i / 3) * Math.PI * 2) * 0.12, Math.sin((i / 3) * Math.PI * 2) * 0.12, 0);
+        b.rotation.z = (i / 3) * Math.PI * 2;
+        g.add(b);
       }
       return g;
     };
@@ -104,16 +107,35 @@ export class Pickups {
     const rapidGeo = extrude(bolt);
     const rapid = () => new THREE.Mesh(rapidGeo, mat('rapid'));
 
-    // Piercing: one long arrow, tilted.
-    const pierce = () => {
+    // Might (pierce): an eight-pointed burst.
+    const burst = new THREE.Shape();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const r = i % 2 ? 0.22 : 0.55;
+      if (i === 0) burst.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else burst.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    burst.closePath();
+    const burstGeo = extrude(burst, 0.16);
+    const pierce = () => new THREE.Mesh(burstGeo, mat('pierce'));
+
+    // Swiftness: two chevrons, pointing on.
+    const chevron = new THREE.Shape();
+    chevron.moveTo(-0.3, 0.35);
+    chevron.lineTo(0.05, 0);
+    chevron.lineTo(-0.3, -0.35);
+    chevron.lineTo(-0.12, -0.35);
+    chevron.lineTo(0.23, 0);
+    chevron.lineTo(-0.12, 0.35);
+    chevron.closePath();
+    const chevronGeo = extrude(chevron, 0.14);
+    const swift = () => {
       const g = new THREE.Group();
-      const m = mat('pierce');
-      g.add(
-        new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 6), m),
-        new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.4, 6).translate(0, 0.72, 0), m),
-        new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.02).translate(0, -0.5, 0), m),
-      );
-      g.rotation.z = -0.6;
+      for (const x of [-0.2, 0.2]) {
+        const c = new THREE.Mesh(chevronGeo, mat('swift'));
+        c.position.x = x;
+        g.add(c);
+      }
       return g;
     };
 
@@ -199,6 +221,7 @@ export class Pickups {
       pierce,
       shield,
       heart,
+      swift,
       gold,
       book,
       item_common: item(LOOT_COLORS.item_common),

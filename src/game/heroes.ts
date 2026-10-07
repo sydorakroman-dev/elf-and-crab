@@ -94,11 +94,11 @@ export const HEROES: Record<HeroClass, HeroDef> = {
   beastmaster: {
     name: 'Beast Master',
     icon: '🐺',
-    blurb: 'Throws spears; a wolf fights beside you.',
+    blurb: 'Long spear-staff sweeps; a wolf fights beside you.',
     hp: 105,
     armor: 0.05,
     mana: 0,
-    attack: { kind: 'spear', damage: 15, interval: 0.55 },
+    attack: { kind: 'melee', damage: 18, interval: 0.45, range: 3.6, arc: 0.95 },
     skills: ['dash', 'sic', 'mend'],
     weapon: 'spear',
     colors: [0x6a5030, 0x4a7a3a],

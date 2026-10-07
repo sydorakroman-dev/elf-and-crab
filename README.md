@@ -53,7 +53,7 @@ Pick your hero on the title screen (remembered). Each fights differently; skills
 | 🛡️ Knight | sword swing hitting everything in an arc in front | Dash, Shield Wall (−60% damage, 4 s), Shield Bash (stun in front) | 150 health, 25% armour |
 | 🔮 Mage | magic bolts that pierce | Blink (8 m), Fireball (32 round where it lands), Frost Ring (freeze within 5 m) | 85 health, +4 mana/s |
 | 🪓 Barbarian | heavy great-axe chops | Dash, Whirlwind (26 to all around), Rage (+50% speed, +30% damage, 6 s) | 125 health, 10% armour |
-| 🐺 Beast Master | thrown spears, and a wolf that fights beside you | Dash, Sic ’Em (wolf leaps at a foe, 30), Mend (heal 25 and the wolf) | 105 health |
+| 🐺 Beast Master | long spear-staff sweeps (melee, the longest reach), and a wolf that fights beside you | Dash, Sic ’Em (wolf leaps at a foe, 30), Mend (heal 25 and the wolf) | 105 health |
 
 ## Skills and spells
 
@@ -247,7 +247,7 @@ Two roles:
 | --- | --- | --- |
 | 🦀 Crab | medium | ✨ **Magic Burst** — stun every enemy within 5.5 m for 2.5 s (2.8 s) · 🐚 **Shell Shield** — the elf gets a bubble that blocks the next hit (4.4 s) |
 | 🦫 Capybara | slow | ♨️ **Soothing Spring** — a 6 m pool for 6 s: enemies in it are 60% slower, the elf heals 1 heart in it (4 s) · 🌸 **Calm Aura** — enemies within 7 m stop chasing and wander off, harmless, for 5 s (3.2 s) |
-| 🐺 Wolf | fast | 🐾 **Pounce** — leap up to 10 m the way it's heading, 25 damage to every enemy on the way (2 s) · 🌕 **War Howl** — enemies within 8 m panic and flee for 3 s (bosses only flinch), and the elf gets Rapid fire for 5 s (5.6 s) |
+| 🐺 Wolf | fast | 🐾 **Pounce** — leap up to 10 m the way it's heading, 25 damage to every enemy on the way (2 s) · 🌕 **War Howl** — enemies within 8 m panic and flee for 3 s (bosses only flinch), and the hero gets Haste for 5 s (5.6 s) |
 | 🐠 Goldfish | medium | 🫧 **Bubble Shield** — the elf gets a bubble that blocks the next 2 hits (5.6 s) · 💦 **Water Jet** — a 7 m blast of water ahead: 6 damage, knocks enemies ~5 m back and slows them by half for 3 s (3.2 s) |
 | 🦎 Iguana | medium | 👅 **Tongue Lash** — yanks the nearest enemy within 9 m over to the iguana and stuns it 1.5 s (bosses just flinch) (3.6 s) · 💚 **Jade Ward** — a jade circle around the elf for 5 s: heals 6 HP/s and slows enemies in it by 40% (5.6 s) |
 
@@ -268,9 +268,10 @@ dropped by defeated enemies (tougher ones more often). Walk over one to collect 
 
 | | Power-up | Effect |
 | --- | --- | --- |
-| 🔱 | Multishot | 3 arrows in a spread (12 s) |
-| ⚡ | Rapid fire | Double fire rate (10 s) |
-| ➶ | Piercing arrows | Arrows pass through every enemy in a line (12 s) |
+| 🌀 | Frenzy | ranged: 3 shots in a spread · melee: swings hit everything around you, with more reach (12 s) |
+| ⚡ | Haste | attack twice as fast (10 s) |
+| 💥 | Might | +50% damage; shots also fly through foes (12 s) |
+| 👟 | Swiftness | move 35% faster (12 s) |
 | 🛡️ | Shield | Absorbs the next hit (up to 20 s) |
 | ❤️ | Heart | +1 heart (only appears when you're hurt) |
 

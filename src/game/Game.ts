@@ -515,6 +515,7 @@ export class Game {
     this.rest(dt);
     this.updateBlessings(dt);
     this.shieldWall = Math.max(0, this.shieldWall - dt);
+    this.player.speedScale = (1 + this.heroGear.moveSpeed) * (this.powers.has('swift') ? 1.35 : 1); // Swiftness
     this.elf.setGuard(this.shieldWall > 0);
     this.rage = Math.max(0, this.rage - dt);
     if (this.pet) this.updatePet(dt);
@@ -544,7 +545,9 @@ export class Game {
     const p = this.player.position;
     const dir = this.player.aimDirection(this.aim);
     if (attack.kind === 'melee') {
-      this.meleeSwing(dir, attack.range ?? 3, attack.arc ?? 1);
+      // Frenzy: the swing hits everything around you, with more reach.
+      const frenzy = this.powers.has('multishot');
+      this.meleeSwing(dir, (attack.range ?? 3) + (frenzy ? 1 : 0), frenzy ? Math.PI : attack.arc ?? 1);
       return;
     }
     // Gentle aim assist: snap to an enemy near the crosshair line.
@@ -1375,7 +1378,8 @@ export class Game {
 
   /** A basic attack's damage with gear (and Rage): sometimes a critical (double) hit. */
   private arrowDamage(): number {
-    const base = HEROES[this.heroClass].attack.damage * (1 + this.heroGear.damage) * (this.rage > 0 ? 1.3 : 1);
+    const might = this.powers.has('pierce') ? 1.5 : 1; // the Might power-up
+    const base = HEROES[this.heroClass].attack.damage * (1 + this.heroGear.damage) * (this.rage > 0 ? 1.3 : 1) * might;
     return Math.random() < this.heroGear.crit ? base * 2 : base;
   }
 

@@ -47,12 +47,12 @@ describe('pickPowerUp', () => {
   it('offers every type, roughly by weight, when hurt', () => {
     const rng = mulberry32(9);
     const counts: Record<string, number> = {};
-    for (let i = 0; i < 13000; i++) {
+    for (let i = 0; i < 15000; i++) {
       const t = pickPowerUp(rng, 2, 5);
       counts[t] = (counts[t] ?? 0) + 1;
     }
-    expect(Object.keys(counts).sort()).toEqual(['heart', 'multishot', 'pierce', 'rapid', 'shield']);
-    // Weights 3:3:2:2:3 of 13 → multishot ≈ 3000, pierce ≈ 2000.
+    expect(Object.keys(counts).sort()).toEqual(['heart', 'multishot', 'pierce', 'rapid', 'shield', 'swift']);
+    // Weights 3:3:2:2:3:2 of 15 → multishot (Frenzy) ≈ 3000, pierce (Might) ≈ 2000.
     expect(counts.multishot).toBeGreaterThan(2700);
     expect(counts.multishot).toBeLessThan(3300);
     expect(counts.pierce).toBeGreaterThan(1750);

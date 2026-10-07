@@ -12,7 +12,7 @@ import type { RunPhase } from '../world/rooms';
 export type GameState = 'ready' | 'playing' | 'paused' | 'over' | 'won';
 
 export { ENEMY_KIND_LIST as SLIME_KIND_CODES } from '../game/enemyKinds';
-export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart'] as const;
+export const POWER_CODES = ['multishot', 'rapid', 'pierce', 'shield', 'heart', 'swift'] as const;
 /** Pickup codes on the wire: the power-ups (0–4), then loot. Append only. */
 export const PICKUP_CODES = [...POWER_CODES, 'gold', 'book', 'item_common', 'item_rare', 'item_epic', 'potion_health', 'potion_mana'] as const;
 
