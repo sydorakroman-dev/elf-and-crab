@@ -122,7 +122,42 @@ export class Dungeon {
     this.fadeables = this.occluders.map((obj) => ({ obj, mats: ownMaterials(obj), opacity: 1 }));
     this.focus.copy(this.entry);
     this.update(0, 0, this.entry);
+    this.freezeStatic();
     scene.add(this.group);
+  }
+
+  /**
+   * Thousands of walls, props and bits of dressing never move: work out their positions once and
+   * let the renderer skip them every frame (only the things that animate stay live).
+   */
+  private freezeStatic(): void {
+    const live = new Set<THREE.Object3D>();
+    const top = (o: THREE.Object3D | null) => {
+      while (o && o.parent && o.parent !== this.group) o = o.parent;
+      if (o && o.parent === this.group) live.add(o);
+    };
+    for (const f of this.flames) top(f.sprite);
+    for (const f of this.fireflies) top(f.sprite);
+    for (const e of this.embers) top(e.sprite);
+    for (const b of this.bobbers) top(b.obj);
+    for (const r of this.ripples) top(r.mesh);
+    for (const g of this.glints) top(g.sprite);
+    for (const c of this.chestLids) top(c.lid);
+    for (const l of this.lights) top(l);
+    top(this.waterSheet);
+    top(this.exitBars);
+    top(this.exitPortal);
+    top(this.beacon);
+    top(this.moon);
+    top(this.moon.target);
+    this.group.updateMatrixWorld(true);
+    for (const child of this.group.children) {
+      if (live.has(child)) continue;
+      child.traverse((o) => {
+        o.matrixAutoUpdate = false;
+        o.matrixWorldAutoUpdate = false;
+      });
+    }
   }
 
   /** Is (x, z) in the open exit doorway? */

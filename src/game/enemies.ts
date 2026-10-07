@@ -227,7 +227,11 @@ export class Enemies {
 
   /** Draws only the enemies within `range` m of `focus` (the level is big; fog hides the rest). */
   cull(focus: { x: number; z: number }, range: number): void {
-    for (const s of this.all) s.group.visible = Math.abs(s.x - focus.x) < range && Math.abs(s.z - focus.z) < range;
+    for (const s of this.all) {
+      const near = Math.abs(s.x - focus.x) < range && Math.abs(s.z - focus.z) < range;
+      s.group.visible = near;
+      s.group.matrixWorldAutoUpdate = near; // far monsters' many parts aren't recalculated every frame
+    }
   }
 
   /** Wakes `e` and its whole pack (it was hit, or saw the hero). */
