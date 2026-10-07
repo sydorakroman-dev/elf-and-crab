@@ -4,7 +4,7 @@
  * and rules, unit tested; Game applies the effects.
  */
 
-export type AbilityId = 'dash' | 'windwalk' | 'doubleshot';
+export type AbilityId = 'dash' | 'windwalk' | 'doubleshot' | 'shieldwall' | 'bash' | 'blink' | 'fireball' | 'frostring' | 'whirlwind' | 'rage' | 'sic' | 'mend';
 
 export interface AbilityDef {
   name: string;
@@ -19,6 +19,15 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
   dash: { name: 'Dash', icon: '💨', kind: 'skill', cost: 1, description: 'A quick dash; you can’t be hit while dashing.' },
   doubleshot: { name: 'Double Shot', icon: '🏹', kind: 'skill', cost: 1, description: 'Your next 3 shots fire two arrows side by side.' },
   windwalk: { name: 'Wind Walk', icon: '🌬️', kind: 'skill', cost: 2, description: 'Turn invisible for 3 s: enemies lose track of you. Shooting breaks it.' },
+  shieldwall: { name: 'Shield Wall', icon: '🛡️', kind: 'skill', cost: 2, description: 'Brace behind your shield: take 60% less damage for 4 s.' },
+  bash: { name: 'Shield Bash', icon: '💥', kind: 'skill', cost: 1, description: 'Slam the foes in front: 15 damage and stunned for 1.5 s.' },
+  blink: { name: 'Blink', icon: '✨', kind: 'skill', cost: 1, description: 'Vanish and appear 8 m ahead (you can’t blink through walls).' },
+  fireball: { name: 'Fireball', icon: '☄️', kind: 'skill', cost: 2, description: 'Hurl a fireball: 32 damage to everything round where it lands.' },
+  frostring: { name: 'Frost Ring', icon: '❄️', kind: 'skill', cost: 2, description: 'Freeze every foe within 5 m for 2 s.' },
+  whirlwind: { name: 'Whirlwind', icon: '🌀', kind: 'skill', cost: 2, description: 'Spin with both blades: 26 damage to every foe around you.' },
+  rage: { name: 'Rage', icon: '😡', kind: 'skill', cost: 2, description: 'For 6 s, swing 50% faster and hit 30% harder.' },
+  sic: { name: 'Sic ’Em', icon: '🐺', kind: 'skill', cost: 1, description: 'Your wolf leaps at the nearest foe for 30 damage.' },
+  mend: { name: 'Mend', icon: '🌿', kind: 'skill', cost: 2, description: 'Heal yourself 25 and your wolf fully.' },
 };
 
 /** What sits in each of the nine slots (spells from the magic book will fill the empty ones). */

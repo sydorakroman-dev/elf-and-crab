@@ -16,7 +16,7 @@ import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_
 import { BUBBLE_HITS, TONGUE_BOSS_FLINCH, WARD, FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, JET, POUNCE_DAMAGE, inJet, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
 import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
-import { DOUBLE_GAP, DOUBLE_SHOTS, Resources, WIND_WALK_SECONDS } from './abilities';
+import { ABILITIES, DOUBLE_GAP, DOUBLE_SHOTS, Resources, WIND_WALK_SECONDS, type AbilityId } from './abilities';
 import { DIFFICULTIES, difficulty, scaledDamage } from './difficulty';
 import { DamageNumbers } from './numbers';
 import { AutoQuality } from '../ui/quality';
@@ -36,6 +36,8 @@ import { Pickups, type Collected } from './pickups';
 import { ELF_SPELLS, FIRST_SPELL_SLOT, SPELL_POWER, Spellbook, spellCost, spellTitle, type SpellKey } from './spells';
 import { chestLoot, rollLoot, tierOf, type Drop } from './loot';
 import { Inventory, makeStock, type InvOp, type StockEntry } from './inventory';
+import { HEROES, HERO_CLASSES, inSwing, loadHero, type HeroClass } from './heroes';
+import { Pet } from './pet';
 import { POTIONS, RARITY_INFO, makeItem, makePotion, type BagEntry } from './items';
 import { ENCHANT_CHAIN, ENCHANT_FIRE, ENCHANT_FROST, type ArrowHit } from './arrows';
 import type { HeroLink } from '../net/client';
@@ -131,6 +133,12 @@ export class Game {
   private bagFullNote = 0;
   /** Landmarks named so far in this level. */
   private readonly landmarksSeen = new Set<string>();
+  /** The hero being played, and its timed skills: Shield Wall, Rage (seconds left). */
+  private heroClass: HeroClass = loadHero();
+  private shieldWall = 0;
+  private rage = 0;
+  /** The beast master's wolf. */
+  private pet: Pet | null = null;
   /** Sarcophagi burst open in this level (prop indices), and alarms already announced. */
   private ambushed: number[] = [];
   private alarmsShown = 0;
@@ -251,6 +259,7 @@ export class Game {
     this.bagPanel.onClose = () => this.closeBag();
     this.bagPanel.onContinue = () => this.leaveShop();
     this.hud.actionBar.onBag = () => this.toggleBag();
+    this.hud.onHero = (h) => this.setHero(h);
     this.minimap.setLevel(this.level.map);
     if (mode === 'touch') this.touch = new TouchControls(root, this.player);
     this.player.onActiveChange = (active) => {
@@ -338,6 +347,7 @@ export class Game {
     // Arrive at the south gate, looking north across the room.
     const e = this.dungeon.entry;
     this.player.spawn(e.x, e.z, 0);
+    this.pet?.place(e.x - 2, e.z + 1);
     this.companion.reset(e.x + 2.5, e.z + 0.5);
     this.telegraph.sync([], 0);
     this.hud.bossBar.set(null);
@@ -366,7 +376,7 @@ export class Game {
     for (const e of Object.values(this.enchants)) e.shots = 0;
     this.bloom.left = this.bark.left = 0;
     this.inv.clear();
-    this.refreshGear();
+    this.setHero(this.hud.hero);
     this.ward = 0;
     this.riddle = null;
     this.elf.setGhost(false);
@@ -504,6 +514,10 @@ export class Game {
     this.updateFamiliar(dt);
     this.rest(dt);
     this.updateBlessings(dt);
+    this.shieldWall = Math.max(0, this.shieldWall - dt);
+    this.elf.setGuard(this.shieldWall > 0);
+    this.rage = Math.max(0, this.rage - dt);
+    if (this.pet) this.updatePet(dt);
 
     this.checkContacts();
     this.updatePowerUps(dt);
@@ -522,11 +536,17 @@ export class Game {
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
     if (this.phase === 'ready' && !this.practice) return; // nothing to shoot at until the hero starts
     if (!this.player.trigger || this.fireCooldown > 0) return;
-    this.fireCooldown = (this.powers.has('rapid') ? FIRE_INTERVAL / 2 : FIRE_INTERVAL) / (1 + this.heroGear.attackSpeed);
+    const attack = HEROES[this.heroClass].attack;
+    const interval = this.heroClass === 'elf' ? FIRE_INTERVAL : attack.interval;
+    this.fireCooldown = ((this.powers.has('rapid') ? interval / 2 : interval) / (1 + this.heroGear.attackSpeed)) / (this.rage > 0 ? 1.5 : 1);
     this.invisible = 0; // shooting gives you away
 
     const p = this.player.position;
     const dir = this.player.aimDirection(this.aim);
+    if (attack.kind === 'melee') {
+      this.meleeSwing(dir, attack.range ?? 3, attack.arc ?? 1);
+      return;
+    }
     // Gentle aim assist: snap to an enemy near the crosshair line.
     const alive = this.enemies.all.filter((s) => s.alive && !s.hidden);
     const assist = this.mode === 'touch' ? TOUCH_AIM_ASSIST_ANGLE : AIM_ASSIST_ANGLE;
@@ -543,16 +563,46 @@ export class Game {
       this.hud.actionBar.setCharges('doubleshot', this.doubleShots);
     }
     const enchant = this.takeEnchant();
+    const look = attack.kind === 'bolt' ? 1 : attack.kind === 'spear' ? 2 : 0;
+    const through = pierce || !!attack.pierce;
     for (const d of spreadDirections(dir.x, dir.z, count, MULTISHOT_SPREAD)) {
       if (!twin) {
-        this.arrows.fire(p.x + d.x * 0.6, p.z + d.z * 0.6, d, pierce, enchant);
+        this.arrows.fire(p.x + d.x * 0.6, p.z + d.z * 0.6, d, through, enchant, look);
         continue;
       }
       const sx = d.z * (DOUBLE_GAP / 2); // sideways (perpendicular to the shot)
       const sz = -d.x * (DOUBLE_GAP / 2);
-      for (const k of [-1, 1]) this.arrows.fire(p.x + d.x * 0.6 + sx * k, p.z + d.z * 0.6 + sz * k, d, pierce, enchant);
+      for (const k of [-1, 1]) this.arrows.fire(p.x + d.x * 0.6 + sx * k, p.z + d.z * 0.6 + sz * k, d, through, enchant, look);
     }
     this.sfx.twang();
+    this.events.push({ e: 'twang' });
+  }
+
+  /** A sword / twin-blade swing: everything in the arc in front takes the hit (and enchantments go off). */
+  private meleeSwing(dir: THREE.Vector3, range: number, arc: number): void {
+    const p = this.player.position;
+    // Gentle aim assist toward the nearest foe in reach.
+    const near = this.enemies.all
+      .filter((s) => s.alive && !s.hidden && Math.hypot(s.x - p.x, s.z - p.z) < range + s.radius + 1.5)
+      .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+    if (near) dir.set(near.x - p.x, 0, near.z - p.z).normalize();
+    this.player.faceShot(dir);
+    const enchant = this.takeEnchant();
+    let hits = 0;
+    for (const s of [...this.enemies.all]) {
+      if (!s.alive || s.hidden || !inSwing(p.x, p.z, dir.x, dir.z, range, arc, s)) continue;
+      this.enemies.wake(s);
+      this.damage(s, s.x - p.x, s.z - p.z, this.arrowDamage());
+      if (enchant) this.enchantHit({ slime: s, dirX: dir.x, dirZ: dir.z, enchant });
+      hits++;
+    }
+    // The slash: a fan of sparks along the arc.
+    for (let k = -2; k <= 2; k++) {
+      const a = Math.atan2(dir.x, dir.z) + (k / 2) * arc * 0.8;
+      this.effects.burst(p.x + Math.sin(a) * range * 0.75, 1.2, p.z + Math.cos(a) * range * 0.75, new THREE.Color(0xf4f6ff), 3, 2, 0.08);
+    }
+    this.sfx.whoosh();
+    if (hits) this.shake = Math.max(this.shake, 0.08);
     this.events.push({ e: 'twang' });
   }
 
@@ -833,7 +883,7 @@ export class Game {
       t: q(this.time),
       state,
       ...(this.practice ? { practice: 1 } : {}),
-      hero: { x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0, ...(this.invisible > 0 ? { i: 1 } : {}), ...(this.ward > 0 ? { w: 1 } : {}) },
+      hero: { c: HERO_CLASSES.indexOf(this.heroClass), x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0, ...(this.invisible > 0 ? { i: 1 } : {}), ...(this.ward > 0 ? { w: 1 } : {}) },
       fam: c.kind
         ? { k: FAMILIAR_KINDS.indexOf(c.kind), x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed), y: q(c.height) }
         : null,
@@ -859,6 +909,7 @@ export class Game {
       gold: this.inv.gold,
       ...this.invForSnapshot(),
       ch: this.chestsOpened,
+      ...(this.pet ? { pet: this.pet.tuple() } : {}),
       ...(this.ambushed.length ? { amb: this.ambushed } : {}),
       powers: this.powers.list().map((pw) => [POWER_CODES.indexOf(pw.type), q(pw.remaining)]),
       cds: c.kind ? FAMILIARS[c.kind].spells.map((id) => [SPELL_IDS.indexOf(id), q(c.cooldowns.remaining(id))]) : [],
@@ -1130,7 +1181,8 @@ export class Game {
       return;
     }
     // Bark Skin takes the edge off.
-    const taken = Math.max(1, Math.round(scaledDamage(amount) * (this.bark.left > 0 ? 1 - this.bark.reduce : 1) * (1 - this.heroGear.armor)));
+    const armour = Math.min(0.75, this.heroGear.armor + HEROES[this.heroClass].armor + (this.shieldWall > 0 ? 0.6 : 0));
+    const taken = Math.max(1, Math.round(scaledDamage(amount) * (this.bark.left > 0 ? 1 - this.bark.reduce : 1) * (1 - armour)));
     this.health -= taken;
     this.numbers.show(taken, p.x, 2.4, p.z, 'hurt');
     this.events.push({ e: 'num', x: q(p.x), y: 2.4, z: q(p.z), n: taken, k: 2 });
@@ -1194,20 +1246,157 @@ export class Game {
       this.effects.ring(p.x, p.z, 0xdff4ff, 2);
       this.sfx.whoosh();
       this.hud.toast('🌬️ Wind Walk', 0xdff4ff);
+      return;
     }
+    this.heroSkill(id);
+  }
+
+  /** The other heroes' skills (stamina already checked here, paid on success). */
+  private heroSkill(id: AbilityId): void {
+    const p = this.player.position;
+    const def = ABILITIES[id];
+    if (!this.resources.canAfford(id)) return;
+    const foesWithin = (x: number, z: number, r: number) => this.enemies.all.filter((s) => s.alive && !s.hidden && Math.hypot(s.x - x, s.z - z) <= r + s.radius);
+    switch (id) {
+      case 'shieldwall':
+        this.shieldWall = 4;
+        this.spellFx(p.x, p.z, 0x8fb8ff, 1.6, 16);
+        break;
+      case 'bash': {
+        const dir = this.player.aimDirection(this.aim);
+        this.player.faceShot(dir);
+        for (const s of [...this.enemies.all]) {
+          if (!s.alive || s.hidden || !inSwing(p.x, p.z, dir.x, dir.z, 3.4, 0.9, s)) continue;
+          this.enemies.wake(s);
+          this.damage(s, s.x - p.x, s.z - p.z, 15);
+          s.stun(1.5);
+          s.shove(s.x - p.x, s.z - p.z, 2.5);
+        }
+        this.spellFx(p.x + dir.x * 2, p.z + dir.z * 2, 0xffe08a, 2, 18);
+        this.shake = Math.max(this.shake, 0.2);
+        break;
+      }
+      case 'blink': {
+        // Eight metres the way you're heading (or aiming), short of any wall.
+        const v = this.player.motion;
+        const dir = v.speed > 0.5 ? { x: Math.sin(v.moveYaw), z: Math.cos(v.moveYaw) } : this.player.aimDirection(this.aim);
+        const t = walkMap().raycast(p.x, p.z, p.x + dir.x * 8, p.z + dir.z * 8, 0.6) ?? 1;
+        this.spellFx(p.x, p.z, 0xc79bff, 0, 20);
+        p.set(p.x + dir.x * 8 * t, 0, p.z + dir.z * 8 * t); // the camera glides after
+        this.spellFx(p.x, p.z, 0xc79bff, 1.4, 20);
+        this.invulnerable = Math.max(this.invulnerable, 0.3);
+        break;
+      }
+      case 'fireball': {
+        const dir = this.aimAt();
+        this.player.faceShot(dir);
+        const t = walkMap().raycast(p.x, p.z, p.x + dir.x * 14, p.z + dir.z * 14, 0.4) ?? 1;
+        // Lands on the first foe in the way, or where it hits a wall.
+        let land = { x: p.x + dir.x * 14 * t, z: p.z + dir.z * 14 * t };
+        for (let d = 1; d <= 14 * t; d += 0.5) {
+          const x = p.x + dir.x * d;
+          const z = p.z + dir.z * d;
+          if (foesWithin(x, z, 0.4).length) {
+            land = { x, z };
+            break;
+          }
+        }
+        for (const s of foesWithin(land.x, land.z, 3.5)) {
+          this.enemies.wake(s);
+          this.damage(s, s.x - land.x || dir.x, s.z - land.z || dir.z, 32);
+        }
+        this.spellFx(land.x, land.z, 0xff7a2a, 3.5, 40);
+        this.sfx.burst();
+        this.shake = Math.max(this.shake, 0.25);
+        break;
+      }
+      case 'frostring':
+        for (const s of this.enemies.stunAround(p.x, p.z, 5, 2)) this.damage(s, s.x - p.x, s.z - p.z, 8);
+        this.spellFx(p.x, p.z, 0xbff0ff, 5, 40);
+        this.sfx.burst();
+        break;
+      case 'whirlwind':
+        for (const s of foesWithin(p.x, p.z, 3.6)) {
+          this.enemies.wake(s);
+          this.damage(s, s.x - p.x, s.z - p.z, 26);
+        }
+        this.elf.shoot();
+        this.spellFx(p.x, p.z, 0xffd0a0, 3.6, 36);
+        this.sfx.whoosh();
+        break;
+      case 'rage':
+        this.rage = 6;
+        this.spellFx(p.x, p.z, 0xff4a3a, 2, 30);
+        this.sfx.wave();
+        break;
+      case 'sic': {
+        const pet = this.pet;
+        const target = pet ? this.enemies.all.filter((s) => s.alive && !s.hidden).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0] : null;
+        if (!pet || !target || Math.hypot(target.x - p.x, target.z - p.z) > 16) {
+          this.hud.toast('🐺 No foe near enough', 0x9a9a9a);
+          return;
+        }
+        pet.leapTo(target.x, target.z);
+        this.enemies.wake(target);
+        this.damage(target, target.x - pet.x, target.z - pet.z, 30);
+        this.spellFx(target.x, target.z, 0xd9cbb0, 1.6, 18);
+        break;
+      }
+      case 'mend':
+        this.heal(25);
+        this.spellFx(p.x, p.z, 0x7dff8a, 2, 24);
+        if (this.pet) this.spellFx(this.pet.x, this.pet.z, 0x7dff8a, 1.4, 14);
+        this.sfx.spring();
+        break;
+      default:
+        return;
+    }
+    this.resources.spend(id);
+    this.hud.toast(`${def.icon} ${def.name}`, 0xffe0a0);
+  }
+
+  /** The wolf: follows the hero, and bites the nearest awake foe close by. */
+  private updatePet(dt: number): void {
+    const pet = this.pet!;
+    const p = this.player.position;
+    const foe = this.enemies.all
+      .filter((s) => s.alive && !s.hidden && !this.enemies.isAsleep(s) && Math.hypot(s.x - p.x, s.z - p.z) < 14)
+      .sort((a, b) => Math.hypot(a.x - pet.x, a.z - pet.z) - Math.hypot(b.x - pet.x, b.z - pet.z))[0];
+    const bitten = pet.update(dt, p, foe ?? null, this.dungeon.obstacles, this.time);
+    if (bitten && foe) this.damage(foe, foe.x - pet.x, foe.z - pet.z, 7 * (1 + this.heroGear.damage));
   }
 
   // ── Gear, the bag and the merchant ────────────────────────────────────────────────────────
 
-  /** Max health: the elf's own, plus gear. */
+  /** Max health: the hero's own, plus gear. */
   private get maxHealth(): number {
-    return HERO.maxHp + this.heroGear.maxHp;
+    return HEROES[this.heroClass].hp + this.heroGear.maxHp;
   }
 
-  /** An arrow's damage with gear: more damage, and sometimes a critical (double) shot. */
+  /** A basic attack's damage with gear (and Rage): sometimes a critical (double) hit. */
   private arrowDamage(): number {
-    const base = HERO.arrowDamage * (1 + this.heroGear.damage);
+    const base = HEROES[this.heroClass].attack.damage * (1 + this.heroGear.damage) * (this.rage > 0 ? 1.3 : 1);
     return Math.random() < this.heroGear.crit ? base * 2 : base;
+  }
+
+  /** Plays hero `h` from now on: its look, skills, health, and (the beast master) its wolf. */
+  setHero(h: HeroClass): void {
+    this.heroClass = h;
+    const def = HEROES[h];
+    this.elf.setHeroClass(h);
+    this.hud.actionBar.setAbilities(def.skills);
+    this.shieldWall = this.rage = 0;
+    this.elf.setGuard(false);
+    if (def.pet && !this.pet) {
+      this.pet = new Pet(this.player.position.x + 2, this.player.position.z + 1);
+      this.scene.add(this.pet.group);
+    } else if (!def.pet && this.pet) {
+      this.scene.remove(this.pet.group);
+      this.pet = null;
+    }
+    this.refreshGear();
+    this.health = this.maxHealth;
+    this.hud.setHealth(this.health);
   }
 
   /** Gear changed (or the gold): recompute stats and pass them on to everything that uses them. */
@@ -1216,7 +1405,7 @@ export class Game {
     this.heroGear = this.inv.heroStats();
     this.famGear = this.inv.familiarStats();
     this.player.speedScale = 1 + this.heroGear.moveSpeed;
-    this.resources.manaBonus = this.heroGear.manaRegen;
+    this.resources.manaBonus = this.heroGear.manaRegen + HEROES[this.heroClass].mana;
     this.resources.staminaBonus = this.heroGear.staminaRegen;
     this.companion.cooldownScale = 1 - this.famGear.famCooldown;
     this.companion.speedScale = 1 + this.famGear.famSpeed;
@@ -1706,6 +1895,7 @@ export class Game {
       this.effects.clear();
       const e = this.dungeon.entry;
       this.player.spawn(e.x, e.z, 0);
+      this.pet?.place(e.x - 2, e.z + 1);
       if (this.companion.kind) this.companion.appear(this.companion.kind, e.x + 2.5, e.z + 0.5);
       this.heal(this.maxHealth); // a fresh start in every level
       this.nextPickup = 8;

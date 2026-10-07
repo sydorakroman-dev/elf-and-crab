@@ -19,6 +19,8 @@ interface Arrow {
   /** Piercing arrows fly through slimes, hitting each one once. */
   pierce: boolean;
   enchant: number;
+  /** 0 an arrow, 1 a magic bolt (the mage), 2 a spear (the beast master). */
+  look: number;
   hitSlimes: Set<Enemy>;
 }
 
@@ -76,11 +78,11 @@ export class Arrows {
       mesh.userData.glow = glow;
       mesh.visible = false;
       this.group.add(mesh);
-      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false, pierce: false, enchant: 0, hitSlimes: new Set() });
+      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false, pierce: false, enchant: 0, look: 0, hitSlimes: new Set() });
     }
   }
 
-  fire(x: number, z: number, dir: { x: number; z: number }, pierce = false, enchant = 0): void {
+  fire(x: number, z: number, dir: { x: number; z: number }, pierce = false, enchant = 0, look = 0): void {
     // Reuse a free arrow, or the oldest stuck one.
     const a = this.arrows.find((a) => !a.active) ?? this.arrows.reduce((o, a) => (a.stuck && a.stuck < o.stuck ? a : o));
     a.active = true;
@@ -88,9 +90,11 @@ export class Arrows {
     a.stuck = 0;
     a.pierce = pierce;
     a.enchant = enchant;
+    a.look = look;
     a.hitSlimes.clear();
     a.dir.set(dir.x, 0, dir.z).normalize();
-    this.setGlow(a.mesh, pierce, enchant);
+    this.setLook(a.mesh, look);
+    this.setGlow(a.mesh, pierce, enchant, look);
     a.mesh.position.set(x, HEIGHT, z);
     a.mesh.rotation.set(0, Math.atan2(a.dir.x, a.dir.z), 0);
     a.mesh.visible = true;
@@ -100,7 +104,7 @@ export class Arrows {
   snapshot(): ArrowTuple[] {
     const out: ArrowTuple[] = [];
     this.arrows.forEach((a, i) => {
-      if (a.active) out.push([i, q(a.mesh.position.x), q(a.mesh.position.z), q(a.mesh.rotation.y), (a.pierce ? 1 : 0) | (a.enchant << 1)]);
+      if (a.active) out.push([i, q(a.mesh.position.x), q(a.mesh.position.z), q(a.mesh.rotation.y), (a.pierce ? 1 : 0) | (a.enchant << 1) | (a.look << 4)]);
     });
     return out;
   }
@@ -115,17 +119,27 @@ export class Arrows {
       a.mesh.visible = true;
       a.mesh.position.set(x, HEIGHT, z);
       a.mesh.rotation.set(0, yaw, 0);
-      this.setGlow(a.mesh, (pierce & 1) === 1, pierce >> 1);
+      this.setLook(a.mesh, (pierce >> 4) & 3);
+      this.setGlow(a.mesh, (pierce & 1) === 1, (pierce >> 1) & 7, (pierce >> 4) & 3);
     }
     this.arrows.forEach((a, i) => {
       if (!seen.has(i)) a.mesh.visible = false;
     });
   }
 
-  private setGlow(mesh: THREE.Group, pierce: boolean, enchant: number): void {
+  private setGlow(mesh: THREE.Group, pierce: boolean, enchant: number, look = 0): void {
     const glow = mesh.userData.glow as THREE.Sprite;
-    glow.visible = pierce || enchant > 0;
-    if (glow.visible) glow.material.color.setHex(glowColor(pierce, enchant));
+    glow.visible = pierce || enchant > 0 || look === 1;
+    if (glow.visible) glow.material.color.setHex(look === 1 && !enchant ? 0x8fb8ff : glowColor(pierce && look !== 1, enchant));
+    glow.scale.setScalar(look === 1 ? 1.5 : 0.9);
+  }
+
+  /** An arrow, a magic bolt (just the glow), or a spear (long, no feathers). */
+  private setLook(mesh: THREE.Group, look: number): void {
+    const [shaft, head, f1, f2] = mesh.children;
+    shaft.visible = head.visible = look !== 1;
+    f1.visible = f2.visible = look === 0;
+    mesh.scale.set(1, 1, look === 2 ? 1.8 : 1);
   }
 
   clear(): void {

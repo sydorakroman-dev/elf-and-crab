@@ -858,3 +858,10 @@ kbd {
 .bag-cell { position: relative; }
 .bag-cell .up-mark { position: absolute; right: 2px; top: 1px; font-size: 11px; color: #5dff7a; text-shadow: 0 0 4px #000, 0 0 2px #000; }
 .bag-cell.new::after { content: ''; position: absolute; left: 4px; top: 4px; width: 7px; height: 7px; border-radius: 50%; background: #ffd24a; box-shadow: 0 0 6px #ffd24a; }
+
+/* The hero picker. */
+.heroes { display: flex; flex-wrap: wrap; gap: 6px; }
+.heroes button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; padding: 8px 6px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.35); color: inherit; cursor: pointer; font: 600 12px/1.1 system-ui, sans-serif; }
+.heroes button .hero-icon { font-size: 26px; }
+.heroes button.on { background: #ffd36b; color: #2a1c08; border-color: #ffd36b; }
+.heroes button[disabled] { opacity: 0.35; cursor: default; }

@@ -26,6 +26,8 @@ export type GlobTuple = [number, number, number, number];
 export type PickupTuple = [number, number, number, number, number];
 
 export interface HeroState {
+  /** Which hero (index into HERO_CLASSES). */
+  c?: number;
   x: number;
   z: number;
   /** Facing yaw. */
@@ -134,6 +136,8 @@ export interface Snapshot {
   ch?: number;
   /** Sarcophagi that have burst open (prop indices). */
   amb?: number[];
+  /** The beast master's wolf: [x, z, yaw, speed, mode, y]. */
+  pet?: number[];
   /** The party's gear and bag (sent when it changes). */
   inv?: InvState;
   /** The merchant's wares (while at the merchant's camp). */
@@ -218,7 +222,10 @@ export function interpolate(a: Snapshot, b: Snapshot, t: number): Snapshot {
     };
   }
 
-  return { ...b, t: lerp(a.t, b.t, k), hero, fam, slimes, arrows, globs, ev: [] };
+  // The wolf glides too (unless it leapt far).
+  const pet = a.pet && b.pet && Math.hypot(a.pet[0] - b.pet[0], a.pet[1] - b.pet[1]) <= TELEPORT ? [lerp(a.pet[0], b.pet[0], k), lerp(a.pet[1], b.pet[1], k), lerpAngle(a.pet[2], b.pet[2], k), ...b.pet.slice(3)] : b.pet;
+
+  return { ...b, t: lerp(a.t, b.t, k), hero, fam, slimes, arrows, globs, ev: [], ...(pet ? { pet } : {}) };
 }
 
 /**

@@ -37,6 +37,9 @@ export class ActionBar {
   private lastKey = '';
   /** What's in each of the nine slots. */
   private readonly defs: (SlotDef | null)[] = DEFAULT_SLOTS.map((id) => (id ? abilitySlot(id) : null));
+  /** The skills in slots 1–3 (they depend on the hero). */
+  private readonly abilityIds: (AbilityId | null)[] = [...DEFAULT_SLOTS];
+
 
   constructor(hudLeft: HTMLElement, root: HTMLElement, touch: boolean) {
     hudLeft.insertAdjacentHTML(
@@ -134,6 +137,15 @@ export class ActionBar {
     });
   }
 
+  /** The hero's three skills go in slots 1–3. */
+  setAbilities(ids: readonly AbilityId[]): void {
+    ids.forEach((id, i) => {
+      this.abilityIds[i] = id;
+      this.setSlotCharges(i, 0);
+      this.setSlot(i, abilitySlot(id));
+    });
+  }
+
   /** Puts a learned spell (or nothing) in slot `i`. */
   setSlot(i: number, def: SlotDef | null): void {
     if (i < 0 || i >= this.defs.length) return;
@@ -164,7 +176,7 @@ export class ActionBar {
 
   /** A little counter on an ability's slot (charges left; 0 hides it). */
   setCharges(id: AbilityId, n: number): void {
-    this.setSlotCharges(DEFAULT_SLOTS.indexOf(id), n);
+    this.setSlotCharges(this.abilityIds.indexOf(id), n);
   }
 
   /** A little counter on slot `i` (charges left; 0 hides it). */
@@ -183,7 +195,7 @@ export class ActionBar {
 
   /** The ability in slot `i`, if any. */
   ability(i: number): AbilityId | null {
-    return DEFAULT_SLOTS[i] ?? null;
+    return this.abilityIds[i] ?? null;
   }
 
   /** Slot bound to this key, or -1. */

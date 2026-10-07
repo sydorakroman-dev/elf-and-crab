@@ -5,6 +5,7 @@ import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey } from 
 import { normalizeCode } from '../net/protocol';
 import { ActionBar } from './actionbar';
 import { DIFFICULTIES, DIFFICULTY_LIST, difficulty, setDifficulty, type Difficulty } from '../game/difficulty';
+import { HEROES, HERO_CLASSES, loadHero, saveHero, type HeroClass } from '../game/heroes';
 import { loadProgress, type Progress } from '../game/progress';
 import { ROOMS } from '../world/rooms';
 import type { ConnStatus } from '../net/client';
@@ -72,6 +73,11 @@ export class Hud {
 
            <section class="panel play-panel">
              <div class="setup" data-setup>
+               <div class="field">
+                 <span class="label">Hero</span>
+                 <div class="heroes" data-heroes>${HERO_CLASSES.map((h) => `<button type="button" data-hero="${h}" title="${HEROES[h].blurb}"><span class="hero-icon">${HEROES[h].icon}</span><span class="hero-name">${HEROES[h].name}</span></button>`).join('')}</div>
+                 <span class="hint" data-hero-hint></span>
+               </div>
                <div class="field">
                  <span class="label">Difficulty</span>
                  <div class="difficulty" data-difficulty>${DIFFICULTY_LIST.map((d) => `<button type="button" data-diff="${d}">${DIFFICULTIES[d].icon} ${DIFFICULTIES[d].label}</button>`).join('')}</div>
@@ -154,6 +160,7 @@ export class Hud {
     this.linkEl = root.querySelector('[data-link]')!;
     this.inviteStatus = root.querySelector('[data-istatus]')!;
     this.showDifficulty();
+    this.showHero();
     this.startSelect = root.querySelector('[data-start-room]')!;
     this.startSelect.addEventListener('click', (e) => e.stopPropagation());
     this.setProgress(loadProgress());
@@ -170,6 +177,17 @@ export class Hud {
       onStart();
     });
         this.overlay.addEventListener('click', (e) => {
+      const heroBtn = (e.target as HTMLElement).closest<HTMLElement>('[data-hero]');
+      if (heroBtn) {
+        // The hero can change between runs (not while one is paused).
+        if (this.button.textContent !== 'Resume') {
+          this.hero = heroBtn.dataset.hero as HeroClass;
+          saveHero(this.hero);
+          this.showHero();
+          this.onHero?.(this.hero);
+        }
+        return;
+      }
       const diff = (e.target as HTMLElement).closest<HTMLElement>('[data-diff]');
       if (diff) {
         // Difficulty can change between runs (not while one is paused).
@@ -218,6 +236,24 @@ export class Hud {
     trophies.textContent = `👑 Ash King beaten on: ${DIFFICULTY_LIST.filter((d) => p.wins.includes(d)).map((d) => `${DIFFICULTIES[d].icon} ${DIFFICULTIES[d].label}`).join(' · ')}`;
   }
 
+  /** The hero chosen on the title screen (remembered). */
+  hero: HeroClass = loadHero();
+  onHero?: (h: HeroClass) => void;
+
+  /** Highlights the chosen hero; locked while a run is paused. */
+  showHero(): void {
+    const locked = this.button.textContent === 'Resume';
+    for (const b of this.overlay.querySelectorAll<HTMLElement>('[data-hero]')) {
+      b.classList.toggle('on', b.dataset.hero === this.hero);
+      b.toggleAttribute('disabled', locked && b.dataset.hero !== this.hero);
+    }
+    const hint = this.overlay.querySelector('[data-hero-hint]');
+    if (hint) {
+      const d = HEROES[this.hero];
+      hint.textContent = `${d.blurb} · ${d.hp} health${d.armor ? ` · armour ${Math.round(d.armor * 100)}%` : ''}`;
+    }
+  }
+
   /** Highlights the chosen difficulty; locked (dimmed) while a run is paused. */
   showDifficulty(): void {
     const locked = this.button.textContent === 'Resume';
@@ -244,6 +280,7 @@ export class Hud {
       this.message.innerHTML = 'The monsters will wait. Probably.';
       this.button.textContent = 'Resume';
       this.showDifficulty();
+      this.showHero();
     }
   }
 
@@ -341,6 +378,7 @@ export class Hud {
     this.message.innerHTML = `The Ash King has fallen. You cleared all seven rooms in <strong>${m}:${s}</strong> with <strong>${score}</strong> points${isBest ? ' — a new best!' : '.'}`;
     this.button.textContent = 'Play again';
     this.showDifficulty();
+    this.showHero();
     this.overlay.hidden = false;
   }
 
@@ -349,6 +387,7 @@ export class Hud {
     this.message.innerHTML = `You held out until wave <strong>${wave}</strong> with <strong>${score}</strong> points.`;
     this.button.textContent = 'Try again';
     this.showDifficulty();
+    this.showHero();
     this.overlay.hidden = false;
   }
 }

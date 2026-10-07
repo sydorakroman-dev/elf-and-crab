@@ -4,6 +4,8 @@ import { ROOMS } from '../world/rooms';
 import { generateLevel } from '../world/levelgen';
 import { Minimap } from '../ui/minimap';
 import { InventoryPanel } from '../ui/inventory';
+import { Pet } from '../game/pet';
+import { HERO_CLASSES } from '../game/heroes';
 import type { InvState, StockEntry } from '../game/inventory';
 import { TelegraphRings } from '../game/telegraph';
 import { BeastVisual } from '../game/beastVisual';
@@ -104,6 +106,7 @@ export class FamiliarGame {
   private shopStock: StockEntry[] | null = null;
   private lastPhase = '';
   private beaconMoved = false;
+  private pet: Pet | null = null;
 
   constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarLink) {
     this.renderer = renderer;
@@ -437,6 +440,19 @@ export class FamiliarGame {
   }
 
   private apply(s: Snapshot, dt: number): void {
+    // The hero's look (which hero), and the beast master's wolf.
+    const hero = HERO_CLASSES[s.hero.c ?? 0] ?? 'elf';
+    if (hero !== this.elf.hero) this.elf.setHeroClass(hero);
+    if (s.pet) {
+      if (!this.pet) {
+        this.pet = new Pet(s.pet[0], s.pet[1]);
+        this.scene.add(this.pet.group);
+      }
+      this.pet.show(s.pet, dt, this.time);
+    } else if (this.pet) {
+      this.scene.remove(this.pet.group);
+      this.pet = null;
+    }
     // The shared bag and the merchant (opens by itself at the merchant's camp).
     if (s.inv) this.invState = s.inv;
     if (s.shop) this.shopStock = s.shop;
