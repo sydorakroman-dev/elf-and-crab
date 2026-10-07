@@ -70,6 +70,7 @@ const results = await page.evaluate(({ TRIALS }) => {
       }
       if (g.phase === 'ready') g.beginFight(); // press Start
       if (g.phase === 'transition') g.cardSkip = true;
+      if (g.phase === 'shop') g.leaveShop(); // bots don't shop
       g.update(1 / 60);
       if (g.health < lastHealth && firstHitWave.v === null) firstHitWave.v = g.room + 1;
       lastHealth = g.health;
