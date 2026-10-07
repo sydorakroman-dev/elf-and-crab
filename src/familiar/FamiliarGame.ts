@@ -322,6 +322,10 @@ export class FamiliarGame {
             this.sfx.book();
           }
           break;
+        case 'ambush':
+          this.effects.burst(ev.x, 1.2, ev.z, new THREE.Color(0xcfe8d8), 30, 5, 0.14);
+          this.hud.popups.toast('⚰️ The dead rise!', 0xcfe8d8);
+          break;
         case 'note':
           this.hud.popups.toast(ev.t, 0x9fe0ff);
           break;
@@ -448,6 +452,7 @@ export class FamiliarGame {
     if (bagBtn && bagBtn.hidden === showBag) bagBtn.hidden = !showBag;
     // Chests the hero's side has opened.
     for (let i = 0; i < this.dungeon.level.chests.length; i++) if ((s.ch ?? 0) & (1 << i)) this.dungeon.openChest(i);
+    for (const i of s.amb ?? []) this.dungeon.openSarcophagus(i);
     const e = this.dungeon.level.exit;
     const bossHall = this.dungeon.level.halls.find((hh) => hh.kind === 'boss');
     this.minimap.setVisible(!s.practice && (s.state === 'playing' || s.state === 'paused'));

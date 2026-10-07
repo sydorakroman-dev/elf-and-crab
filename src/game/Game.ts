@@ -7,7 +7,7 @@ import { Player, type Arena, type InputMode } from '../player/controls';
 import { TouchControls } from '../ui/touch';
 import type { Elf } from '../player/elf';
 import type { FamiliarBody } from '../player/beasts';
-import { Enemies, type Enemy, type Strike } from './enemies';
+import { Enemies, type Enemy, type EnemyKind, type Strike } from './enemies';
 import { Arrows } from './arrows';
 import { Globs, PROJECTILES, PROJECTILE_KINDS, type GlobImpact } from './globs';
 import { Effects } from './effects';
@@ -131,6 +131,9 @@ export class Game {
   private bagFullNote = 0;
   /** Landmarks named so far in this level. */
   private readonly landmarksSeen = new Set<string>();
+  /** Sarcophagi burst open in this level (prop indices), and alarms already announced. */
+  private ambushed: number[] = [];
+  private alarmsShown = 0;
   private readonly touch: TouchControls | null = null;
   private readonly mode: InputMode;
   private readonly sfx = new Sfx();
@@ -402,6 +405,10 @@ export class Game {
     this.bossAnnounced = false;
     this.chestsOpened = 0;
     this.landmarksSeen.clear();
+    this.ambushed = [];
+    this.alarmsShown = 0;
+    this.enemies.alarmRadius = ROOMS[index].alarm ?? 0;
+    this.enemies.alarms = 0;
     this.minimap?.setLevel(this.level.map);
   }
 
@@ -479,6 +486,12 @@ export class Game {
     }
     for (const strike of strikes) this.enemyStrike(strike);
     if (this.steps % 6 === 0) this.enemies.cull(this.player.position, 50);
+    if (!still && this.steps % 6 === 3) this.checkAmbushes();
+    if (this.enemies.alarms > this.alarmsShown) {
+      this.alarmsShown = this.enemies.alarms;
+      this.banner('📯 The camp is raised!');
+      this.sfx.wave();
+    }
     this.showHealPulses();
     this.syncBoss();
     this.updateGlobs(dt);
@@ -846,6 +859,7 @@ export class Game {
       gold: this.inv.gold,
       ...this.invForSnapshot(),
       ch: this.chestsOpened,
+      ...(this.ambushed.length ? { amb: this.ambushed } : {}),
       powers: this.powers.list().map((pw) => [POWER_CODES.indexOf(pw.type), q(pw.remaining)]),
       cds: c.kind ? FAMILIARS[c.kind].spells.map((id) => [SPELL_IDS.indexOf(id), q(c.cooldowns.remaining(id))]) : [],
       ev: this.events,
@@ -880,6 +894,24 @@ export class Game {
       goal: this.phase === 'cleared' && e ? e : bossHall ?? null,
     });
     this.spotLandmarks();
+  }
+
+  /** The crypt: walk past a cursed sarcophagus and its lid bursts off — skeletons climb out. */
+  private checkAmbushes(): void {
+    const p = this.player.position;
+    for (const i of this.level.ambushes) {
+      if (this.ambushed.includes(i)) continue;
+      const s = this.level.props[i];
+      if (Math.hypot(s.x - p.x, s.z - p.z) > 6) continue;
+      this.ambushed.push(i);
+      this.dungeon.openSarcophagus(i);
+      const risen: EnemyKind[] = ['skeleton', 'skeleton'];
+      this.enemies.spawnAwake(risen, s.x, s.z, this.dungeon.obstacles);
+      this.effects.burst(s.x, 1.2, s.z, new THREE.Color(0xcfe8d8), 30, 5, 0.14);
+      this.events.push({ e: 'ambush', i, x: q(s.x), z: q(s.z) });
+      this.hud.toast('⚰️ The dead rise!', 0xcfe8d8);
+      this.sfx.land();
+    }
   }
 
   /** A landmark comes into view for the first time: name it. */

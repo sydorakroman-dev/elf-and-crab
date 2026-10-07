@@ -83,6 +83,8 @@ export class Dungeon {
   private beacon: THREE.Group | null = null;
   private exitOpen = 0;
   /** Chest lids (in the level's chest order): how open (0 → 1), and where they're heading. */
+  /** Sarcophagus lids by the prop's index (they slide off when the dead inside wake). */
+  private readonly sarcophagi = new Map<number, THREE.Object3D>();
   private readonly chestLids: { lid: THREE.Object3D; open: number; target: number; glow: THREE.Sprite }[] = [];
   private readonly fireflies: { sprite: THREE.Sprite; base: THREE.Vector3; seed: number }[] = [];
   private readonly embers: { sprite: THREE.Sprite; x: number; z: number; speed: number; seed: number }[] = [];
@@ -115,7 +117,7 @@ export class Dungeon {
     this.buildExit();
     this.buildChests();
     this.buildBeacon();
-    for (const p of level.props) this.buildProp(p, rng);
+    level.props.forEach((p, i) => this.buildProp(p, rng, i));
     this.buildFeature(rng);
     this.buildRubble(rng);
     this.moon = this.buildLights(shadowMapSize, rng);
@@ -176,6 +178,17 @@ export class Dungeon {
     if (!this.beacon || !e) return;
     this.beacon.position.set(e.x, 0, e.z + 2);
     for (const c of this.beacon.children) ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).color.setHex(0xfff1c0);
+  }
+
+  /** The lid of sarcophagus prop `i` slides off. */
+  openSarcophagus(i: number): void {
+    const lid = this.sarcophagi.get(i);
+    if (!lid || lid.userData.open) return;
+    lid.userData.open = true;
+    lid.position.set(0.9, 0.5, 0.4);
+    lid.rotation.set(0.2, 0.3, -0.5);
+    lid.updateMatrix();
+    lid.parent?.updateMatrixWorld(true);
   }
 
   /** Swings chest `i`'s lid open. */
@@ -386,8 +399,14 @@ export class Dungeon {
     const m = this.map;
     const { wall } = this.room;
     const outdoor = !!this.room.outdoor;
+    // How the walls are made: hedges, rough cave rock, pale cut stone, a palisade, or brick.
+    const style = outdoor ? 'hedge' : this.room.feature === 'crystals' ? 'rock' : this.room.feature === 'throne' ? 'palisade' : 'brick';
+    const crisp = this.room.feature === 'brazier'; // the crypt: even, pale cut stone
     const H = this.wallHeight;
     const rows = Math.ceil(H);
+    const rockGeo = new THREE.IcosahedronGeometry(1, 0);
+    const stakeGeo = new THREE.CylinderGeometry(0.3, 0.34, 1, 6).translate(0, 0.5, 0);
+    const tipGeo = new THREE.ConeGeometry(0.32, 0.9, 6).translate(0, 0.45, 0);
     const blockGeo = new THREE.BoxGeometry(TILE - 0.06, 1 - 0.06, TILE - 0.06);
     const capGeo = new THREE.BoxGeometry(TILE, 0.5, TILE);
     const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 1, 6).translate(0, 0.5, 0);
@@ -406,11 +425,39 @@ export class Dungeon {
         const trunks: THREE.Matrix4[] = [];
         const canopies: THREE.Matrix4[] = [];
         const canopyColors: THREE.Color[] = [];
+        const rocks: THREE.Matrix4[] = [];
+        const rockColors: THREE.Color[] = [];
+        const stakes: THREE.Matrix4[] = [];
+        const tips: THREE.Matrix4[] = [];
         for (let r = cr; r < Math.min(cr + CHUNK, m.rows); r++)
           for (let col = cc; col < Math.min(cc + CHUNK, m.cols); col++) {
             if (m.isFloor(col, r)) continue;
             const d = this.depth(col, r);
             const p = m.centre(col, r);
+            if (style === 'rock' && d <= 3) {
+              // Cave rock: big, rough boulders of every height (no bricks, no straight tops).
+              if (d === 1 || rng() < 0.55) {
+                const k = 1.15 + rng() * 0.45;
+                const h = H * (d === 1 ? 0.55 + rng() * 0.45 : 0.35 + rng() * 0.6);
+                q.setFromEuler(e.set(rng() * 3, rng() * 3, rng() * 3));
+                rocks.push(new THREE.Matrix4().compose(v.set(p.x + (rng() - 0.5) * 0.6, h * 0.55, p.z + (rng() - 0.5) * 0.6), q, s.set(k, h * 0.65, k)));
+                rockColors.push(new THREE.Color().setHSL(wall.h + (rng() - 0.5) * 0.06, wall.s + (rng() - 0.5) * 0.06, wall.l + (rng() - 0.5) * 0.08));
+              }
+              continue;
+            }
+            if (style === 'palisade') {
+              // Sharpened log stakes along the edge; beyond, the trodden ground of the camp.
+              if (d === 1)
+                for (const off of [-0.5, 0.5]) {
+                  const h = H + (rng() - 0.5) * 1.2;
+                  const jx = p.x + off * (rng() < 0.5 ? 1 : -1) * 0.9;
+                  const jz = p.z + (rng() - 0.5) * 0.9;
+                  q.setFromEuler(e.set((rng() - 0.5) * 0.08, rng() * 3, (rng() - 0.5) * 0.08));
+                  stakes.push(new THREE.Matrix4().compose(v.set(jx, 0, jz), q, s.set(1, h, 1)));
+                  tips.push(new THREE.Matrix4().compose(v.set(jx, h, jz), q, s.set(1, 1, 1)));
+                }
+              continue;
+            }
             if (d === 1) {
               for (let row = 0; row < rows; row++) {
                 const h = Math.min(1, H - row);
@@ -423,7 +470,8 @@ export class Dungeon {
                   mat4.compose(v.set(p.x, row + h / 2, p.z), q.identity(), s.set(1, h, 1));
                 }
                 blocks.push(mat4.clone());
-                blockColors.push(new THREE.Color().setHSL(wall.h + (rng() - 0.5) * 0.08, wall.s + (rng() - 0.5) * 0.05, wall.l + (rng() - 0.5) * 0.08 - (row === 0 ? 0.03 : 0)));
+                const vary = crisp ? 0.3 : 1; // cut stone is even
+                blockColors.push(new THREE.Color().setHSL(wall.h + (rng() - 0.5) * 0.08 * vary, wall.s + (rng() - 0.5) * 0.05 * vary, wall.l + (rng() - 0.5) * 0.08 * vary - (row === 0 ? 0.03 : 0) + (crisp && row === rows - 1 ? 0.05 : 0)));
               }
             } else if (d <= 3) {
               if (outdoor) {
@@ -446,7 +494,7 @@ export class Dungeon {
               }
             }
           }
-        if (!blocks.length && !caps.length && !trunks.length) continue;
+        if (!blocks.length && !caps.length && !trunks.length && !rocks.length && !stakes.length) continue;
         const chunk = new THREE.Group();
         const mats: THREE.Material[] = [];
         const add = (geo: THREE.BufferGeometry, list: THREE.Matrix4[], material: THREE.MeshStandardMaterial, colors?: THREE.Color[]) => {
@@ -465,6 +513,9 @@ export class Dungeon {
         add(capGeo, caps, new THREE.MeshStandardMaterial({ color: c.setHSL(wall.h, wall.s * 0.7, wall.l * 0.6).getHex(), roughness: 1, flatShading: true }));
         add(trunkGeo, trunks, new THREE.MeshStandardMaterial({ color: 0x6a4024, roughness: 0.9, flatShading: true }));
         add(canopyGeo, canopies, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true }), canopyColors);
+        add(rockGeo, rocks, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), rockColors);
+        add(stakeGeo, stakes, new THREE.MeshStandardMaterial({ color: c.setHSL(wall.h, wall.s, wall.l).getHex(), roughness: 0.9, flatShading: true }));
+        add(tipGeo, tips, new THREE.MeshStandardMaterial({ color: c.setHSL(wall.h, wall.s * 0.8, wall.l * 1.3).getHex(), roughness: 0.9, flatShading: true }));
         this.group.add(chunk);
         const x0 = m.originX + cc * TILE;
         // Only chunks near the camera are drawn (a level is 400 m long; fog hides the rest).
@@ -700,7 +751,7 @@ export class Dungeon {
     return v as T;
   }
 
-  private buildProp(p: Prop, rng: () => number): void {
+  private buildProp(p: Prop, rng: () => number, index = -1): void {
     const room = this.room;
     const obj = new THREE.Group();
     obj.position.set(p.x, 0, p.z);
@@ -805,6 +856,104 @@ export class Dungeon {
       case 'landmark':
         this.buildLandmark(obj, rng);
         break;
+      case 'stalagmite': {
+        const rock = this.once('stalagRock', () => new THREE.MeshStandardMaterial({ color: room.stone, roughness: 1, flatShading: true }));
+        for (let i = 0; i < 3; i++) {
+          const h = 2.2 + rng() * 3 - i * 0.8;
+          const cone = new THREE.Mesh(this.once('stalag', () => new THREE.ConeGeometry(0.7, 1, 6).translate(0, 0.5, 0)), rock);
+          cone.scale.set(1 - i * 0.25, h, 1 - i * 0.25);
+          cone.position.set((rng() - 0.5) * 0.9 * i, 0, (rng() - 0.5) * 0.9 * i);
+          obj.add(cone);
+        }
+        tall = false;
+        break;
+      }
+      case 'chasm': {
+        // A dark drop in the cave floor: walk round it, shoot across.
+        const pit = new THREE.Mesh(this.once('chasmGeo', () => new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2)), this.once('chasmMat', () => new THREE.MeshBasicMaterial({ color: 0x020104 })));
+        pit.scale.set(p.r + 0.4, 1, p.r * 0.8);
+        pit.position.y = 0.04;
+        const rim = new THREE.Mesh(this.once('chasmRim', () => new THREE.TorusGeometry(1, 0.12, 4, 24).rotateX(Math.PI / 2)), this.once('chasmRimMat', () => this.glow(0x1a0a2a, 0x8a5aff, 0.6)));
+        rim.scale.set(p.r + 0.45, 1, p.r * 0.8 + 0.05);
+        rim.position.y = 0.06;
+        obj.add(pit, rim);
+        obj.rotation.y = rng() * Math.PI;
+        blocks = { x: p.x, z: p.z, radius: p.r, low: true };
+        tall = false;
+        break;
+      }
+      case 'sarcophagus': {
+        const stone = this.once('sarcStone', () => new THREE.MeshStandardMaterial({ color: 0xb8ad98, roughness: 0.85, flatShading: true }));
+        const body = new THREE.Mesh(this.once('sarcBody', () => new THREE.BoxGeometry(1.2, 0.9, 2.4).translate(0, 0.45, 0)), stone);
+        const lid = new THREE.Mesh(this.once('sarcLid', () => new THREE.BoxGeometry(1.35, 0.25, 2.55)), this.once('sarcLidMat', () => new THREE.MeshStandardMaterial({ color: 0xcfc4ae, roughness: 0.8, flatShading: true })));
+        lid.position.y = 1.02;
+        const effigy = new THREE.Mesh(this.once('sarcEffigy', () => new THREE.CapsuleGeometry(0.28, 1.3, 3, 6).rotateX(Math.PI / 2)), stone);
+        effigy.position.y = 0.25;
+        lid.add(effigy);
+        obj.add(body, lid);
+        obj.rotation.y = p.angle ?? 0;
+        if (index >= 0) this.sarcophagi.set(index, lid);
+        tall = false;
+        break;
+      }
+      case 'candles': {
+        blocks = null;
+        tall = false;
+        const wax = this.once('wax', () => new THREE.MeshStandardMaterial({ color: 0xf2e6c8, roughness: 0.7 }));
+        for (let i = 0; i < 4; i++) {
+          const h = 0.3 + rng() * 0.5;
+          const c = new THREE.Mesh(this.once('candle', () => new THREE.CylinderGeometry(0.07, 0.08, 1, 6).translate(0, 0.5, 0)), wax);
+          c.scale.y = h;
+          c.position.set((rng() - 0.5) * 0.7, 0, (rng() - 0.5) * 0.7);
+          obj.add(c);
+        }
+        this.flame(p.x, 0.9, p.z, 0.9, 8, 10, room.torchLight, room.torchFlame, 0);
+        break;
+      }
+      case 'tent': {
+        const hide = this.once(`tent${Math.floor(rng() * 3)}`, () => new THREE.MeshStandardMaterial({ color: [0x8a6a4a, 0x7a3a2a, 0x6a5a3a][Math.floor(rng() * 3)], roughness: 0.95, flatShading: true }));
+        const cone = new THREE.Mesh(this.once('tentGeo', () => new THREE.ConeGeometry(2.5, 3.4, 6).translate(0, 1.7, 0)), hide);
+        const pole = new THREE.Mesh(this.once('tentPole', () => new THREE.CylinderGeometry(0.08, 0.08, 1.2, 5).translate(0, 3.6, 0)), this.once('wood', () => new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.9 })));
+        obj.add(cone, pole);
+        obj.rotation.y = rng() * Math.PI;
+        tall = false;
+        break;
+      }
+      case 'campfire': {
+        tall = false;
+        const wood = this.once('wood', () => new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.9 }));
+        for (let i = 0; i < 4; i++) {
+          const log = new THREE.Mesh(this.once('log', () => new THREE.CylinderGeometry(0.15, 0.15, 1.6, 6).rotateZ(Math.PI / 2)), wood);
+          log.rotation.y = (i / 4) * Math.PI;
+          log.position.y = 0.15;
+          obj.add(log);
+        }
+        const stones = this.once('fireStones', () => new THREE.TorusGeometry(0.95, 0.22, 4, 9).rotateX(Math.PI / 2));
+        obj.add(new THREE.Mesh(stones, this.once('stoneMat', () => new THREE.MeshStandardMaterial({ color: 0x555050, flatShading: true }))));
+        this.flame(p.x, 0.9, p.z, 2.6, 26, 22, 0xff9a40, 0xffa040, 1);
+        break;
+      }
+      case 'rack': {
+        tall = false;
+        const wood = this.once('wood', () => new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.9 }));
+        const iron = this.once('iron2', () => new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.6, roughness: 0.4, flatShading: true }));
+        const bar = new THREE.Mesh(this.once('rackBar', () => new THREE.BoxGeometry(2, 0.15, 0.15)), wood);
+        bar.position.y = 1.4;
+        obj.add(bar);
+        for (const x of [-0.9, 0.9]) {
+          const post = new THREE.Mesh(this.once('rackPost', () => new THREE.BoxGeometry(0.15, 1.6, 0.15).translate(0, 0.8, 0)), wood);
+          post.position.x = x;
+          obj.add(post);
+        }
+        for (let i = 0; i < 4; i++) {
+          const spear = new THREE.Mesh(this.once('spear', () => new THREE.CylinderGeometry(0.04, 0.04, 2.4, 4).translate(0, 1.2, 0)), iron);
+          spear.position.set(-0.6 + i * 0.4, 0, 0.12);
+          spear.rotation.x = -0.15;
+          obj.add(spear);
+        }
+        obj.rotation.y = rng() * Math.PI;
+        break;
+      }
       case 'throne': {
         const stone = this.once('stone', () => new THREE.MeshStandardMaterial({ color: room.stone, roughness: 0.85, flatShading: true }));
         const gold = this.once('gold', () => new THREE.MeshStandardMaterial({ color: 0xd8a83a, metalness: 0.7, roughness: 0.35, flatShading: true }));
@@ -1142,7 +1291,7 @@ export class Dungeon {
       this.group.add(l);
     }
 
-    if (room.outdoor) return moon; // daylight: no torches
+    if (room.outdoor || room.feature === 'crystals') return moon; // daylight / the cave: its crystals are the light
     const bracketMat = new THREE.MeshStandardMaterial({ color: 0x2a2626, metalness: 0.5, roughness: 0.6 });
     const bracketGeo = new THREE.BoxGeometry(0.25, 0.7, 0.5);
     // Torches along the walls, every dozen metres or so, on walls of every side.

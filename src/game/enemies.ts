@@ -234,11 +234,40 @@ export class Enemies {
     }
   }
 
-  /** Wakes `e` and its whole pack (it was hit, or saw the hero). */
-  wake(e: Enemy): void {
+  /** War camps: a pack that wakes calls the sleeping packs within this many metres (0: none). */
+  alarmRadius = 0;
+  /** Times the alarm has been raised (Game shows it). */
+  alarms = 0;
+
+  /** Wakes `e` and its whole pack (it was hit, or saw the hero) — in a war camp, its neighbours too. */
+  wake(e: Enemy, spread = true): void {
     const b = this.brains.get(e);
     if (!b?.asleep) return;
     for (const ob of this.brains.values()) if (ob.pack === b.pack) ob.asleep = false;
+    if (!spread || !this.alarmRadius) return;
+    let raised = false;
+    // The guardian's pack keeps to its hall: the alarm doesn't reach it.
+    const guardianPacks = new Set([...this.brains].filter(([o]) => o.bossName).map(([, ob]) => ob.pack));
+    for (const [o, ob] of this.brains) {
+      if (!ob.asleep || !o.alive || guardianPacks.has(ob.pack) || Math.hypot(o.x - e.x, o.z - e.z) > this.alarmRadius) continue;
+      this.wake(o, false); // one call each: the alarm doesn't run through the whole camp
+      raised = true;
+    }
+    if (raised) this.alarms++;
+  }
+
+  /** New monsters, awake at once (the dead rising from a sarcophagus). */
+  spawnAwake(kinds: readonly EnemyKind[], x: number, z: number, obstacles: readonly Circle[]): Enemy[] {
+    const pack = this.nextPack++;
+    return kinds.map((kind, i) => {
+      const a = (i / kinds.length) * Math.PI * 2;
+      const e = createEnemy(kind, x + Math.cos(a) * 1.6, z + Math.sin(a) * 1.6);
+      const pos = { x: e.x, z: e.z };
+      pushOutOfCircles(pos, e.radius, obstacles);
+      clampToArena(pos, e.radius);
+      e.setPosition(pos.x, pos.z);
+      return this.add(e, pack, false);
+    });
   }
 
   /** Stuns every living enemy within `radius` of (x, z); returns those hit. */

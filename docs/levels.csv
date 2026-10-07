@@ -1,8 +1,8 @@
 level,level_name,layout,monster_mix,foes_in_packs,guardian,escort
 1,The Woodland,open,14 Armored Beetle + 4 Venomous Snake + 3 Thorn Vine + 2 Dire Wolf + 1 Thorn Boar + 1 Treant,140,The Crystal Bear,3 Armored Beetle
-2,The Crystal Cave,halls,12 Cave Spider + 5 Cave Slime + 4 Spore Crawler + 2 Mushroom Monster + 1 Living Mold,140,The Giant Cave Worm,3 Cave Spider
-3,The Crypt,halls,14 Skeleton Warrior + 4 Skeleton Archer + 4 Ghost + 2 Zombie Brute + 1 Undead Knight,126,The Necromancer,2 Skeleton Warrior + 1 Skeleton Archer
-4,The Throne Room,halls,8 Orc Warrior + 7 Orc Scout + 4 Orc Archer + 2 Orc Shaman + 1 Orc Shield Guard,132,The Orc Chieftain,2 Orc Warrior + 1 Orc Archer
+2,The Crystal Cave,cavern,12 Cave Spider + 5 Cave Slime + 4 Spore Crawler + 2 Mushroom Monster + 1 Living Mold,140,The Giant Cave Worm,3 Cave Spider
+3,The Crypt,crypt,14 Skeleton Warrior + 4 Skeleton Archer + 4 Ghost + 2 Zombie Brute + 1 Undead Knight,126,The Necromancer,2 Skeleton Warrior + 1 Skeleton Archer
+4,The Throne Room,fortress,8 Orc Warrior + 7 Orc Scout + 4 Orc Archer + 2 Orc Shaman + 1 Orc Shield Guard,132,The Orc Chieftain,2 Orc Warrior + 1 Orc Archer
 5,The Flooded Hall,open,14 Scrap Brawler + 5 Rivet Shooter + 4 Rotor Scout + 2 Bomb Lobber + 2 Boiler Tinkerer + 2 Water Elemental,162,The Scrap Boss,2 Scrap Brawler + 1 Rivet Shooter + 1 Water Elemental
 6,The Lava Chamber,halls,9 Fire Elemental + 8 Wind Elemental + 2 Rock Golem,120,The Inferno,2 Fire Elemental + 1 Wind Elemental
 7,The Ash King's Lair,lair,,0,The Ash King,

@@ -10,9 +10,14 @@ import type { EnemyKind } from '../game/enemies';
 import { mulberry32 } from '../util/rng';
 
 /** Halls joined by corridors · one open area with clearings · a long approach to one vast hall. */
-export type LayoutStyle = 'halls' | 'open' | 'lair' | 'practice';
+/**
+ * halls: chambers joined by corridors · open: woods / flooded ground · cavern: winding natural caves
+ * · crypt: a strict grid of straight halls lined with burial niches · fortress: courtyards behind
+ * palisades with a keep · lair: a long approach to one vast hall.
+ */
+export type LayoutStyle = 'halls' | 'open' | 'cavern' | 'crypt' | 'fortress' | 'lair' | 'practice';
 
-export type PropKind = 'tree' | 'crystal' | 'pillar' | 'brazier' | 'lavapit' | 'spire' | 'pool' | 'throne' | 'landmark';
+export type PropKind = 'tree' | 'crystal' | 'pillar' | 'brazier' | 'lavapit' | 'spire' | 'pool' | 'throne' | 'landmark' | 'stalagmite' | 'chasm' | 'sarcophagus' | 'candles' | 'tent' | 'campfire' | 'rack';
 
 export interface LevelTheme {
   layout: LayoutStyle;
@@ -26,6 +31,8 @@ export interface LevelTheme {
   escort: Partial<Record<EnemyKind, number>>;
   /** Monsters in packs around the level (not counting the boss and its escort). */
   foes: number;
+  /** War camps: a waking pack raises the alarm for sleeping packs this close (m). */
+  alarm?: number;
 }
 
 export interface Hall {
@@ -81,6 +88,8 @@ export interface Level {
   chests: { x: number; z: number; detour: number }[];
   /** The level's named landmarks. */
   landmarks: { x: number; z: number; name: string }[];
+  /** Sarcophagi that burst open with skeletons when the hero passes (index = place in `props`). */
+  ambushes: number[];
 }
 
 /** Tiles across and from south to north: a tall rectangle, 200 m × 400 m. */
@@ -88,7 +97,7 @@ const COLS = 100;
 const ROWS = 200;
 const HALF_W = (COLS * TILE) / 2; // 100 m
 const HALF_H = (ROWS * TILE) / 2; // 200 m
-const BLOCKING: Record<PropKind, number> = { tree: 0.9, crystal: 1.4, pillar: 1.3, brazier: 1.3, lavapit: 3.6, spire: 1.6, pool: 3.3, throne: 3, landmark: 2.4 };
+const BLOCKING: Record<PropKind, number> = { tree: 0.9, crystal: 1.4, pillar: 1.3, brazier: 1.3, lavapit: 3.6, spire: 1.6, pool: 3.3, throne: 3, landmark: 2.4, stalagmite: 0.9, chasm: 3.4, sarcophagus: 1.3, candles: 0.5, tent: 2.6, campfire: 1.1, rack: 0.9 };
 
 export function generateLevel(theme: LevelTheme, seed: number): Level {
   const rng = mulberry32(seed);
@@ -101,6 +110,12 @@ export function generateLevel(theme: LevelTheme, seed: number): Level {
       return g.lair(theme, seed);
     case 'open':
       return g.open(theme, seed);
+    case 'cavern':
+      return g.cavern(theme, seed);
+    case 'crypt':
+      return g.crypt(theme, seed);
+    case 'fortress':
+      return g.fortress(theme, seed);
     default:
       return g.halls(theme, seed);
   }
@@ -110,6 +125,8 @@ class Gen {
   readonly map: WalkMap;
   readonly rng: () => number;
   readonly props: Prop[] = [];
+  /** Natural caves: every corridor winds (tunnels) instead of running straight. */
+  natural = false;
 
   constructor(map: WalkMap, rng: () => number) {
     this.map = map;
@@ -150,6 +167,10 @@ class Gen {
 
   /** An L-shaped corridor between two points. */
   corridor(a: { x: number; z: number }, b: { x: number; z: number }, width = 3): void {
+    if (this.natural) {
+      this.winding(a, b);
+      return;
+    }
     const m = this.map;
     const [ac, ar, bc, br] = [m.col(a.x), m.row(a.z), m.col(b.x), m.row(b.z)];
     if (this.rng() < 0.5) {
@@ -190,7 +211,11 @@ class Gen {
       }
     others.sort((a, b) => a[2] - b[2]);
     for (const [i, j] of others.slice(0, extra)) edges.push([i, j]);
-    for (const [i, j] of edges) this.corridor(halls[i], halls[j], width);
+    // Width 0: winding natural tunnels instead of straight corridors.
+    for (const [i, j] of edges) {
+      if (width === 0) this.winding(halls[i], halls[j]);
+      else this.corridor(halls[i], halls[j], width);
+    }
   }
 
   /**
@@ -205,7 +230,8 @@ class Gen {
     for (let i = 0; i < 3 && westLane.length && eastLane.length; i++) {
       const a = this.pick(westLane);
       const b = eastLane.slice().sort((p, q) => Math.abs(p.z - a.z) - Math.abs(q.z - a.z))[0];
-      this.corridor(a, b, width);
+      if (width === 0) this.winding(a, b);
+      else this.corridor(a, b, width);
     }
   }
 
@@ -217,11 +243,11 @@ class Gen {
   ensureSecondRoute(start: Hall, boss: Hall, width: number): void {
     const m = this.map;
     let side = 0;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
       const { cut, meanX } = this.shortestWayCut(start, boss);
       if (!cut) return;
       side = attempt === 0 ? (meanX > 0 ? -1 : 1) : -side;
-      const sc = m.col(side * (HALF_W - 10));
+      const sc = m.col(side * (HALF_W - (attempt < 2 ? 10 : 22)));
       const south = m.row(Math.min(HALF_H - 6, start.z + start.r + 3));
       this.run(m.col(start.x), m.row(start.z), m.col(start.x), south, width);
       this.run(m.col(start.x), south, sc, south, width);
@@ -270,14 +296,18 @@ class Gen {
 
   /** A dead-end side room off one of the halls, with a chest. */
   treasureRooms(halls: Hall[], count: number): void {
-    for (let n = 0, tries = 0; n < count && tries < 40; tries++) {
+    for (let n = 0, tries = 0; n < count && tries < 120; tries++) {
       const from = this.pick(halls.filter((h) => h.kind === 'normal'));
       if (!from) return;
-      const dir = this.pick([-1, 1]);
+      // Off any side of a hall (east, west, or into the gaps north and south).
+      const a = this.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]) + this.range(-0.4, 0.4);
       const r = 6;
-      const x = from.x + dir * (from.r + 20);
-      const z = from.z + this.range(-6, 6);
-      if (!this.fits(halls, x, z, r, 6)) continue;
+      const d = from.r + this.range(16, 26);
+      const x = from.x + Math.cos(a) * d;
+      const z = from.z + Math.sin(a) * d;
+      const boss = halls.find((h) => h.kind === 'boss');
+      if (boss && z < boss.z + boss.r) continue; // nothing beyond the guardian: its hall stays the top
+      if (!this.fits(halls, x, z, r, 4)) continue;
       const room: Hall = { x, z, r, shape: 'square', kind: 'treasure' };
       halls.push(room);
       this.stamp(room);
@@ -340,22 +370,51 @@ class Gen {
         }
         break;
       }
-      case 'crystals':
-        for (const h of inner) scatter('crystal', h, Math.round(h.r / 4), 0.8);
-        break;
-      case 'brazier':
+      case 'crystals': {
+        // Glowing crystal clusters (the cave's only light), stalagmites, and chasms in some caverns.
+        // Chasms first (they need room), then crystals and stalagmites round them.
+        for (const h of inner) if (h.kind === 'normal' && h.r >= 9 && this.rng() < 0.5) this.prop('chasm', h.x + this.range(-2, 2), h.z + this.range(-2, 2), keepClear);
         for (const h of inner) {
-          this.prop('brazier', h.x, h.z, keepClear);
-          if (h.r >= 11) ring('pillar', h, 0.55);
+          scatter('crystal', h, Math.max(2, Math.round(h.r / 3.5)), 0.85);
+          scatter('stalagmite', h, Math.round(h.r / 3), 0.9);
+        }
+        // Crystals along the tunnels too, so the dark stretches between caverns glow here and there.
+        for (let i = 0; i < 600 && this.props.filter((p) => p.kind === 'crystal').length < 110; i++) {
+          const p = this.map.randomFloor(this.rng, 2.2);
+          this.prop('crystal', p.x, p.z, keepClear);
         }
         break;
+      }
+      case 'brazier': {
+        // The crypt: sarcophagi in rows (some burst open with skeletons), candles, a brazier in chapels.
+        for (const h of inner) {
+          if (h.kind === 'boss') {
+            ring('pillar', h, 0.55);
+            continue;
+          }
+          if (h.r >= 10) this.prop('brazier', h.x, h.z, keepClear);
+          for (const sx of [-1, 1])
+            for (const f of [-0.45, 0, 0.45]) {
+              if (this.rng() < 0.6) this.prop('sarcophagus', h.x + sx * h.r * 0.55, h.z + f * h.r, keepClear, Math.PI / 2);
+            }
+          scatter('candles', h, 3, 0.85);
+        }
+        break;
+      }
       case 'throne': {
-        for (const h of inner) if (h.kind !== 'boss') ring('pillar', h, 0.6);
+        // The war camp: tents, campfires and weapon racks in the courtyards; the throne in the keep.
+        for (const h of inner) {
+          if (h.kind === 'boss') continue;
+          this.prop('campfire', h.x, h.z, keepClear);
+          scatter('tent', h, Math.round(h.r / 6) + 1, 0.8);
+          scatter('rack', h, 2, 0.75);
+        }
         const boss = halls.find((h) => h.kind === 'boss');
         if (boss) {
           // Against the west wall of the boss hall, facing east into it.
           this.prop('throne', boss.x - boss.r + 3, boss.z, [], Math.PI / 2);
           for (const sz of [-1, 1]) for (const f of [-0.2, 0.35]) this.prop('pillar', boss.x + boss.r * f, boss.z + sz * boss.r * 0.6, keepClear);
+          scatter('rack', boss, 3, 0.8);
         }
         break;
       }
@@ -473,9 +532,9 @@ class Gen {
     }
     for (const h of halls) this.stamp(h);
     this.lanes(halls, start, boss, 3);
-    this.ensureSecondRoute(start, boss, 3);
     this.treasureRooms(halls, 3 + Math.floor(this.rng() * 3));
     const exit = this.exitAlcove(boss);
+    this.ensureSecondRoute(start, boss, 3); // after the exit alcove, which walls off rock round it
     const begin = { x: this.map.centre(this.map.col(start.x), 0).x, z: start.z + 4 };
     this.keepReachable(begin.x, begin.z);
     return this.finish(theme, seed, halls, begin, exit);
@@ -510,9 +569,204 @@ class Gen {
     }
     for (const h of halls) this.stamp(h);
     this.lanes(halls, start, boss, 4);
-    this.ensureSecondRoute(start, boss, 4);
     this.treasureRooms(halls, 10); // candidate groves; only those well off the way keep a chest
     const exit = this.exitAlcove(boss);
+    this.ensureSecondRoute(start, boss, 4); // after the exit alcove, which walls off rock round it
+    const begin = { x: start.x, z: start.z + 4 };
+    this.keepReachable(begin.x, begin.z);
+    return this.finish(theme, seed, halls, begin, exit);
+  }
+
+  /**
+   * Natural caverns: rough rock (noise, smoothed) with round chambers of every size joined by
+   * winding tunnels that narrow and widen — no straight corridors, no square rooms.
+   */
+  cavern(theme: LevelTheme, seed: number): Level {
+    const m = this.map;
+    for (let r = 2; r < m.rows - 2; r++) for (let c = 2; c < m.cols - 2; c++) if (this.rng() < 0.42) m.tiles[r * m.cols + c] = FLOOR;
+    for (let pass = 0; pass < 5; pass++) {
+      const next = new Uint8Array(m.tiles);
+      for (let r = 1; r < m.rows - 1; r++)
+        for (let c = 1; c < m.cols - 1; c++) {
+          let n = 0;
+          for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if ((dr || dc) && m.isFloor(c + dc, r + dr)) n++;
+          next[r * m.cols + c] = n >= 5 || (n >= 4 && m.isFloor(c, r)) ? FLOOR : WALL;
+        }
+      m.tiles.set(next);
+    }
+    const halls: Hall[] = [];
+    const start: Hall = { x: this.range(-30, 30), z: HALF_H - 22, r: 11, shape: 'circle', kind: 'start' };
+    const boss: Hall = { x: this.range(-24, 24), z: -HALF_H + 34, r: 19, shape: 'circle', kind: 'boss' };
+    halls.push(start, boss);
+    for (let tries = 0; tries < 2500 && halls.length < 30; tries++) {
+      const r = Math.round(this.range(6, 15)); // every size, from pockets to great caverns
+      const west = halls.length % 2 === 0;
+      const x = west ? this.range(-HALF_W + 14, -10) : this.range(10, HALF_W - 14);
+      const z = this.range(-HALF_H + 60, HALF_H - 40);
+      if (this.fits(halls, x, z, r, 4)) halls.push({ x, z, r, shape: 'circle', kind: 'normal' });
+    }
+    for (const h of halls) this.stampRough(h);
+    this.natural = true;
+    // Winding tunnels, 2–4 tiles wide.
+    this.lanes(halls, start, boss, 0);
+    this.treasureRooms(halls, 5);
+    const exit = this.exitAlcove(boss);
+    this.ensureSecondRoute(start, boss, 3); // after the exit alcove, which walls off rock round it
+    const begin = { x: start.x, z: start.z + 4 };
+    this.keepReachable(begin.x, begin.z);
+    return this.finish(theme, seed, halls, begin, exit);
+  }
+
+  /** A cavern: a circle with a ragged edge. */
+  stampRough(h: Hall): void {
+    const m = this.map;
+    const bumps = [this.rng() * 6, this.rng() * 6, this.rng() * 6];
+    for (let r = m.row(h.z - h.r * 1.4); r <= m.row(h.z + h.r * 1.4); r++)
+      for (let c = m.col(h.x - h.r * 1.4); c <= m.col(h.x + h.r * 1.4); c++) {
+        const p = m.centre(c, r);
+        const a = Math.atan2(p.z - h.z, p.x - h.x);
+        const edge = h.r * (1 + 0.18 * Math.sin(a * 3 + bumps[0]) + 0.1 * Math.sin(a * 5 + bumps[1]) + 0.06 * Math.sin(a * 9 + bumps[2]));
+        if (Math.hypot(p.x - h.x, p.z - h.z) <= edge) this.set(c, r, FLOOR);
+      }
+  }
+
+  /** A tunnel that wanders between two points, its width changing as it goes (2–4 tiles). */
+  winding(a: { x: number; z: number }, b: { x: number; z: number }): void {
+    const m = this.map;
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    const steps = Math.max(2, Math.ceil(len / 2));
+    const nx = -(b.z - a.z) / (len || 1);
+    const nz = (b.x - a.x) / (len || 1);
+    const amp = Math.min(14, len * 0.18);
+    const phase = this.rng() * 6;
+    const waves = 1 + this.rng() * 1.5;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const off = Math.sin(t * Math.PI * waves * 2 + phase) * amp * Math.sin(t * Math.PI);
+      const x = a.x + (b.x - a.x) * t + nx * off;
+      const z = a.z + (b.z - a.z) * t + nz * off;
+      const w = 1 + Math.round((Math.sin(t * 9 + phase) * 0.5 + 0.5) * 1.6); // half-width 1–2 tiles
+      for (let dr = -w; dr <= w; dr++) for (let dc = -w; dc <= w; dc++) if (dr * dr + dc * dc <= w * w + 1) this.set(m.col(x) + dc, m.row(z) + dr, FLOOR);
+    }
+  }
+
+  /**
+   * The crypt: a strict grid of square chambers and cross-shaped chapels joined by long straight
+   * halls; the halls are lined with burial niches (one-tile alcoves) every few metres.
+   */
+  crypt(theme: LevelTheme, seed: number): Level {
+    const COLS_X = [-66, -22, 22, 66];
+    const rowsZ: number[] = [];
+    for (let z = HALF_H - 22; z > -HALF_H + 70; z -= 40) rowsZ.push(z);
+    const halls: Hall[] = [];
+    const grid: (Hall | null)[][] = [];
+    rowsZ.forEach((z, ri) => {
+      grid.push([]);
+      COLS_X.forEach((x, ci) => {
+        let h: Hall | null = null;
+        if (ri === 0) h = ci === 1 || ci === 2 ? { x, z, r: ci === 1 ? 11 : 9, shape: 'square', kind: ci === 1 ? 'start' : 'normal' } : null;
+        else if (this.rng() < 0.85) h = { x, z, r: Math.round(this.range(7, 11)), shape: 'square', kind: 'normal' };
+        grid[ri].push(h);
+        if (h) halls.push(h);
+      });
+    });
+    const boss: Hall = { x: 0, z: -HALF_H + 34, r: 19, shape: 'square', kind: 'boss' };
+    halls.push(boss);
+    const start = halls.find((h) => h.kind === 'start')!;
+    for (const h of halls) {
+      this.stamp(h);
+      // Chapels: a cross (two crossing arms through the chamber) on some of them.
+      if (h.kind === 'normal' && this.rng() < 0.35) {
+        const m = this.map;
+        const arm = Math.round((h.r + 5) / TILE);
+        this.run(m.col(h.x) - arm, m.row(h.z), m.col(h.x) + arm, m.row(h.z), 5);
+        this.run(m.col(h.x), m.row(h.z) - arm, m.col(h.x), m.row(h.z) + arm, 5);
+      }
+    }
+    // Straight halls between grid neighbours (east–west and north–south); always the north links
+    // and two in three of the side links, so there are several ways up.
+    const straight = (a: Hall, b: Hall) => {
+      const m = this.map;
+      this.run(m.col(a.x), m.row(a.z), m.col(b.x), m.row(b.z), 3);
+      this.niches(a, b);
+    };
+    for (let ri = 0; ri < grid.length; ri++)
+      for (let ci = 0; ci < COLS_X.length; ci++) {
+        const h = grid[ri][ci];
+        if (!h) continue;
+        const east = grid[ri][ci + 1];
+        if (east && (ri === 0 || this.rng() < 0.66)) straight(h, east);
+        // North: the nearest chamber up the same column.
+        for (let rj = ri + 1; rj < grid.length; rj++) {
+          const n = grid[rj][ci];
+          if (n) {
+            straight(h, n);
+            break;
+          }
+        }
+      }
+    // The top row of the grid opens into the guardian's ossuary through two long halls.
+    const top = grid[grid.length - 1].filter((h): h is Hall => !!h);
+    for (const h of [top[0], top[top.length - 1]]) if (h) this.corridor(h, boss, 3);
+    this.treasureRooms(halls, 5);
+    const exit = this.exitAlcove(boss);
+    this.ensureSecondRoute(start, boss, 3); // after the exit alcove, which walls off rock round it
+    const begin = { x: start.x, z: start.z + 4 };
+    this.keepReachable(begin.x, begin.z);
+    return this.finish(theme, seed, halls, begin, exit);
+  }
+
+  /** Burial niches: one-tile alcoves along both sides of a straight hall from a to b. */
+  niches(a: Hall, b: Hall): void {
+    const m = this.map;
+    const horiz = Math.abs(b.x - a.x) > Math.abs(b.z - a.z);
+    const [c0, r0, c1, r1] = [m.col(a.x), m.row(a.z), m.col(b.x), m.row(b.z)];
+    if (horiz) {
+      for (let c = Math.min(c0, c1) + Math.ceil(a.r / 2) + 1; c < Math.max(c0, c1) - Math.ceil(b.r / 2) - 1; c += 3) {
+        this.set(c, r0 - 2, FLOOR);
+        this.set(c, r0 + 2, FLOOR);
+      }
+    } else {
+      for (let r = Math.min(r0, r1) + Math.ceil(a.r / 2) + 1; r < Math.max(r0, r1) - Math.ceil(b.r / 2) - 1; r += 3) {
+        this.set(c0 - 2, r, FLOOR);
+        this.set(c0 + 2, r, FLOOR);
+      }
+    }
+  }
+
+  /**
+   * The orc war camp: big muddy courtyards behind palisades, joined by wide gates, with the
+   * chieftain's stone keep at the top.
+   */
+  fortress(theme: LevelTheme, seed: number): Level {
+    const COLS_X = [-60, 0, 60];
+    const halls: Hall[] = [];
+    const grid: Hall[][] = [];
+    let ri = 0;
+    for (let z = HALF_H - 26; z > -HALF_H + 80; z -= 50, ri++) {
+      grid.push([]);
+      for (const [ci, x] of COLS_X.entries()) {
+        if (ri === 0 && ci !== 1) continue; // the camp gate: one courtyard to start in
+        const h: Hall = { x: x + this.range(-6, 6), z: z + this.range(-5, 5), r: Math.round(this.range(13, 18)), shape: 'square', kind: ri === 0 ? 'start' : 'normal' };
+        grid[ri].push(h);
+        halls.push(h);
+      }
+    }
+    const boss: Hall = { x: 0, z: -HALF_H + 34, r: 20, shape: 'square', kind: 'boss' };
+    halls.push(boss);
+    const start = halls[0];
+    for (const h of halls) this.stamp(h);
+    const gate = (a: Hall, b: Hall) => this.corridor(a, b, 5);
+    for (let r = 0; r < grid.length; r++) {
+      for (let c = 0; c + 1 < grid[r].length; c++) if (r === 0 || this.rng() < 0.75) gate(grid[r][c], grid[r][c + 1]);
+      if (r + 1 < grid.length) for (const h of grid[r]) gate(h, grid[r + 1].slice().sort((p, q) => Math.abs(p.x - h.x) - Math.abs(q.x - h.x))[0]);
+    }
+    const last = grid[grid.length - 1];
+    gate(last[0], boss);
+    gate(last[last.length - 1], boss);
+    this.treasureRooms(halls, 5);
+    const exit = this.exitAlcove(boss);
+    this.ensureSecondRoute(start, boss, 5); // after the exit alcove, which walls off rock round it
     const begin = { x: start.x, z: start.z + 4 };
     this.keepReachable(begin.x, begin.z);
     return this.finish(theme, seed, halls, begin, exit);
@@ -571,6 +825,11 @@ class Gen {
     if (bossHall) keepClear.push({ x: bossHall.x, z: bossHall.z, r: theme.layout === 'lair' ? 6 : bossHall.r * 0.7 });
     this.decorate(theme, halls, keepClear);
     const packs = this.populate(theme, halls, start);
-    return { seed, map: this.map, halls, start, exit, packs, props: this.props, chests, landmarks };
+    // Sarcophagi away from the start can burst open with skeletons (about half of them).
+    const ambushes: number[] = [];
+    this.props.forEach((p, i) => {
+      if (p.kind === 'sarcophagus' && Math.hypot(p.x - start.x, p.z - start.z) > 40 && this.rng() < 0.5) ambushes.push(i);
+    });
+    return { seed, map: this.map, halls, start, exit, packs, props: this.props, chests, landmarks, ambushes };
   }
 }

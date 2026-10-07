@@ -115,9 +115,9 @@ Ash King**, a volcanic dragon; beat him to win.
 | Level | Who lives there | Guardian |
 | --- | --- | --- |
 | 1 · The Woodland — open woods and glades, hedges | forest beasts, thorn vines, a treant | 🐻 The Crystal Bear |
-| 2 · The Crystal Cave — halls and corridors, glowing crystal clusters | underworld dwellers | 🪱 The Giant Cave Worm |
-| 3 · The Crypt — halls and corridors, torches, braziers, pillars | the undead | 💀 The Necromancer |
-| 4 · The Throne Room — square halls, colonnades, the throne in the guardian's hall | orcs | 🪓 The Orc Chieftain |
+| 2 · The Crystal Cave — winding natural caverns of rough rock, lit only by glowing crystals; chasms to walk round (arrows fly over) | underworld dwellers | 🪱 The Giant Cave Worm |
+| 3 · The Crypt — a grid of pale stone halls lined with burial niches, cross-shaped chapels, candles; some sarcophagi burst open with skeletons as you pass | the undead | 💀 The Necromancer |
+| 4 · The Throne Room — an orc war camp: muddy courtyards behind palisades, tents and campfires, the throne in the keep; a woken pack raises the alarm for its neighbours | orcs | 🪓 The Orc Chieftain |
 | 5 · The Flooded Hall — open flooded caverns: ankle-deep water, ripples, waterfalls, floating debris | goblins, water elementals | ⚙️ The Scrap Boss |
 | 6 · The Lava Chamber — halls with lava pits (arrows fly over them) | fire and wind elementals, rock golems | 🔥 The Inferno |
 | 7 · The Ash King's Lair — a long approach to a vast round hall: obsidian spires, lava pools, lavafalls, a rune circle | — (the dragon alone) | 🐉 **The Ash King** (final boss) |

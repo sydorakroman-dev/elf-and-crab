@@ -16,7 +16,7 @@ describe('levels', () => {
   });
 
   it('mixes open plains and halls with corridors, in different hall shapes', () => {
-    expect(new Set(ROOMS.map((r) => r.layout))).toEqual(new Set(['open', 'halls', 'lair']));
+    expect(new Set(ROOMS.map((r) => r.layout))).toEqual(new Set(['open', 'cavern', 'crypt', 'fortress', 'halls', 'lair']));
     expect(new Set(ROOMS.flatMap((r) => r.shapes))).toEqual(new Set(['square', 'circle', 'octagon']));
   });
 

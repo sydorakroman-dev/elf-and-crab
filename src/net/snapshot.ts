@@ -87,6 +87,8 @@ export type GameEvent =
   | { e: 'burst'; x: number; z: number; c: number; n: number }
   /** Loot picked up: k 0 gold (n coins), 1 a spell book (t: what it taught), 2 gear or a potion (t: what). */
   | { e: 'loot'; k: number; x: number; z: number; n: number; t?: string }
+  /** Sarcophagus prop `i` burst open (the dead rise). */
+  | { e: 'ambush'; i: number; x: number; z: number }
   /** Something worth a note on the tablet too (a landmark seen). */
   | { e: 'note'; t: string }
   /** Chest `i` (in the level's list) was opened. */
@@ -130,6 +132,8 @@ export interface Snapshot {
   gold?: number;
   /** Chests opened so far (bit i: chest i). */
   ch?: number;
+  /** Sarcophagi that have burst open (prop indices). */
+  amb?: number[];
   /** The party's gear and bag (sent when it changes). */
   inv?: InvState;
   /** The merchant's wares (while at the merchant's camp). */
