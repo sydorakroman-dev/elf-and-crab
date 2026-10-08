@@ -133,6 +133,7 @@ export class Elf {
     );
     await Promise.all(
       (['knight', 'mage', 'barbarian', 'beastmaster'] as const).map(async (h) => {
+        if (this.animated.has(h)) return; // it has its own animated model: the built one isn't needed
         const parts = await loadParts(`${base}models/${h}.glb`).catch(() => null);
         if (parts) this.models.set(h, this.partition(parts));
       }),
@@ -270,7 +271,8 @@ export class Elf {
    * and its weapon in hand instead of the bow and quiver.
    */
   setHeroClass(h: HeroClass): void {
-    if (h === this.heroClass && this.modelKey) {
+    // (Same hero, but its animated model may have finished loading since: then swap it in.)
+    if (h === this.heroClass && this.modelKey && this.active === (this.animated.get(h) ?? null)) {
       this.applyWeapon();
       return;
     }

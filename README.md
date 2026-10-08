@@ -44,8 +44,9 @@ play and the final level have no seal. In the practice room, the 🔮 button sta
 ## Heroes
 
 Pick your hero on the title screen (remembered). Each fights differently; skills sit in slots 1–3
-(stamina), spells from books in 4–9 (mana). Each hero has its own model, built in code after its art
-(`scripts/models/build-heroes.mjs`), on the elf's skeleton so the same rig animates them all.
+(stamina), spells from books in 4–9 (mana). Each hero has its own animated model, delivered to the
+spec below with idle, walk, run, an attack per weapon type, skill, hit, death, victory and jump clips (older
+built-in-code versions, `scripts/models/build-heroes.mjs`, are the fallback).
 
 | Hero | Preferred weapon | Skills | |
 | --- | --- | --- | --- |
@@ -79,7 +80,8 @@ A hero can also come as an animated model (rigid parts on named bones, no weapon
 and an attack clip per weapon type — Attack1H / Attack2H / AttackBow / AttackStaff — optionally Skill / Hit /
 Death / Victory): see [`docs/hero-model-spec.md`](docs/hero-model-spec.md).
 `node scripts/models/prepare-hero.mjs model.glb <hero>` checks it and slims it down into
-`public/models/heroes/<hero>.glb`, which then replaces that hero's built model. The barbarian uses one.
+`public/models/heroes/<hero>.glb`, which then replaces that hero's built model. All five heroes now use one
+(the built models remain as a fallback if a delivered one fails to load).
 
 ## Skills and spells
 
