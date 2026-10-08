@@ -32,7 +32,7 @@ export const BEASTS: Record<BeastKind, BeastDef> = {
   snake: { name: 'Venomous Snake', tier: 'normal', hp: 30, speed: 3.5, radius: 0.7, touch: 10, push: 7, score: 15, color: 0x2f8f3a, drop: 0.06 },
   direwolf: { name: 'Dire Wolf', tier: 'tough', hp: 50, speed: 7.5, radius: 0.8, touch: 15, push: 5, score: 30, color: 0x3a4250, drop: 0.12 },
   boar: { name: 'Thorn Boar', tier: 'elite', hp: 90, speed: 4.2, radius: 1.0, touch: 15, push: 2.5, score: 60, color: 0x7a4a26, drop: 0.25 },
-  bear: { name: 'The Crystal Bear', tier: 'mini-boss', hp: 450, speed: 4.0, radius: 1.7, touch: 22, push: 0.8, score: 300, color: 0x6b4226, drop: 0 },
+  bear: { name: 'The Crystal Bear', tier: 'mini-boss', hp: 450, speed: 5.2, radius: 1.7, touch: 22, push: 0.8, score: 300, color: 0x6b4226, drop: 0 },
 };
 
 // Snake: coils, then lunges.
@@ -43,11 +43,12 @@ export const DIREWOLF = { retreat: 0.9, retreatSpeed: 6.5 };
 export const BOAR = { minRange: 5, maxRange: 16, paw: 0.8, chargeSpeed: 15, chargeTime: 1.1, chargeDamage: 30, chargeKnock: 22, daze: 1.2, cooldown: 3.5 };
 // Crystal bear: swipes up close; ground-pounds every few seconds, flinging a ring of crystal shards;
 // charges from afar (dazed if it hits a tree or wall). At half health it roars in beetles and enrages:
-// faster, pounding and charging more often.
+// faster, pounding and charging more often, a second wave of shards after each pound, and a second
+// charge straight after the first.
 export const BEAR = {
   swipeRange: 3.2, swipeWindup: 0.4, swipeRadius: 2.8, swipeDamage: 28,
-  poundEvery: 6, poundWindup: 1.0, poundRadius: 4.5, poundDamage: 25, shards: 8,
-  chargeMin: 6, chargeMax: 18, chargeWindup: 0.7, chargeSpeed: 16, chargeTime: 1.1, chargeDamage: 26, chargeKnock: 24, chargeDaze: 1.6, chargeEvery: 8.5, chargeFirst: 4,
+  poundEvery: 6, poundWindup: 0.9, poundRadius: 4.5, poundDamage: 25, shards: 12, shardSpeed: 1.5,
+  chargeMin: 6, chargeMax: 18, chargeWindup: 0.6, chargeSpeed: 20, chargeTime: 1.1, chargeDamage: 26, chargeKnock: 24, chargeDaze: 1.6, chargeEvery: 8.5, chargeFirst: 4,
   roar: 0.8, roarBeetles: 6,
   /** After the roar: speed ×, and pound / charge timers ×. */
   enragedSpeed: 1.2, enragedCooldown: 0.75,
@@ -86,6 +87,14 @@ export class Beast implements Enemy {
   private chargeTimer = BEAR.chargeFirst;
   private bearMove: 'swipe' | 'pound' | 'charge' = 'swipe';
   private roared = false;
+  get enraged(): boolean {
+    return this.roared;
+  }
+  /** Enraged: the second charge of a pair is still to come; the second wave of shards, in this long. */
+  private chargeAgain = false;
+  /** The next charge is that second one (it may start close up). */
+  private followUp = false;
+  private secondWave = 0;
   /** Bolts to fire this step (the bear's crystal shards). */
   private spits: Spit[] = [];
   private lockDir = { x: 0, z: 1 };
@@ -294,6 +303,11 @@ export class Beast implements Enemy {
       return 0;
     }
 
+    if (this.secondWave > 0) {
+      this.secondWave -= dt;
+      if (this.secondWave <= 0) this.shardRing(Math.random() * Math.PI, 1.1);
+    }
+
     switch (this.mode) {
       case 'chase': {
         this.move(tx, tz, chase, dt, others, obstacles);
@@ -332,9 +346,16 @@ export class Beast implements Enemy {
           const hitRock = pushOutOfCircles(p, this.radius, obstacles.filter((o) => !o.low));
           if (!bear) this.cooldown = BOAR.cooldown;
           if (hitWall || hitRock || Math.hypot(p.x - before.x, p.z - before.z) < 0.01) {
+            this.chargeAgain = false;
             this.setMode('dazed', bear ? BEAR.chargeDaze : BOAR.daze);
           } else if (this.timer <= 0) {
             this.setMode('recover', 0.5);
+            // Enraged: turns and charges again straight away.
+            if (bear && this.chargeAgain) {
+              this.chargeAgain = false;
+              this.followUp = true;
+              this.chargeTimer = 0.45;
+            }
           }
           return speed;
         }
@@ -380,8 +401,10 @@ export class Beast implements Enemy {
         this.bearMove = 'pound';
         this.telegraph = { x: this.pose.x, z: this.pose.z, r: BEAR.poundRadius, p: 0 };
         this.setMode('windup', BEAR.poundWindup);
-      } else if (this.chargeTimer <= 0 && dist > BEAR.chargeMin && dist < BEAR.chargeMax) {
+      } else if (this.chargeTimer <= 0 && dist > (this.followUp ? 2 : BEAR.chargeMin) && dist < BEAR.chargeMax) {
         this.chargeTimer = BEAR.chargeEvery * faster;
+        this.chargeAgain = this.roared && !this.followUp;
+        this.followUp = false;
         this.bearMove = 'charge';
         this.lockDir = { x: tx, z: tz };
         this.telegraph = { x: this.pose.x, z: this.pose.z, r: 2.4, p: 0 };
@@ -411,12 +434,9 @@ export class Beast implements Enemy {
         this.strike = { x: p.x, z: p.z, r: BEAR.poundRadius, damage: BEAR.poundDamage, knock: 18 };
         this.telegraph = null;
         const turn = Math.random() * Math.PI;
-        for (let i = 0; i < BEAR.shards; i++) {
-          const a = turn + (i / BEAR.shards) * Math.PI * 2;
-          const dx = Math.sin(a);
-          const dz = Math.cos(a);
-          this.spits.push({ x: p.x + dx * (this.radius + 0.6), z: p.z + dz * (this.radius + 0.6), dirX: dx, dirZ: dz, kind: 'magic' });
-        }
+        this.shardRing(turn, BEAR.shardSpeed);
+        // Enraged: a slower second wave, aimed between the first one's shards.
+        if (this.roared) this.secondWave = 0.45;
         this.setMode('recover', 0.6);
       } else {
         // Swipe: a big paw in front.
@@ -425,6 +445,17 @@ export class Beast implements Enemy {
         this.setMode('recover', 0.4);
       }
       p.act = 1;
+    }
+  }
+
+  /** The pound's crystal shards, flying out all round. */
+  private shardRing(turn: number, speed: number): void {
+    const p = this.pose;
+    for (let i = 0; i < BEAR.shards; i++) {
+      const a = turn + ((i + (speed < BEAR.shardSpeed ? 0.5 : 0)) / BEAR.shards) * Math.PI * 2;
+      const dx = Math.sin(a);
+      const dz = Math.cos(a);
+      this.spits.push({ x: p.x + dx * (this.radius + 0.6), z: p.z + dz * (this.radius + 0.6), dirX: dx, dirZ: dz, kind: 'magic', speed });
     }
   }
 

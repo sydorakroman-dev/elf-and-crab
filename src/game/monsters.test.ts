@@ -127,6 +127,82 @@ describe('monsters', () => {
     expect(e.z).toBeGreaterThan(0);
   });
 
+  it('every boss has a second phase', () => {
+    for (const d of Object.values(MONSTERS)) if (d.bossName) expect(d.enrage?.attacks.length).toBeGreaterThan(0);
+  });
+
+  it('at half health a boss roars (throwing the hero back), speeds up and gains new moves', () => {
+    const e = new Monster('chieftain', 0, 30);
+    run(e, origin(), 0.5);
+    e.hurt(e.maxHp * 0.55, 0, -1);
+    let roar: Strike | null = null;
+    run(e, origin(), 2, (m) => (roar ??= m.strike));
+    expect(e.enraged).toBe(true);
+    expect(roar!.knock).toBeGreaterThanOrEqual(30);
+    // Faster than before: it covers more ground in a second (the hero far off, nothing to attack yet).
+    const far = new THREE.Vector3(0, 0, -200);
+    const calm = new Monster('chieftain', 0, 22);
+    const angry = new Monster('chieftain', 0, 22);
+    angry.hurt(angry.maxHp * 0.55, 0, -1);
+    run(angry, far, 2); // the roar, then it sets off
+    run(calm, far, 2);
+    const [a0, c0] = [angry.z, calm.z];
+    run(angry, far, 1);
+    run(calm, far, 1);
+    expect(a0 - angry.z).toBeGreaterThan((c0 - calm.z) * 1.1);
+  });
+
+  it('chained attacks go off several times in a row (the Scrap Boss’s rivet burst)', () => {
+    const e = new Monster('scrapboss', 0, 14);
+    const rivets: Spit[] = [];
+    run(e, origin(), 3, (_, s) => rivets.push(...s.filter((x) => x.kind === 'rivet')));
+    expect(rivets.length).toBe(6); // the burst: one, then five more
+    expect(rivets[0].speed).toBeGreaterThan(1); // boss shots fly faster
+  });
+
+  it('leading shots aim where the hero is heading', () => {
+    const e = new Monster('scrapboss', 0, 14);
+    const target = new THREE.Vector3(0, 0, 0);
+    let first: Spit | null = null;
+    for (let i = 0; i < 60 * 3 && !first; i++) {
+      target.x += 6 / 60; // running sideways at 6 m/s
+      first = e.update(1 / 60, target, [e], []).find((s) => s.kind === 'rivet') ?? null;
+    }
+    const aimX = first!.dirX / -first!.dirZ; // sideways per metre forward
+    const straightX = (target.x - e.x) / (e.z - target.z);
+    expect(aimX).toBeGreaterThan(straightX + 0.05);
+  });
+
+  it('rings fly out all round', () => {
+    const e = new Monster('inferno', 0, 14);
+    e.hurt(e.maxHp * 0.55, 0, -1);
+    let ring: Spit[] = [];
+    run(e, origin(), 8, (_, s) => {
+      if (s.length >= 12 && !ring.length) ring = s;
+    });
+    expect(ring.length).toBe(12);
+    const angles = ring.map((s) => Math.atan2(s.dirX, s.dirZ));
+    expect(Math.max(...angles) - Math.min(...angles)).toBeGreaterThan(Math.PI * 1.6);
+  });
+
+  it('the Necromancer blinks away when the hero stays close, in a burst of souls', () => {
+    const e = new Monster('necromancer', 0, 3);
+    const hero = new THREE.Vector3();
+    let souls = 0;
+    let jump = 0;
+    for (let i = 0; i < 60 * 4 && !souls; i++) {
+      hero.set(e.x, 0, e.z - 3); // the hero keeps on its heels
+      const before = { x: e.x, z: e.z };
+      const s = e.update(1 / 60, hero, [e], []);
+      if (s.length === 8) {
+        souls = s.length;
+        jump = Math.hypot(e.x - before.x, e.z - before.z);
+      }
+    }
+    expect(souls).toBe(8);
+    expect(jump).toBeGreaterThan(8);
+  });
+
   it.each(Object.keys(MONSTERS) as MonsterKind[])('%s runs without errors', (k) => {
     const e = new Monster(k, 0, 10);
     run(e, origin(), 5);

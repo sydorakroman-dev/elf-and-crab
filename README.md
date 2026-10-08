@@ -156,7 +156,7 @@ Ash King**, a volcanic dragon; beat him to win.
 
 | Level | Who lives there | Guardian |
 | --- | --- | --- |
-| 1 · The Woodland — open woods and glades, hedges | forest beasts, thorn vines, a treant | 🐻 The Crystal Bear |
+| 1 · The Woodland — open woods and glades, ringed by forest: oaks, pines and birches (some turning gold and red), undergrowth, mossy boulders, fallen logs | forest beasts, thorn vines, a treant | 🐻 The Crystal Bear |
 | 2 · The Crystal Cave — winding natural caverns of rough rock, lit only by glowing crystals; chasms to walk round (arrows fly over) | underworld dwellers | 🪱 The Giant Cave Worm |
 | 3 · The Crypt — a grid of pale stone halls lined with burial niches, cross-shaped chapels, candles; some sarcophagi burst open with skeletons as you pass | the undead | 💀 The Necromancer |
 | 4 · The Throne Room — an orc war camp: muddy courtyards behind palisades, tents and campfires, the throne in the keep; a woken pack raises the alarm for its neighbours | orcs | 🪓 The Orc Chieftain |
@@ -170,6 +170,11 @@ Full tables with every number: [`docs/enemies.csv`](docs/enemies.csv) and [`docs
 generated from the code with `npm run stats`. The elf has **100 HP**; arrows do 10. Each level's group is tougher than
 the last.
 
+**Bosses** move fast, their shots fly faster than other monsters' (and many aim where you're running, so change
+direction), and their attacks come in chains. At **half health** each roars — a shockwave that throws you back,
+with a banner — and enters a **second phase**: faster, quicker to attack again, with new moves (spirals and rings of
+projectiles, double and triple charges).
+
 **Woodland — forest beasts and living plants** (all melee)
 
 | | Tier | HP | Damage | Special |
@@ -180,7 +185,7 @@ the last.
 | Thorn Boar | elite | 90 | 15 | paws the ground, then charges (30); dazed if it hits a tree or wall |
 | Thorn Vine | normal | 22 | 10 | lashes from 3 m |
 | Treant | elite | 90 | 16 | roots erupt where you stand, after a warning ring, and slow |
-| **Crystal Bear** | boss | 450 | 22 | fast; swipe (28), ground pound with warning ring (25) that flings 8 crystal shards, a charge from afar (26; dazed if it hits a tree); at half health roars in 6 beetles and enrages |
+| **Crystal Bear** | boss | 450 | 22 | fast; swipe (28), ground pound with warning ring (25) that flings 12 fast crystal shards, a charge from afar (26; dazed if it hits a tree); at half health roars in 6 beetles and enrages: faster, a second wave of shards after each pound, and charges twice in a row |
 
 **Crystal Cave — underworld dwellers** (critters of the deep: poison and acid)
 
@@ -191,7 +196,7 @@ the last.
 | Spore Crawler | normal | 25 | 8 | spore bombs leave poison clouds (6 HP/s) |
 | Mushroom Monster | tough | 55 | 14 | poison spore burst around itself |
 | Living Mold | elite | 80 | 18 | slow, hard punch; regrows when you stop hitting it |
-| **Giant Cave Worm** | boss | 420 | 18 | burrows (can't be hit), bursts up under you after a warning ring; acid fans; calls spiders |
+| **Giant Cave Worm** | boss | 420 | 18 | burrows (can't be hit), bursts up under you after a warning ring, spraying acid all round; fast 5-shot acid fans aimed where you're heading; calls spiders. **Phase 2:** burrows twice in a row, spinning acid rings |
 
 **Crypt — the undead**
 
@@ -202,7 +207,7 @@ the last.
 | Ghost | normal | 30 | 12 | floats straight through pillars |
 | Zombie Brute | tough | 105 | 25 | slow; fist slam |
 | Undead Knight | elite | 150 | 22 | its shield halves arrows to the front — hit it from the side |
-| **Necromancer** | boss | 575 | 14 / 20 | 5-bolt soul volleys, soul blasts at your spot; raises skeletons every 10 s |
+| **Necromancer** | boss | 575 | 14 / 20 | two quick 5-bolt soul volleys aimed where you're heading, soul blasts at your spot; get close and he blinks away in a burst of souls; raises skeletons every 10 s. **Phase 2:** a spiral of souls, curses three in a row |
 
 **Throne Room — orcs**
 
@@ -213,7 +218,7 @@ the last.
 | Orc Warrior | tough | 70 | 20 | axe swing |
 | Orc Shaman | tough | 55 | 12 | magic bolts; heals nearby orcs (green ring) — kill it first |
 | Orc Shield Guard | elite | 170 | 22 | its shield blocks almost every arrow to the front |
-| **Orc Chieftain** | boss | 745 | 28 / 30 | hammer swings, ground slam with warning ring, long charges; war-cry brings 3 warriors |
+| **Orc Chieftain** | boss | 745 | 28 / 30 | hammer swings, ground slam with warning ring, fast charges, throwing axes; war-cry brings 3 warriors. **Phase 2:** three charges in a row, axe volleys |
 
 **Flooded Hall — goblins and water elementals** (quick, well-armed tinkerers with nasty gadgets)
 
@@ -225,7 +230,7 @@ the last.
 | Bomb Lobber | tough | 55 | 26 | bombs land where you stand, after a warning ring |
 | Boiler Tinkerer | elite | 130 | 24 | steam burst around itself |
 | Water Elemental | normal | 65 | 12 | water bolts that slow you for 2 s |
-| **Scrap Boss** | boss | 950 | 32 | stomp shockwave, mech punches; drops 4 brawlers at 2/3 and 1/3 health |
+| **Scrap Boss** | boss | 950 | 32 | stomp shockwave, mech punches, rivet-gun bursts, strings of bombs that follow you; drops 4 brawlers at 2/3 and 1/3 health. **Phase 2:** rings of rivets |
 
 **Lava Chamber — fire, wind and stone elementals**
 
@@ -234,13 +239,13 @@ the last.
 | Wind Elemental | normal | 65 | 8 | gust bolts with a big shove |
 | Fire Elemental | tough | 105 | 15 | fireballs that leave burning ground (10 HP/s) |
 | Rock Golem | elite | 255 | 30 | slow; heavy punch with huge knockback |
-| **The Inferno** | final boss | 1380 | 30 / 15 / 22 | flame ring around itself, 5-fireball fans, meteors at your spot (all leave fire); calls fire elementals |
+| **The Inferno** | final boss | 1380 | 30 / 15 / 22 | flame ring around itself, double 5-fireball fans, three meteors in a row (all leave fire); calls fire elementals. **Phase 2:** a spiral of fire |
 
 **The Ash King's Lair — the final boss**, alone in his hall (he calls in fire elementals himself)
 
 | | Tier | HP | Damage | Special |
 | --- | --- | --- | --- | --- |
-| **🐉 The Ash King** | final boss | 2600 | 24–34 | a volcanic dragon: wing slam around himself (warning ring, leaves fire), swoops across the lair from 9 m+, 9-fireball breath fans, falling ash where you stand (burning ground), bites; calls 3 fire elementals at 2/3 and 1/3 health |
+| **🐉 The Ash King** | final boss | 2600 | 24–34 | a volcanic dragon: wing slam around himself (warning ring, leaves fire), swoops across the lair from 9 m+, double 9-fireball breath fans, four meteors of falling ash that follow you (burning ground), bites; calls 3 fire elementals at 2/3 and 1/3 health. **Phase 2:** three swoops in a row, rings of fire |
 
 The models (`public/models/`) are static, part-named meshes; `src/game/monsterVisual.ts`, `beastVisual.ts` and
 `elementalVisual.ts` rig them in code. Health and damage live in `src/game/balance.ts` and the `BEASTS`

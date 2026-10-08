@@ -52,6 +52,115 @@ interface Fadeable {
  * and a small pool of point lights follow the camera's focus, so a big level stays fast.
  * dispose() frees it all.
  */
+interface ForestLists {
+  trunks: THREE.Matrix4[];
+  trunkColors: THREE.Color[];
+  canopies: THREE.Matrix4[];
+  canopyColors: THREE.Color[];
+  pines: THREE.Matrix4[];
+  pineColors: THREE.Color[];
+  bushes: THREE.Matrix4[];
+  bushColors: THREE.Color[];
+  flowers: THREE.Matrix4[];
+  flowerColors: THREE.Color[];
+  rocks: THREE.Matrix4[];
+  rockColors: THREE.Color[];
+}
+
+const fq = new THREE.Quaternion();
+const fe = new THREE.Euler();
+const fv = new THREE.Vector3();
+const fs = new THREE.Vector3();
+const hsl = (h: number, s: number, l: number) => new THREE.Color().setHSL(h, s, l);
+
+/**
+ * One tile of the Woodland's edge, `d` tiles from the clearing: trunks under tall canopies (oak,
+ * pine, birch, some in autumn colours) with undergrowth — bushes (some flowering, some turning),
+ * mossy boulders and fallen logs — thick at the edge, trees further in.
+ */
+function forestTile(rng: () => number, d: number, x: number, z: number, o: ForestLists): void {
+  const at = (spread: number) => [x + (rng() - 0.5) * spread, z + (rng() - 0.5) * spread] as const;
+  // Trees: now and then right at the edge, mostly further in.
+  if (rng() < (d === 1 ? 0.35 : d === 2 ? 0.6 : 0.5)) {
+    const [tx, tz] = at(1.4);
+    const kind = rng();
+    if (kind < 0.25) {
+      // Pine: a dark trunk, stacked cones.
+      const height = 5 + rng() * 3;
+      o.trunks.push(new THREE.Matrix4().compose(fv.set(tx, 0, tz), fq.identity(), fs.set(0.7, height * 0.5, 0.7)));
+      o.trunkColors.push(hsl(0.07, 0.35, 0.2 + rng() * 0.05));
+      const tint = hsl(0.38 + (rng() - 0.5) * 0.06, 0.35, 0.17 + rng() * 0.06);
+      for (let i = 0; i < 3; i++) {
+        const w = 1.9 - i * 0.5;
+        o.pines.push(new THREE.Matrix4().compose(fv.set(tx, height * (0.25 + i * 0.22), tz), fq.setFromEuler(fe.set(0, rng() * 3, 0)), fs.set(w, height * 0.38, w)));
+        o.pineColors.push(tint.clone().offsetHSL(0, 0, i * 0.03));
+      }
+    } else {
+      // Oak (brown bark) or birch (pale bark, lighter leaves); some turned gold, orange or red.
+      const birch = kind > 0.8;
+      const height = 3.2 + rng() * 2.6;
+      o.trunks.push(new THREE.Matrix4().compose(fv.set(tx, 0, tz), fq.setFromEuler(fe.set((rng() - 0.5) * 0.12, 0, (rng() - 0.5) * 0.12)), fs.set(birch ? 0.6 : 1, height, birch ? 0.6 : 1)));
+      o.trunkColors.push(birch ? hsl(0.1, 0.08, 0.8) : hsl(0.07, 0.4, 0.22 + rng() * 0.08));
+      const season = rng();
+      const leaf =
+        season < 0.14 ? hsl(0.1 + rng() * 0.04, 0.7, 0.42) // gold
+        : season < 0.24 ? hsl(0.05 + rng() * 0.03, 0.7, 0.4) // orange
+        : season < 0.3 ? hsl(0.01 + rng() * 0.02, 0.6, 0.35) // red
+        : birch ? hsl(0.2 + rng() * 0.04, 0.5, 0.4)
+        : hsl(0.25 + (rng() - 0.5) * 0.08, 0.45, 0.24 + rng() * 0.1);
+      for (let i = 0; i < 3; i++) {
+        const k = (birch ? 1.4 : 1.9) - i * 0.4 + rng() * 0.3;
+        o.canopies.push(new THREE.Matrix4().compose(fv.set(tx + (rng() - 0.5) * 1.2, height + 0.4 + i * 0.9, tz + (rng() - 0.5) * 1.2), fq.setFromEuler(fe.set(rng() * 3, rng() * 3, rng() * 3)), fs.set(k, k * 0.85, k)));
+        o.canopyColors.push(leaf.clone().offsetHSL((rng() - 0.5) * 0.02, 0, (rng() - 0.5) * 0.06));
+      }
+    }
+  }
+  // Undergrowth: thick along the edge, thinning further in.
+  const bushes = d === 1 ? 2 + Math.floor(rng() * 2) : d === 2 ? (rng() < 0.6 ? 1 : 0) : rng() < 0.25 ? 1 : 0;
+  for (let b = 0; b < bushes; b++) {
+    const [bx, bz] = at(1.8);
+    const look = rng();
+    const color =
+      look < 0.16 ? hsl(0.07 + rng() * 0.05, 0.6, 0.38) // turning
+      : look < 0.3 ? hsl(0.17 + rng() * 0.03, 0.5, 0.36) // yellow-green
+      : look < 0.42 ? hsl(0.42, 0.3, 0.22) // blue-green
+      : hsl(0.27 + (rng() - 0.5) * 0.06, 0.45, 0.22 + rng() * 0.1);
+    const k = 0.75 + rng() * 0.6;
+    const h = (0.65 + rng() * 0.45) * k;
+    for (let i = 0; i < 2; i++) {
+      const ox = bx + (rng() - 0.5) * 0.9;
+      const oz = bz + (rng() - 0.5) * 0.9;
+      const kk = k * (1 - i * 0.25);
+      o.bushes.push(new THREE.Matrix4().compose(fv.set(ox, h * 0.7, oz), fq.setFromEuler(fe.set(rng() * 3, rng() * 3, rng() * 3)), fs.set(kk, h, kk)));
+      o.bushColors.push(color.clone().offsetHSL(0, 0, (rng() - 0.5) * 0.06));
+    }
+    // Some flower: pink, white or yellow blossoms dotted over it.
+    if (rng() < 0.22) {
+      const petal = [hsl(0.93, 0.6, 0.75), hsl(0.15, 0.2, 0.92), hsl(0.13, 0.85, 0.6), hsl(0.75, 0.45, 0.7)][Math.floor(rng() * 4)];
+      for (let f = 0; f < 6; f++) {
+        const a = rng() * Math.PI * 2;
+        const up = 0.3 + rng() * 0.6;
+        o.flowers.push(new THREE.Matrix4().compose(fv.set(bx + Math.sin(a) * k * 0.85, h * (0.7 + up * 0.8), bz + Math.cos(a) * k * 0.85), fq.setFromEuler(fe.set(rng(), rng(), rng())), fs.set(1, 1, 1)));
+        o.flowerColors.push(petal);
+      }
+    }
+  }
+  // Mossy boulders and the odd fallen log.
+  if (rng() < (d <= 2 ? 0.14 : 0.06)) {
+    const [rx, rz] = at(1.2);
+    const k = 0.7 + rng() * 0.8;
+    o.rocks.push(new THREE.Matrix4().compose(fv.set(rx, k * 0.35, rz), fq.setFromEuler(fe.set(rng() * 3, rng() * 3, rng() * 3)), fs.set(k * 1.2, k * 0.8, k)));
+    o.rockColors.push(rng() < 0.5 ? hsl(0.1, 0.05, 0.42 + rng() * 0.1) : hsl(0.22, 0.3, 0.32));
+  } else if (d <= 2 && rng() < 0.06) {
+    const [lx, lz] = at(0.8);
+    const len = 2.5 + rng() * 2;
+    fq.setFromEuler(fe.set(0, rng() * Math.PI, Math.PI / 2));
+    // The trunk geometry stands on its base: tipped over, it lies along the ground from (lx, lz).
+    o.trunks.push(new THREE.Matrix4().compose(fv.set(lx, 0.4, lz), fq, fs.set(0.75, len, 0.75)));
+    o.trunkColors.push(hsl(0.07, 0.35, 0.24));
+  }
+}
+
 export class Dungeon {
   readonly group = new THREE.Group();
   readonly room: RoomDef;
@@ -298,11 +407,15 @@ export class Dungeon {
     const fy = focus.y + 1;
     // Only the part of the sight line below the wall tops can be blocked.
     const rise = camera.y - fy;
-    const tTop = rise > 0.01 ? Math.min(1, (this.wallHeight + 0.5 - fy) / rise) : 1;
+    // (In the Woodland the edge is tall trees: all the way up to the camera.)
+    const top = this.room.outdoor ? 99 : this.wallHeight + 0.5;
+    const tTop = rise > 0.01 ? Math.min(1, (top - fy) / rise) : 1;
     const ex = focus.x + (camera.x - focus.x) * tTop;
     const ez = focus.z + (camera.z - focus.z) * tTop;
+    // Trees also fill the foreground under the camera: fade them along the whole way to it, wider.
+    const pad = this.room.outdoor ? 3 : 1;
     for (const c of this.chunks) {
-      const hit = segmentHitsBox(focus.x, focus.z, ex, ez, c.minX - 1, c.maxX + 1, c.minZ - 1, c.maxZ + 1);
+      const hit = segmentHitsBox(focus.x, focus.z, ex, ez, c.minX - pad, c.maxX + pad, c.minZ - pad, c.maxZ + pad);
       fade(c, hit ? 0.28 : 1, dt);
     }
     const lx = camera.x - focus.x;
@@ -399,8 +512,8 @@ export class Dungeon {
     const m = this.map;
     const { wall } = this.room;
     const outdoor = !!this.room.outdoor;
-    // How the walls are made: hedges, rough cave rock, pale cut stone, a palisade, or brick.
-    const style = outdoor ? 'hedge' : this.room.feature === 'crystals' ? 'rock' : this.room.feature === 'throne' ? 'palisade' : 'brick';
+    // How the walls are made: the forest's edge, rough cave rock, pale cut stone, a palisade, or brick.
+    const style = outdoor ? 'forest' : this.room.feature === 'crystals' ? 'rock' : this.room.feature === 'throne' ? 'palisade' : 'brick';
     const crisp = this.room.feature === 'brazier'; // the crypt: even, pale cut stone
     const H = this.wallHeight;
     const rows = Math.ceil(H);
@@ -411,6 +524,9 @@ export class Dungeon {
     const capGeo = new THREE.BoxGeometry(TILE, 0.5, TILE);
     const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 1, 6).translate(0, 0.5, 0);
     const canopyGeo = new THREE.IcosahedronGeometry(1, 0);
+    const pineGeo = new THREE.ConeGeometry(1, 1, 7).translate(0, 0.5, 0);
+    const bushGeo = new THREE.DodecahedronGeometry(1, 0);
+    const flowerGeo = new THREE.OctahedronGeometry(0.13, 0);
     const mat4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const e = new THREE.Euler();
@@ -423,10 +539,18 @@ export class Dungeon {
         const blockColors: THREE.Color[] = [];
         const caps: THREE.Matrix4[] = [];
         const trunks: THREE.Matrix4[] = [];
+        const trunkColors: THREE.Color[] = [];
         const canopies: THREE.Matrix4[] = [];
         const canopyColors: THREE.Color[] = [];
+        const pines: THREE.Matrix4[] = [];
+        const pineColors: THREE.Color[] = [];
+        const bushes: THREE.Matrix4[] = [];
+        const bushColors: THREE.Color[] = [];
+        const flowers: THREE.Matrix4[] = [];
+        const flowerColors: THREE.Color[] = [];
         const rocks: THREE.Matrix4[] = [];
         const rockColors: THREE.Color[] = [];
+        const forest = { trunks, trunkColors, canopies, canopyColors, pines, pineColors, bushes, bushColors, flowers, flowerColors, rocks, rockColors };
         const stakes: THREE.Matrix4[] = [];
         const tips: THREE.Matrix4[] = [];
         for (let r = cr; r < Math.min(cr + CHUNK, m.rows); r++)
@@ -434,6 +558,10 @@ export class Dungeon {
             if (m.isFloor(col, r)) continue;
             const d = this.depth(col, r);
             const p = m.centre(col, r);
+            if (style === 'forest') {
+              if (d <= 4) forestTile(rng, d, p.x, p.z, forest);
+              continue;
+            }
             if (style === 'rock' && d <= 3) {
               // Cave rock: big, rough boulders of every height (no bricks, no straight tops).
               if (d === 1 || rng() < 0.55) {
@@ -461,40 +589,17 @@ export class Dungeon {
             if (d === 1) {
               for (let row = 0; row < rows; row++) {
                 const h = Math.min(1, H - row);
-                if (outdoor) {
-                  // Leafy, uneven blocks for a hedge.
-                  const k = 1 + rng() * 0.25;
-                  q.setFromEuler(e.set((rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3, (rng() - 0.5) * 0.3));
-                  mat4.compose(v.set(p.x + (rng() - 0.5) * 0.3, row + h / 2, p.z + (rng() - 0.5) * 0.3), q, s.set(k, h * k, k));
-                } else {
-                  mat4.compose(v.set(p.x, row + h / 2, p.z), q.identity(), s.set(1, h, 1));
-                }
+                mat4.compose(v.set(p.x, row + h / 2, p.z), q.identity(), s.set(1, h, 1));
                 blocks.push(mat4.clone());
                 const vary = crisp ? 0.3 : 1; // cut stone is even
                 blockColors.push(new THREE.Color().setHSL(wall.h + (rng() - 0.5) * 0.08 * vary, wall.s + (rng() - 0.5) * 0.05 * vary, wall.l + (rng() - 0.5) * 0.08 * vary - (row === 0 ? 0.03 : 0) + (crisp && row === rows - 1 ? 0.05 : 0)));
               }
             } else if (d <= 3) {
-              if (outdoor) {
-                // The wood beyond the hedge: trees on every other tile.
-                if ((col + r) % 2 === 0 || rng() < 0.3) {
-                  const height = 3 + rng() * 2.5;
-                  const jx = p.x + (rng() - 0.5) * 1.2;
-                  const jz = p.z + (rng() - 0.5) * 1.2;
-                  trunks.push(new THREE.Matrix4().compose(v.set(jx, 0, jz), q.identity(), s.set(1, height, 1)));
-                  for (let i = 0; i < 2; i++) {
-                    const k = 1.9 - i * 0.5 + rng() * 0.3;
-                    q.setFromEuler(e.set(rng() * 3, rng() * 3, rng() * 3));
-                    canopies.push(new THREE.Matrix4().compose(v.set(jx + (rng() - 0.5) * 0.6, height + 0.6 + i * 1.2, jz + (rng() - 0.5) * 0.6), q, s.set(k, k, k)));
-                    canopyColors.push(new THREE.Color().setHSL(0.27 + (rng() - 0.5) * 0.05, 0.45, 0.28 + rng() * 0.08));
-                  }
-                }
-              } else {
-                const jitter = (rng() - 0.5) * 0.4;
-                caps.push(new THREE.Matrix4().compose(v.set(p.x, H - 0.25 + jitter, p.z), q.identity(), s.set(1, 1, 1)));
-              }
+              const jitter = (rng() - 0.5) * 0.4;
+              caps.push(new THREE.Matrix4().compose(v.set(p.x, H - 0.25 + jitter, p.z), q.identity(), s.set(1, 1, 1)));
             }
           }
-        if (!blocks.length && !caps.length && !trunks.length && !rocks.length && !stakes.length) continue;
+        if (!blocks.length && !caps.length && !trunks.length && !rocks.length && !stakes.length && !bushes.length && !pines.length) continue;
         const chunk = new THREE.Group();
         const mats: THREE.Material[] = [];
         const add = (geo: THREE.BufferGeometry, list: THREE.Matrix4[], material: THREE.MeshStandardMaterial, colors?: THREE.Color[]) => {
@@ -511,8 +616,11 @@ export class Dungeon {
         };
         add(blockGeo, blocks, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true }), blockColors);
         add(capGeo, caps, new THREE.MeshStandardMaterial({ color: c.setHSL(wall.h, wall.s * 0.7, wall.l * 0.6).getHex(), roughness: 1, flatShading: true }));
-        add(trunkGeo, trunks, new THREE.MeshStandardMaterial({ color: 0x6a4024, roughness: 0.9, flatShading: true }));
+        add(trunkGeo, trunks, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), trunkColors);
         add(canopyGeo, canopies, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true }), canopyColors);
+        add(pineGeo, pines, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true }), pineColors);
+        add(bushGeo, bushes, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), bushColors);
+        add(flowerGeo, flowers, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, flatShading: true }), flowerColors);
         add(rockGeo, rocks, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), rockColors);
         add(stakeGeo, stakes, new THREE.MeshStandardMaterial({ color: c.setHSL(wall.h, wall.s, wall.l).getHex(), roughness: 0.9, flatShading: true }));
         add(tipGeo, tips, new THREE.MeshStandardMaterial({ color: c.setHSL(wall.h, wall.s * 0.8, wall.l * 1.3).getHex(), roughness: 0.9, flatShading: true }));

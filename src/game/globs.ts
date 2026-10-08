@@ -24,12 +24,14 @@ export const PROJECTILES: Record<ProjectileKind, { speed: number; radius: number
 
 const LIFETIME = 2.6;
 const HEIGHT = 1.0;
-const POOL = 40;
+const POOL = 120;
 
 interface Glob {
   mesh: THREE.Group;
   looks: Record<ProjectileKind, THREE.Object3D>;
   kind: ProjectileKind;
+  /** Speed × for this one. */
+  speed: number;
   dirX: number;
   dirZ: number;
   life: number;
@@ -122,7 +124,7 @@ export class Globs {
       for (const l of Object.values(looks)) mesh.add(l);
       mesh.visible = false;
       this.group.add(mesh);
-      this.globs.push({ mesh, looks, kind: 'acid', dirX: 0, dirZ: 0, life: 0, active: false });
+      this.globs.push({ mesh, looks, kind: 'acid', speed: 1, dirX: 0, dirZ: 0, life: 0, active: false });
     }
   }
 
@@ -138,6 +140,7 @@ export class Globs {
     g.life = LIFETIME;
     g.dirX = spit.dirX;
     g.dirZ = spit.dirZ;
+    g.speed = spit.speed ?? 1;
     this.show(g, spit.kind);
     g.mesh.position.set(spit.x, HEIGHT, spit.z);
     g.mesh.rotation.y = Math.atan2(spit.dirX, spit.dirZ);
@@ -187,7 +190,8 @@ export class Globs {
     const impacts: GlobImpact[] = [];
     for (const g of this.globs) {
       if (!g.active) continue;
-      const { speed, radius } = PROJECTILES[g.kind];
+      const { radius } = PROJECTILES[g.kind];
+      const speed = PROJECTILES[g.kind].speed * g.speed;
       g.life -= dt;
       const p = g.mesh.position;
       const bx = p.x + g.dirX * speed * dt;

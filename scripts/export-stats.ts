@@ -53,13 +53,18 @@ const shotDamage = (shot: string) => {
   const s = (MONSTER_SHOTS as Record<string, number | { damage: number }>)[shot] ?? (ELEMENTAL_ATTACKS as Record<string, { damage: number }>)[shot];
   return typeof s === 'number' ? s : s.damage;
 };
+const chain = (a: Attack) => (a.repeat ? `; ${a.repeat + 1} in a row` : '');
 const describe = (a: Attack): [string, string | number, string] => {
+  const [name, dmg, how] = describeOne(a);
+  return [name, dmg, how + chain(a)];
+};
+const describeOne = (a: Attack): [string, string | number, string] => {
   switch (a.type) {
     case 'melee':
       return ['melee hit', a.damage, `within ${a.range} m after a ${a.windup} s wind-up; every ${a.cooldown} s`];
     case 'shoot': {
       const n = a.count ?? 1;
-      return [n > 1 ? `${n}-bolt ${a.shot} fan` : `${a.shot} bolt`, shotDamage(a.shot), `up to ${a.range} m; every ${a.cooldown} s${a.shot === 'acid' ? `; slows the hero to ${pct(MONSTER_SHOTS.acid.slowFactor)} for ${MONSTER_SHOTS.acid.slowSeconds} s` : ''}`];
+      return [a.ring ? `${n}-bolt ${a.shot} ring` : n > 1 ? `${n}-bolt ${a.shot} fan` : `${a.shot} bolt`, shotDamage(a.shot), `up to ${a.range} m; every ${a.cooldown} s${a.speed ? `; flies ${a.speed}x faster` : ''}${a.lead ? '; aimed where the hero is heading' : ''}${a.shot === 'acid' ? `; slows the hero to ${pct(MONSTER_SHOTS.acid.slowFactor)} for ${MONSTER_SHOTS.acid.slowSeconds} s` : ''}`];
     }
     case 'area':
       return [
@@ -70,7 +75,9 @@ const describe = (a: Attack): [string, string | number, string] => {
     case 'lunge':
       return ['leap / charge', a.damage, `from ${a.minRange ?? 0}-${a.range} m at ${a.speed} m/s after a ${a.windup} s wind-up; every ${a.cooldown} s`];
     case 'burrow':
-      return ['burrow + erupt', a.damage, `sinks out of reach, bursts up under the hero after a ${a.windup} s warning ring (r ${a.radius} m); every ${a.cooldown} s`];
+      return ['burrow + erupt', a.damage, `sinks out of reach, bursts up under the hero after a ${a.windup} s warning ring (r ${a.radius} m)${a.spray ? `, spraying ${a.spray.count} ${a.spray.shot} bolts all round` : ''}; every ${a.cooldown} s`];
+    case 'blink':
+      return ['blink away', a.shot ? shotDamage(a.shot) : 0, `when the hero is within ${a.range} m: reappears ~${a.distance} m away${a.shot ? ` in a ring of ${a.count ?? 8} ${a.shot} bolts` : ''}; every ${a.cooldown} s`];
   }
 };
 for (const [k, d] of Object.entries(MONSTERS)) {
@@ -83,6 +90,7 @@ for (const [k, d] of Object.entries(MONSTERS)) {
     d.guard !== undefined && `shield: takes ${pct(d.guard)} damage from the front`,
     d.phasing && 'floats through pillars',
     d.summonAt && `calls ${d.summonAt.count} ${nameOf(d.summonAt.kind)}s at ${d.summonAt.at.map(pct).join(' and ')} HP`,
+    d.enrage && `at ${pct(d.enrage.at)} HP roars and enrages: ${d.enrage.speed}x speed, ${d.enrage.cooldown}x cooldowns, adds ${d.enrage.attacks.map((a) => describe(a)[0]).join(' / ')}`,
     d.summonEvery && `raises ${d.summonEvery.count} ${nameOf(d.summonEvery.kind)}s every ${d.summonEvery.every} s (max ${d.summonEvery.max})`,
   ].filter(Boolean);
   enemies.push([

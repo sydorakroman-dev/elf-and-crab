@@ -24,6 +24,8 @@ export interface Spit {
   dirX: number;
   dirZ: number;
   kind: ProjectileKind;
+  /** Flies this many times its kind's usual speed (bosses' shots are quicker). */
+  speed?: number;
 }
 
 /** An area attack landing this step (a slam, a lunge, a swipe, a bomb): the hero is hit if within `r` of (x, z). */
@@ -80,6 +82,8 @@ export interface Enemy {
   slow: number;
   /** Mini-bosses and bosses get a health bar. */
   readonly bossName: string | null;
+  /** A boss in its second phase (after the roar at half health). */
+  readonly enraged?: boolean;
   /** Where an attack is about to land (warning ring), if any. */
   readonly telegraph: Telegraph | null;
   /** Set during update(): an area attack that landed this step. */

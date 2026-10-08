@@ -186,6 +186,8 @@ export class Game {
   private victoryPending = false;
   /** Double Shot: charged shots left. */
   private doubleShots = 0;
+  /** Bosses whose second phase has been announced. */
+  private readonly enragedShown = new Set<number>();
   /** Spells learned from books this run, and the party's gold. */
   private readonly spellbook = new Spellbook();
   /** Gear, the 16-slot bag and the gold purse (shared by the elf and the familiar). */
@@ -2023,6 +2025,13 @@ export class Game {
   }
 
   private syncBoss(): void {
+    const b = this.enemies.boss;
+    if (b?.enraged && !this.enragedShown.has(b.id)) {
+      this.enragedShown.add(b.id);
+      this.banner(`💢 ${b.bossName} is enraged!`);
+      this.sfx.wave();
+      this.shake = Math.max(this.shake, 0.6);
+    }
     this.hud.bossBar.set(this.bossState());
     this.telegraph.sync(this.telegraphTuples(), this.time);
   }
