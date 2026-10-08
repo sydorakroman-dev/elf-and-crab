@@ -31,6 +31,8 @@ const HAND = new THREE.Vector3(1.33, 2.96, 0.22);
 /** Weapon parts the built hero models used to carry (they're weapons now, held separately). */
 /** How far (radians) each weapon is tipped forward in the built rig's fist. */
 const GRIP_TILT: Partial<Record<WeaponType | 'none', number>> = { onehand: 0.6, twohand: 1.2, staff: 0.9 };
+/** The elf's bow is built for the old rig's hand: on an animated model it's turned this much about its length to face forward. */
+const BOW_TURN = -Math.PI / 2;
 const MODEL_WEAPON = /^arm[LR]_lower_(grip|pommel|guard|blade|fuller|shield|staff|prong|crystal|haft|wrap|axe|tip)/;
 
 /** Parts too small or thin for an outline (it would swallow them). */
@@ -324,7 +326,7 @@ export class Elf {
     });
     this.buildWeapons(this.weaponLook);
     if (this.active) {
-      this.active.setWeapon(this.weapons.children.length ? this.weapons : null, MODEL_SCALE);
+      this.active.setWeapon(this.weapons.children.length ? this.weapons : null, MODEL_SCALE, this.weaponLook === 'bow' ? BOW_TURN : 0);
       return;
     }
     if (!this.weapons.children.length) return;

@@ -120,14 +120,15 @@ export class AnimatedHero {
   /**
    * Holds `weapon` in the right hand (null: none). The weapon is built pointing up (+Y) with its
    * grip at the origin, in units where `unit` is a metre's share — it's turned so it points up in
-   * the rest pose and sized to the game's scale.
+   * the rest pose (turned `turn` radians about its length) and sized to the game's scale.
    */
-  setWeapon(weapon: THREE.Object3D | null, unit: number): void {
+  setWeapon(weapon: THREE.Object3D | null, unit: number, turn = 0): void {
     this.weapon?.removeFromParent();
     this.weapon = weapon;
     if (!weapon || !this.wrist) return;
     weapon.position.set(0, 0, 0);
-    weapon.quaternion.copy(this.wristRest).invert();
+    // Upright in the rest pose, then turned `turn` about its own length (a bow faces forward).
+    weapon.quaternion.copy(this.wristRest).invert().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn));
     weapon.scale.setScalar(unit / this.wristScale);
     this.wrist.add(weapon);
   }
