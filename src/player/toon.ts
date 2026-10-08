@@ -61,6 +61,14 @@ export function toonify(root: THREE.Object3D, noOutline: RegExp): void {
 export const MONSTER_NO_OUTLINE =
   /eye|pupil|shine|brow|nostril|nose_hole|mouth|tooth|fang|tusk|rib_mark|stitch|cap_spot|blue_mark|bowstring|arrow_feather|shell_seam|goggle|clock_hand|face_glow|drop|spore|finger|thumb|bristle|^thorn_?\d|claw|spot/;
 
+const vcKeys = new WeakMap<THREE.Material, object>();
+/** A stand-in cache key for "this material, with vertex colours". */
+function vertexColored(m: THREE.Material): object {
+  let k = vcKeys.get(m);
+  if (!k) vcKeys.set(m, (k = {}));
+  return k;
+}
+
 /** `toonify` for a loose set of meshes (e.g. a model's parts, before they're rigged). */
 export function toonifyMeshes(meshes: Iterable<THREE.Mesh>, noOutline: RegExp): void {
   sharedGradient ??= gradientMap();
@@ -68,16 +76,19 @@ export function toonifyMeshes(meshes: Iterable<THREE.Mesh>, noOutline: RegExp): 
   const outline = outlineMaterial();
   for (const mesh of meshes) {
     const src = mesh.material as THREE.MeshStandardMaterial;
-    let mat = toon.get(src);
+    // Delivered models carry their colours in the vertices (scripts/models/prepare-hero.mjs).
+    const vertexColors = !!mesh.geometry.getAttribute('color');
+    const key = (vertexColors ? vertexColored(src) : src) as THREE.Material;
+    let mat = toon.get(key);
     if (!mat) {
-      mat = new THREE.MeshToonMaterial({ color: src.color, emissive: src.emissive, emissiveIntensity: src.emissiveIntensity, gradientMap: sharedGradient, side: src.side });
+      mat = new THREE.MeshToonMaterial({ color: src.color, emissive: src.emissive, emissiveIntensity: src.emissiveIntensity, gradientMap: sharedGradient, side: src.side, vertexColors });
       if (src.transparent) {
         // Glass and water stay see-through.
         mat.transparent = true;
         mat.opacity = src.opacity;
         mat.depthWrite = false;
       }
-      toon.set(src, mat);
+      toon.set(key, mat);
     }
     mesh.material = mat;
     if (noOutline.test(mesh.name)) continue;

@@ -55,6 +55,13 @@ Pick your hero on the title screen (remembered). Each fights differently; skills
 | 🪓 Barbarian | heavy great-axe chops | Dash, Whirlwind (26 to all around), Rage (+50% speed, +30% damage, 6 s) | 125 health, 10% armour |
 | 🐺 Beast Master | long spear-staff sweeps (melee, the longest reach), and a wolf that fights beside you | Dash, Sic ’Em (wolf leaps at a foe, 30), Mend (heal 25 and the wolf) | 105 health |
 
+### Delivered hero models
+
+A hero can also come as an animated model (rigid parts on named bones, clips Idle / Walk / Run /
+Attack, optionally Skill / Hit / Death / Victory): see [`docs/hero-model-spec.md`](docs/hero-model-spec.md).
+`node scripts/models/prepare-hero.mjs model.glb <hero>` checks it and slims it down into
+`public/models/heroes/<hero>.glb`, which then replaces that hero's built model. The barbarian uses one.
+
 ## Skills and spells
 
 The elf has **stamina** (5 charges, one back every 4 s) and **mana** (a 100-point bar, refilling 4 per second).

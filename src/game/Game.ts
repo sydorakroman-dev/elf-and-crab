@@ -1348,6 +1348,7 @@ export class Game {
         break;
       case 'rage':
         this.rage = 6;
+        this.elf.special('Skill');
         this.spellFx(p.x, p.z, 0xff4a3a, 2, 30);
         this.sfx.wave();
         break;

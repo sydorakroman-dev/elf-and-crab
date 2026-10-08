@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { attachAtPivot, loadParts } from './rig';
 import { toonify, toonifyMeshes } from './toon';
 import { Spring, angleDelta, cadence, damp, legPose, splitBody } from './gait';
-import { HEROES, type HeroClass, type WeaponLook } from '../game/heroes';
+import { HEROES, HERO_CLASSES, type HeroClass, type WeaponLook } from '../game/heroes';
+import { AnimatedHero } from './animatedHero';
 
 const MODEL_SCALE = 0.42; // model is ~4.8 units tall → ~2 m
 const ORIGIN = new THREE.Vector3();
@@ -113,6 +114,17 @@ export class Elf {
 
   /** Loads the other heroes' models (they share the elf's skeleton), to swap in with setHeroClass. */
   async loadHeroModels(base: string): Promise<void> {
+    // Delivered, animated models (public/models/heroes/<hero>.glb) take precedence.
+    await Promise.all(
+      HERO_CLASSES.map(async (h) => {
+        const a = await AnimatedHero.load(`${base}models/heroes/${h}.glb`);
+        if (!a) return;
+        a.group.visible = false;
+        a.onStep = (k) => this.onStep?.(k);
+        this.group.add(a.group);
+        this.animated.set(h, a);
+      }),
+    );
     await Promise.all(
       (['knight', 'mage', 'barbarian', 'beastmaster'] as const).map(async (h) => {
         const parts = await loadParts(`${base}models/${h}.glb`).catch(() => null);
@@ -125,6 +137,9 @@ export class Elf {
   private readonly slots: [THREE.Group, THREE.Vector3, string][] = [];
   /** Each loaded model's parts, sorted into the slots (last entry: the torso's). */
   private readonly models = new Map<string, THREE.Mesh[][]>();
+  /** Heroes with their own animated model, and the one showing now (null: the built rig). */
+  private readonly animated = new Map<HeroClass, AnimatedHero>();
+  private active: AnimatedHero | null = null;
   private modelKey = '';
 
   /** Sorts a model's parts into the skeleton's slots (and gives them the cartoon look). */
@@ -187,6 +202,7 @@ export class Elf {
 
   /** Wind Walk: see-through, no outline. */
   setGhost(on: boolean): void {
+    this.active?.setGhost(on);
     if (on === this.ghostly) return;
     this.ghostly = on;
     this.group.traverse((o) => {
@@ -205,6 +221,7 @@ export class Elf {
 
   /** Release: the string snaps forward and the bow kicks; then it's redrawn (others: a swing, a cast, a throw). */
   shoot(): void {
+    this.active?.attack();
     this.recoil = 1;
     this.draw = 0;
     this.swing = 1;
@@ -239,6 +256,15 @@ export class Elf {
     this.heroClass = h;
     const def = HEROES[h];
     this.weaponLook = def.weapon;
+    // An animated model of its own: show it instead of the built rig.
+    this.active?.setPose('none');
+    for (const [k, a] of this.animated) a.group.visible = k === h;
+    this.active = this.animated.get(h) ?? null;
+    this.body.visible = !this.active;
+    if (this.active) {
+      this.buildWeapons('bow', 0);
+      return;
+    }
     // Its own model where there is one; otherwise the elf's, recoloured, with a placeholder weapon.
     const own = this.models.has(h);
     this.useModel(own ? h : 'elf');
@@ -339,12 +365,14 @@ export class Elf {
 
   /** Recoil from a hit: a jolt back, the head snapping, a stagger. */
   flinch(): void {
+    this.active?.flinch();
     this.flinchAmount = 1;
     this.stagger = 1;
   }
 
   /** End-of-run poses, played on top of everything: falling over, or bow raised in triumph. */
   setPose(pose: 'none' | 'dead' | 'victory'): void {
+    this.active?.setPose(pose);
     if (pose === this.pose) return;
     this.pose = pose;
     this.poseT = 0;
@@ -356,6 +384,10 @@ export class Elf {
 
   /** Advances the end pose while the game itself is stopped (game over / victory screen). */
   updatePose(dt: number): void {
+    if (this.active) {
+      this.active.updatePose(dt);
+      return;
+    }
     if (this.pose === 'none') return;
     this.poseT += dt;
     this.time += dt;
@@ -471,8 +503,18 @@ export class Elf {
   /** A hit stagger: a step back and a twist, decaying. */
   private stagger = 0;
 
+  /** A skill's flourish on an animated model ('Skill' — a roar —, 'Jump'…). */
+  special(name: string): void {
+    this.active?.special(name);
+  }
+
   update(dt: number, m: ElfMotion): void {
     if (dt <= 0) return;
+    if (this.active) {
+      this.group.rotation.y = m.facing;
+      this.active.update(dt, m);
+      return;
+    }
     if (this.pose !== 'none') {
       this.group.rotation.y = m.facing;
       this.updatePose(dt);
