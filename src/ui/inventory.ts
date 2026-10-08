@@ -1,4 +1,4 @@
-import { HERO_SLOTS, POTIONS, RARITY_INFO, SLOT_INFO, STAT_INFO, fits, itemScore, sellPrice, statLines, type BagEntry, type GearSlot, type Item, type StatKey } from '../game/items';
+import { HERO_SLOTS, POTIONS, artKey, kindInfo, RARITY_INFO, SLOT_INFO, STAT_INFO, fits, itemScore, sellPrice, statLines, type BagEntry, type GearSlot, type Item, type StatKey } from '../game/items';
 import type { InvOp, InvState, StockEntry } from '../game/inventory';
 
 type Selection = { from: 'bag'; i: number } | { from: 'gear'; slot: GearSlot } | { from: 'shop'; i: number } | null;
@@ -12,16 +12,17 @@ const DOUBLE_TAP_MS = 350;
 
 const BASE = import.meta.env.BASE_URL;
 /** Gear kinds shown with a basic placeholder picture until they get painted art. */
-const PLACEHOLDER = new Set(['offhand', 'collar', 'charm']);
+const PLACEHOLDER = new Set(['offhand', 'collar', 'charm', 'onehand', 'twohand', 'staff']);
 
 /** An item's icon: its painted picture where it has one (bows, armor), otherwise an emoji. */
 function iconOf(e: Thing): string {
   if (e.kind === 'book') return '📖';
   if (e.kind === 'potion') return POTIONS[e.potion].icon;
-  if (e.art) return `<img class="item-art" src="${BASE}art/items/${e.slot}-${e.art}.webp" alt="" draggable="false" />`;
+  const key = artKey(e);
+  if (e.art) return `<img class="item-art" src="${BASE}art/items/${key}-${e.art}.webp" alt="" draggable="false" />`;
   // Kinds still waiting for their art: a plain placeholder picture.
-  if (PLACEHOLDER.has(e.slot)) return `<img class="item-art" src="${BASE}art/items/${e.slot}-0.svg" alt="" draggable="false" />`;
-  return SLOT_INFO[e.slot].icon;
+  if (PLACEHOLDER.has(key)) return `<img class="item-art" src="${BASE}art/items/${key}-0.svg" alt="" draggable="false" />`;
+  return kindInfo(e).icon;
 }
 
 function nameOf(e: Thing): string {
@@ -41,7 +42,7 @@ const DOLL: Record<GearSlot, { area: string; size: 'small' | 'tall' | 'body' }> 
   amulet: { area: 'amulet', size: 'small' },
   helmet: { area: 'helmet', size: 'small' },
   gloves: { area: 'gloves', size: 'small' },
-  bow: { area: 'bow', size: 'tall' },
+  weapon: { area: 'weapon', size: 'tall' },
   armor: { area: 'armor', size: 'body' },
   cape: { area: 'cape', size: 'small' },
   belt: { area: 'belt', size: 'small' },
@@ -434,7 +435,7 @@ export class InventoryPanel {
     let lines: string[] = [];
     let sub = '';
     if (e.kind === 'item') {
-      sub = `${RARITY_INFO[e.rarity].label} ${SLOT_INFO[e.slot].label.toLowerCase()}${SLOT_INFO[e.slot].familiar ? ' · for the familiar' : ''}`;
+      sub = `${RARITY_INFO[e.rarity].label} ${kindInfo(e).label.toLowerCase()}${e.slot === 'weapon' ? ' weapon' : ''}${SLOT_INFO[e.slot].familiar ? ' · for the familiar' : ''}`;
       lines = statLines(e.stats);
       const g = this.state!.gear;
       const worn = e.slot === 'ring' ? (g.ring && g.ring2 ? g.ring : null) : g[e.slot];

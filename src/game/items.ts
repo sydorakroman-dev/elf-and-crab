@@ -4,16 +4,31 @@
  */
 
 /** What a piece of gear is (where it can be worn). */
-export type ItemSlot = 'bow' | 'offhand' | 'helmet' | 'armor' | 'cape' | 'belt' | 'gloves' | 'boots' | 'amulet' | 'ring' | 'collar' | 'charm';
+export type ItemSlot = 'weapon' | 'offhand' | 'helmet' | 'armor' | 'cape' | 'belt' | 'gloves' | 'boots' | 'amulet' | 'ring' | 'collar' | 'charm';
 /** Places to wear gear: one per kind, except two rings. */
-export type HeroSlot = 'bow' | 'offhand' | 'helmet' | 'armor' | 'cape' | 'belt' | 'gloves' | 'boots' | 'amulet' | 'ring' | 'ring2';
+export type HeroSlot = 'weapon' | 'offhand' | 'helmet' | 'armor' | 'cape' | 'belt' | 'gloves' | 'boots' | 'amulet' | 'ring' | 'ring2';
 export type FamSlot = 'collar' | 'charm';
 export type GearSlot = HeroSlot | FamSlot;
-export const HERO_SLOTS: HeroSlot[] = ['bow', 'offhand', 'helmet', 'armor', 'cape', 'belt', 'gloves', 'boots', 'amulet', 'ring', 'ring2'];
+export const HERO_SLOTS: HeroSlot[] = ['weapon', 'offhand', 'helmet', 'armor', 'cape', 'belt', 'gloves', 'boots', 'amulet', 'ring', 'ring2'];
 export const FAM_SLOTS: FamSlot[] = ['collar', 'charm'];
 export const GEAR_SLOTS: GearSlot[] = [...HERO_SLOTS, ...FAM_SLOTS];
 /** Every kind of gear that can drop. */
-export const ITEM_SLOTS: ItemSlot[] = ['bow', 'offhand', 'helmet', 'armor', 'cape', 'belt', 'gloves', 'boots', 'amulet', 'ring', 'collar', 'charm'];
+export const ITEM_SLOTS: ItemSlot[] = ['weapon', 'offhand', 'helmet', 'armor', 'cape', 'belt', 'gloves', 'boots', 'amulet', 'ring', 'collar', 'charm'];
+
+/**
+ * Weapons by how they're used — the one in hand decides how the hero attacks:
+ * onehand (sword, axe, mace: quick melee), twohand (greataxe, greatsword, warhammer: heavy melee),
+ * bow (arrows), staff (magic bolts).
+ */
+export type WeaponType = 'onehand' | 'twohand' | 'bow' | 'staff';
+export const WEAPON_TYPES: WeaponType[] = ['onehand', 'twohand', 'bow', 'staff'];
+
+export const WEAPON_INFO: Record<WeaponType, { label: string; icon: string; nouns: string[] }> = {
+  onehand: { label: 'One-handed', icon: '🗡️', nouns: ['Arming Sword', 'Hand Axe', 'Flanged Mace', 'Broadsword', 'War Pick', 'Falchion'] },
+  twohand: { label: 'Two-handed', icon: '🪓', nouns: ['Greataxe', 'Greatsword', 'Warhammer', 'Halberd', 'Maul', 'Spear-Staff'] },
+  bow: { label: 'Bow', icon: '🏹', nouns: ['Elmwood Bow', 'Yew Longbow', 'Moonwood Bow', 'Hunter’s Recurve'] },
+  staff: { label: 'Staff', icon: '🔮', nouns: ['Oak Staff', 'Crystal Staff', 'Rune Staff', 'Gnarled Staff', 'Star Rod', 'Ember Wand'] },
+};
 
 /** Can gear of kind `item` be worn in place `place`? (A ring fits either ring finger.) */
 export function fits(item: ItemSlot, place: GearSlot): boolean {
@@ -47,6 +62,8 @@ export interface Item {
   kind: 'item';
   id: number;
   slot: ItemSlot;
+  /** Weapons: how it's used. */
+  weapon?: WeaponType;
   rarity: Rarity;
   name: string;
   stats: Stats;
@@ -72,7 +89,7 @@ export const POTIONS: Record<PotionKind, { name: string; icon: string; amount: n
 };
 
 export const SLOT_INFO: Record<ItemSlot | 'ring2', { label: string; icon: string; nouns: string[]; stats: StatKey[]; familiar: boolean }> = {
-  bow: { label: 'Bow', icon: '🏹', nouns: ['Elmwood Bow', 'Yew Longbow', 'Moonwood Bow', 'Hunter’s Recurve'], stats: ['damage', 'attackSpeed', 'crit'], familiar: false },
+  weapon: { label: 'Weapon', icon: '⚔️', nouns: [], stats: ['damage', 'attackSpeed', 'crit'], familiar: false },
   offhand: { label: 'Off-hand', icon: '🗡️', nouns: ['Hunting Knife', 'Elven Dagger', 'Fletcher’s Quiver', 'Wooden Buckler'], stats: ['damage', 'crit', 'armor', 'attackSpeed'], familiar: false },
   helmet: { label: 'Helmet', icon: '🪖', nouns: ['Leather Cap', 'Ranger’s Hood', 'Leaf Circlet', 'Horned Helm'], stats: ['maxHp', 'armor', 'manaRegen'], familiar: false },
   cape: { label: 'Cape', icon: '🧣', nouns: ['Woolen Cloak', 'Ranger’s Cape', 'Leafweave Mantle', 'Shadow Cloak'], stats: ['armor', 'moveSpeed', 'manaRegen'], familiar: false },
@@ -91,7 +108,7 @@ export const SLOT_INFO: Record<ItemSlot | 'ring2', { label: string; icon: string
  * Gear with painted icons: each picture's name, and which pictures each rarity uses (plainer
  * ones for commons, gilded and steel ones for epics).
  */
-export const ITEM_ART: Partial<Record<ItemSlot, { names: string[]; byRarity: Record<Rarity, number[]> }>> = {
+export const ITEM_ART: Partial<Record<ItemSlot | WeaponType, { names: string[]; byRarity: Record<Rarity, number[]> }>> = {
   bow: {
     names: ['Elmwood Bow', 'Hunter’s Recurve', 'Oaken Warbow', 'Ivory Bow', 'Moonsteel Bow', 'Short Hunting Bow', 'Sylvan Bow', 'Plumwood Bow', 'Crystal-Grip Bow', 'Nightgold Bow'],
     byRarity: { common: [1, 2, 3, 6], rare: [4, 7, 8, 9], epic: [5, 9, 10] },
@@ -176,9 +193,20 @@ export function newId(): number {
 }
 
 /** Rolls a piece of gear for `slot` (random if not given) of `rarity` on level `level` (1-based). */
-export function makeItem(rng: () => number, rarity: Rarity, level: number, slot?: ItemSlot): Item {
+/** Which art set an item uses (weapons: by type). */
+export function artKey(it: { slot: ItemSlot; weapon?: WeaponType }): ItemSlot | WeaponType {
+  return it.slot === 'weapon' ? (it.weapon ?? 'onehand') : it.slot;
+}
+
+/** The icon and label an item shows for its kind (weapons: by type). */
+export function kindInfo(it: { slot: ItemSlot; weapon?: WeaponType }): { label: string; icon: string } {
+  return it.slot === 'weapon' ? WEAPON_INFO[it.weapon ?? 'onehand'] : SLOT_INFO[it.slot];
+}
+
+export function makeItem(rng: () => number, rarity: Rarity, level: number, slot?: ItemSlot, weaponType?: WeaponType): Item {
   const s = slot ?? ITEM_SLOTS[Math.floor(rng() * ITEM_SLOTS.length)];
-  const info = SLOT_INFO[s];
+  const weapon = s === 'weapon' ? (weaponType ?? WEAPON_TYPES[Math.floor(rng() * WEAPON_TYPES.length)]) : undefined;
+  const info = weapon ? { ...SLOT_INFO.weapon, nouns: WEAPON_INFO[weapon].nouns } : SLOT_INFO[s];
   const r = RARITY_INFO[rarity];
   const pool = [...info.stats];
   const stats: Stats = {};
@@ -191,13 +219,13 @@ export function makeItem(rng: () => number, rarity: Rarity, level: number, slot?
   }
   const top = (Object.keys(stats) as StatKey[])[0];
   // A painted picture (and the name that goes with it), where this kind has them.
-  const artSet = ITEM_ART[s];
+  const artSet = ITEM_ART[weapon ?? s];
   const pictures = artSet?.byRarity[rarity];
   const art = pictures ? pictures[Math.floor(rng() * pictures.length)] : undefined;
   const noun = art && artSet ? artSet.names[art - 1] : info.nouns[Math.floor(rng() * info.nouns.length)];
   const name = rarity === 'common' ? noun : `${noun} ${SUFFIX[top]}`;
   const value = Math.round(r.value * (1 + 0.2 * Math.max(0, level - 1)));
-  return { kind: 'item', id: newId(), slot: s, rarity, name, stats, value, ...(art ? { art } : {}) };
+  return { kind: 'item', id: newId(), slot: s, ...(weapon ? { weapon } : {}), rarity, name, stats, value, ...(art ? { art } : {}) };
 }
 
 export function makePotion(potion: PotionKind): Potion {

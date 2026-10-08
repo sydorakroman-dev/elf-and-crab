@@ -1,28 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { HEROES, HERO_CLASSES, inSwing } from './heroes';
+import { FISTS, HEROES, HERO_CLASSES, WEAPON_ATTACKS, inSwing } from './heroes';
+import { WEAPON_TYPES } from './items';
 import { ABILITIES } from './abilities';
 
 describe('heroes', () => {
-  it('gives every hero three real skills, health and an attack', () => {
+  it('gives every hero three real skills, health and a preferred weapon type', () => {
     for (const h of HERO_CLASSES) {
       const d = HEROES[h];
       expect(d.skills).toHaveLength(3);
       for (const s of d.skills) expect(ABILITIES[s]).toBeTruthy();
       expect(d.hp).toBeGreaterThan(50);
-      expect(d.attack.damage).toBeGreaterThan(0);
-      expect(d.attack.interval).toBeGreaterThan(0.1);
-      if (d.attack.kind === 'melee') expect(d.attack.range).toBeGreaterThan(2);
+      expect(WEAPON_TYPES).toContain(d.preferred);
     }
+    expect(HEROES.knight.hp).toBeGreaterThan(HEROES.elf.hp);
+    expect(HEROES.mage.hp).toBeLessThan(HEROES.elf.hp);
   });
 
-  it('trades toughness for reach: the melee heroes are the toughest, the mage the frailest', () => {
-    expect(HEROES.knight.hp).toBeGreaterThan(HEROES.elf.hp);
-    expect(HEROES.barbarian.hp).toBeGreaterThan(HEROES.elf.hp);
-    expect(HEROES.mage.hp).toBeLessThan(HEROES.elf.hp);
-    // Damage per second is in the same range for everyone (the beast master's wolf adds to it).
-    const dps = (h: (typeof HERO_CLASSES)[number]) => HEROES[h].attack.damage / HEROES[h].attack.interval;
-    for (const h of HERO_CLASSES) expect(dps(h)).toBeGreaterThan(20);
-    for (const h of HERO_CLASSES) expect(dps(h)).toBeLessThan(50);
+  it('gives each weapon type its own attack, in the same damage-per-second range', () => {
+    const dps = (a: { damage: number; interval: number }) => a.damage / a.interval;
+    for (const w of WEAPON_TYPES) {
+      const a = WEAPON_ATTACKS[w];
+      expect(a.interval).toBeGreaterThan(0.1);
+      expect(dps(a)).toBeGreaterThan(20);
+      expect(dps(a)).toBeLessThan(50);
+      if (a.kind === 'melee') expect(a.range).toBeGreaterThan(2);
+    }
+    expect(WEAPON_ATTACKS.twohand.damage).toBeGreaterThan(WEAPON_ATTACKS.onehand.damage);
+    expect(WEAPON_ATTACKS.twohand.range!).toBeGreaterThan(WEAPON_ATTACKS.onehand.range!);
+    expect(dps(FISTS)).toBeLessThan(dps(WEAPON_ATTACKS.onehand) / 2);
   });
 
   it('hits what is in the arc in front, within reach', () => {

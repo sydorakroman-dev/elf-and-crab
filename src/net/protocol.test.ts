@@ -65,7 +65,7 @@ describe('parseFamiliarCommand', () => {
     expect(parseFamiliarCommand({ type: 'inv', req: { op: 'unequip', slot: 'hat' } })).toBeNull();
     expect(parseFamiliarCommand({ type: 'inv', req: { op: 'steal', i: 0 } })).toBeNull();
     expect(parseFamiliarCommand({ type: 'inv', req: { op: 'move', i: 1, j: 4 } })).toEqual({ type: 'inv', req: { op: 'move', i: 1, j: 4 } });
-    expect(parseFamiliarCommand({ type: 'inv', req: { op: 'unequip', slot: 'bow', to: 7 } })).toEqual({ type: 'inv', req: { op: 'unequip', slot: 'bow', to: 7 } });
+    expect(parseFamiliarCommand({ type: 'inv', req: { op: 'unequip', slot: 'weapon', to: 7 } })).toEqual({ type: 'inv', req: { op: 'unequip', slot: 'weapon', to: 7 } });
     expect(parseFamiliarCommand({ type: 'inv', req: { op: 'move', i: 1 } })).toBeNull();
   });
 });

@@ -25,9 +25,9 @@ const BUDGET = Number(budgetArg ?? 32000);
 const ERROR = 0.012;
 const OUT = `public/models/heroes/${hero}.glb`;
 const BONES = ['pelvis', 'spine', 'chest', 'neck', 'head', 'shL', 'elL', 'wrL', 'shR', 'elR', 'wrR', 'hipL', 'kneeL', 'ankleL', 'hipR', 'kneeR', 'ankleR'];
-const CLIPS = { required: ['Idle', 'Walk', 'Run', 'Attack'], optional: ['Skill', 'Jump', 'Hit', 'Death', 'Victory'] };
+const CLIPS = { required: ['Idle', 'Walk', 'Run', 'Attack1H'], optional: ['Attack2H', 'AttackBow', 'AttackStaff', 'Skill', 'Jump', 'Hit', 'Death', 'Victory'] };
 /** Accepted alternative clip names (the model's name → ours). */
-const CLIP_ALIASES = { AxeCleave: 'Attack', Cleave: 'Attack', Slash: 'Attack', Cast: 'Attack', BattleRoar: 'Skill', Roar: 'Skill' };
+const CLIP_ALIASES = { Attack: 'Attack1H', AxeCleave: 'Attack2H', Cleave: 'Attack2H', Slash: 'Attack1H', Cast: 'AttackStaff', BattleRoar: 'Skill', Roar: 'Skill' };
 
 const io = new NodeIO();
 const doc = await io.read(src);
@@ -41,10 +41,18 @@ for (const a of root.listAnimations()) {
   if (alias) a.setName(alias);
 }
 const clips = root.listAnimations().map((a) => a.getName());
-const missingClips = CLIPS.required.filter((c) => !clips.includes(c));
+const missingClips = CLIPS.required.filter((c) => !clips.includes(c) && !(c === 'Attack1H' && clips.some((n) => n.startsWith('Attack'))));
 if (missingBones.length) console.warn(`! missing bones: ${missingBones.join(', ')}`);
 if (missingClips.length) console.warn(`! missing required clips: ${missingClips.join(', ')}`);
 if (root.listSkins().length) console.warn('! the model is skinned: the game expects rigid parts on bones (see the spec)');
+
+// ── Weapons are held separately (the game puts them in the right hand): drop any the model has ─
+for (const node of root.listNodes()) {
+  if (!/^(axe|sword|bow|staff|shield|weapon|mace|hammer|spear)/i.test(node.getName())) continue;
+  console.warn(`- removing the model's weapon "${node.getName()}" (weapons are separate items)`);
+  node.traverse((n) => n.getMesh()?.dispose());
+  node.dispose();
+}
 
 // ── Colours into the vertices, one shared material ───────────────────────────────────────────
 const shared = doc.createMaterial('hero').setBaseColorFactor([1, 1, 1, 1]).setRoughnessFactor(0.85).setMetallicFactor(0);

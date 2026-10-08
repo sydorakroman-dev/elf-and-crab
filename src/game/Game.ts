@@ -36,9 +36,9 @@ import { Pickups, type Collected } from './pickups';
 import { ELF_SPELLS, FIRST_SPELL_SLOT, SPELL_POWER, Spellbook, spellCost, spellTitle, type SpellKey } from './spells';
 import { chestLoot, rollLoot, tierOf, type Drop } from './loot';
 import { Inventory, makeStock, type InvOp, type StockEntry } from './inventory';
-import { HEROES, HERO_CLASSES, inSwing, loadHero, type HeroClass } from './heroes';
+import { FISTS, HEROES, HERO_CLASSES, PREFERRED_BONUS, WEAPON_ATTACKS, inSwing, loadHero, type Attack, type HeroClass } from './heroes';
 import { Pet } from './pet';
-import { POTIONS, RARITY_INFO, makeItem, makePotion, type BagEntry } from './items';
+import { POTIONS, RARITY_INFO, WEAPON_TYPES, makeItem, makePotion, type BagEntry, type WeaponType } from './items';
 import { ENCHANT_CHAIN, ENCHANT_FIRE, ENCHANT_FROST, type ArrowHit } from './arrows';
 import type { HeroLink } from '../net/client';
 import { POWER_CODES, q, type GameEvent, type Snapshot } from '../net/snapshot';
@@ -387,6 +387,9 @@ export class Game {
     for (const e of Object.values(this.enchants)) e.shots = 0;
     this.bloom.left = this.bark.left = 0;
     this.inv.clear();
+    // Every run starts with the hero's own kind of weapon in hand.
+    this.inv.gear.weapon = makeItem(Math.random, 'common', 1, 'weapon', HEROES[this.hud.hero].preferred);
+    this.inv.version++;
     this.setHero(this.hud.hero);
     this.ward = 0;
     this.riddle = null;
@@ -551,8 +554,8 @@ export class Game {
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
     if (this.phase === 'ready' && !this.practice) return; // nothing to shoot at until the hero starts
     if (!this.player.trigger || this.fireCooldown > 0) return;
-    const attack = HEROES[this.heroClass].attack;
-    const interval = this.heroClass === 'elf' ? FIRE_INTERVAL : attack.interval;
+    const attack = this.attack();
+    const interval = attack.kind === 'arrow' ? FIRE_INTERVAL : attack.interval;
     this.fireCooldown = ((this.powers.has('rapid') ? interval / 2 : interval) / (1 + this.heroGear.attackSpeed)) / (this.rage > 0 ? 1.5 : 1);
     this.invisible = 0; // shooting gives you away
 
@@ -904,7 +907,7 @@ export class Game {
       t: q(this.time),
       state,
       ...(this.practice ? { practice: 1 } : {}),
-      hero: { c: HERO_CLASSES.indexOf(this.heroClass), x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0, ...(this.invisible > 0 ? { i: 1 } : {}), ...(this.ward > 0 ? { w: 1 } : {}) },
+      hero: { c: HERO_CLASSES.indexOf(this.heroClass), wt: WEAPON_TYPES.indexOf(this.weaponType() ?? ('' as WeaponType)), x: q(p.x), z: q(p.z), f: q(m.facing), s: q(m.speed), m: q(m.moveYaw), a: m.aiming ? 1 : 0, d: m.dashing ? 1 : 0, v: this.elf.group.visible ? 1 : 0, ...(this.invisible > 0 ? { i: 1 } : {}), ...(this.ward > 0 ? { w: 1 } : {}) },
       fam: c.kind
         ? { k: FAMILIAR_KINDS.indexOf(c.kind), x: q(c.position.x), z: q(c.position.z), h: q(c.facing), s: q(c.speed), y: q(c.height) }
         : null,
@@ -1399,8 +1402,20 @@ export class Game {
   /** A basic attack's damage with gear (and Rage): sometimes a critical (double) hit. */
   private arrowDamage(): number {
     const might = this.powers.has('pierce') ? 1.5 : 1; // the Might power-up
-    const base = HEROES[this.heroClass].attack.damage * (1 + this.heroGear.damage) * (this.rage > 0 ? 1.3 : 1) * might;
+    const preferred = this.weaponType() === HEROES[this.heroClass].preferred ? 1 + PREFERRED_BONUS : 1;
+    const base = this.attack().damage * (1 + this.heroGear.damage) * (this.rage > 0 ? 1.3 : 1) * might * preferred;
     return Math.random() < this.heroGear.crit ? base * 2 : base;
+  }
+
+  /** The weapon type in hand (null: none). */
+  private weaponType(): WeaponType | null {
+    return this.inv.gear.weapon?.weapon ?? null;
+  }
+
+  /** How the hero attacks: the weapon in hand decides (fists without one). */
+  private attack(): Attack {
+    const w = this.weaponType();
+    return w ? WEAPON_ATTACKS[w] : FISTS;
   }
 
   /** Plays hero `h` from now on: its look, skills, health, and (the beast master) its wolf. */
@@ -1429,6 +1444,7 @@ export class Game {
     this.heroGear = this.inv.heroStats();
     this.famGear = this.inv.familiarStats();
     this.player.speedScale = 1 + this.heroGear.moveSpeed;
+    this.elf.setWeapon(this.weaponType());
     this.resources.manaBonus = this.heroGear.manaRegen + HEROES[this.heroClass].mana;
     this.resources.staminaBonus = this.heroGear.staminaRegen;
     this.companion.cooldownScale = 1 - this.famGear.famCooldown;

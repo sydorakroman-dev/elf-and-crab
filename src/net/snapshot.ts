@@ -28,6 +28,8 @@ export type PickupTuple = [number, number, number, number, number];
 export interface HeroState {
   /** Which hero (index into HERO_CLASSES). */
   c?: number;
+  /** The weapon type in hand (index into WEAPON_TYPES; -1 none). */
+  wt?: number;
   x: number;
   z: number;
   /** Facing yaw. */

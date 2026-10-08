@@ -6,6 +6,7 @@ import { Minimap } from '../ui/minimap';
 import { InventoryPanel } from '../ui/inventory';
 import { Pet } from '../game/pet';
 import { HERO_CLASSES } from '../game/heroes';
+import { WEAPON_TYPES } from '../game/items';
 import type { InvState, StockEntry } from '../game/inventory';
 import { TelegraphRings } from '../game/telegraph';
 import { BeastVisual } from '../game/beastVisual';
@@ -443,6 +444,7 @@ export class FamiliarGame {
     // The hero's look (which hero), and the beast master's wolf.
     const hero = HERO_CLASSES[s.hero.c ?? 0] ?? 'elf';
     if (hero !== this.elf.hero) this.elf.setHeroClass(hero);
+    this.elf.setWeapon(WEAPON_TYPES[s.hero.wt ?? -1] ?? null);
     if (s.pet) {
       if (!this.pet) {
         this.pet = new Pet(s.pet[0], s.pet[1]);

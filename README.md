@@ -47,18 +47,37 @@ Pick your hero on the title screen (remembered). Each fights differently; skills
 (stamina), spells from books in 4–9 (mana). Each hero has its own model, built in code after its art
 (`scripts/models/build-heroes.mjs`), on the elf's skeleton so the same rig animates them all.
 
-| Hero | Attack | Skills | |
+| Hero | Preferred weapon | Skills | |
 | --- | --- | --- | --- |
-| 🏹 Elf Archer | arrows | Dash, Wind Walk, Double Shot | 100 health |
-| 🛡️ Knight | sword swing hitting everything in an arc in front | Dash, Shield Wall (−60% damage, 4 s), Shield Bash (stun in front) | 150 health, 25% armour |
-| 🔮 Mage | magic bolts that pierce | Blink (8 m), Fireball (32 round where it lands), Frost Ring (freeze within 5 m) | 85 health, +4 mana/s |
-| 🪓 Barbarian | heavy great-axe chops | Dash, Whirlwind (26 to all around), Rage (+50% speed, +30% damage, 6 s) | 125 health, 10% armour |
-| 🐺 Beast Master | long spear-staff sweeps (melee, the longest reach), and a wolf that fights beside you | Dash, Sic ’Em (wolf leaps at a foe, 30), Mend (heal 25 and the wolf) | 105 health |
+| 🏹 Elf Archer | 🏹 bow | Dash, Wind Walk, Double Shot | 100 health |
+| 🛡️ Knight | 🗡️ one-handed | Dash, Shield Wall (−60% damage, 4 s), Shield Bash (stun in front) | 150 health, 25% armour |
+| 🔮 Mage | 🔮 staff | Blink (8 m), Fireball (32 round where it lands), Frost Ring (freeze within 5 m) | 85 health, +4 mana/s |
+| 🪓 Barbarian | 🪓 two-handed | Dash, Whirlwind (26 to all around), Rage (+50% speed, +30% damage, 6 s) | 125 health, 10% armour |
+| 🐺 Beast Master | 🪓 two-handed, and a wolf that fights beside you | Dash, Sic ’Em (wolf leaps at a foe, 30), Mend (heal 25 and the wolf) | 105 health |
+
+### Weapons and attack types
+
+**The weapon in hand decides how a hero attacks**, whoever the hero is. Each run starts with a common weapon of
+the hero's preferred type, which also deals **+15% damage** in that hero's hands. Any hero can wear any weapon
+found later (in the **Weapon** slot); with none, it's fists. Fire / Frost / Chain enchant the next hits of any weapon.
+
+| Type | Attack | Damage | Every |
+| --- | --- | --- | --- |
+| 🗡️ One-handed (swords, axes, maces) | melee cut hitting everything in a 3 m arc in front | 18 | 0.45 s |
+| 🪓 Two-handed (greataxes, greatswords, hammers) | heavy melee chop, wider 3.4 m arc | 26 | 0.62 s |
+| 🏹 Bow | arrows | 10 | 0.36 s |
+| 🔮 Staff | magic bolts that pierce | 12 | 0.42 s |
+| ✊ None | punches, 2.2 m | 6 | 0.45 s |
+
+Weapons aren't part of the hero models any more: they're separate items held in the right hand
+(`src/player/elf.ts`, `buildWeapons`). For now the sword, greataxe and staff are simple placeholder models and
+icons, until their art arrives.
 
 ### Delivered hero models
 
-A hero can also come as an animated model (rigid parts on named bones, clips Idle / Walk / Run /
-Attack, optionally Skill / Hit / Death / Victory): see [`docs/hero-model-spec.md`](docs/hero-model-spec.md).
+A hero can also come as an animated model (rigid parts on named bones, no weapon, clips Idle / Walk / Run
+and an attack clip per weapon type — Attack1H / Attack2H / AttackBow / AttackStaff — optionally Skill / Hit /
+Death / Victory): see [`docs/hero-model-spec.md`](docs/hero-model-spec.md).
 `node scripts/models/prepare-hero.mjs model.glb <hero>` checks it and slims it down into
 `public/models/heroes/<hero>.glb`, which then replaces that hero's built model. The barbarian uses one.
 
@@ -103,7 +122,7 @@ bag, onto the merchant to sell, onto the bin to drop. **Q** / **E** drink a heal
 
 | Slot | Can roll |
 | --- | --- |
-| 🏹 Bow · 🗡️ Off-hand · 🪖 Helmet · 🦺 Armor · 🧣 Cape · 🪢 Belt · 🧤 Gloves · 👢 Boots · 📿 Amulet · 💍 two Rings (the elf) | arrow damage, attack speed, critical shots, max health, armor, move speed, mana and stamina regen |
+| ⚔️ Weapon · 🗡️ Off-hand · 🪖 Helmet · 🦺 Armor · 🧣 Cape · 🪢 Belt · 🧤 Gloves · 👢 Boots · 📿 Amulet · 💍 two Rings (the elf) | damage, attack speed, critical hits, max health, armor, move speed, mana and stamina regen |
 | 🎀 Collar · 🍀 Charm (the familiar) | familiar damage, shorter familiar cooldowns, familiar speed |
 
 Bows, armor, helmets, capes, belts, gloves, boots, rings and amulets have painted icons (`public/art/items/`, cut from the art sheets by

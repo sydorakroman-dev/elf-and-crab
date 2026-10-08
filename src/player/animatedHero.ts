@@ -4,6 +4,10 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { toonify } from './toon';
 import { damp } from './gait';
 import type { ElfMotion } from './elf';
+import type { WeaponType } from '../game/items';
+
+/** The attack clip for each weapon type ('Attack' when the model doesn't have that one). */
+const ATTACK_CLIPS: Record<WeaponType | 'none', string> = { onehand: 'Attack1H', twohand: 'Attack2H', bow: 'AttackBow', staff: 'AttackStaff', none: 'Attack1H' };
 
 /** How tall a hero stands (m), whatever size the delivered model is. */
 const HEIGHT = 2.05;
@@ -33,6 +37,11 @@ export class AnimatedHero {
   private poseT = 0;
   private stepPhase = 0;
   private ghost = false;
+  /** The right wrist (weapons are held there), and its rest-pose turn and size. */
+  private readonly wrist: THREE.Object3D | null;
+  private readonly wristRest = new THREE.Quaternion();
+  private wristScale = 1;
+  private weapon: THREE.Object3D | null = null;
 
   static async load(url: string): Promise<AnimatedHero | null> {
     try {
@@ -52,8 +61,17 @@ export class AnimatedHero {
     model.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) o.castShadow = true;
     });
+    // Weapons are held separately: drop any the model came with.
+    model.getObjectByName('Axe')?.removeFromParent();
     toonify(model, /^$/);
     this.group.add(model);
+    // Where a weapon goes (measured in the rest pose, before any clip plays).
+    model.updateMatrixWorld(true);
+    this.wrist = model.getObjectByName('wrR') ?? null;
+    if (this.wrist) {
+      this.wrist.getWorldQuaternion(this.wristRest);
+      this.wristScale = this.wrist.getWorldScale(new THREE.Vector3()).x;
+    }
     this.mixer = new THREE.AnimationMixer(model);
     for (const clip of clips) this.actions.set(clip.name, this.mixer.clipAction(clip));
     for (const name of ['Idle', 'Walk', 'Run'] as const) {
@@ -76,9 +94,27 @@ export class AnimatedHero {
     return true;
   }
 
-  /** The basic attack (also what the game calls a "shot"). */
-  attack(): void {
-    this.one('Attack', ATTACK_TIME, 0.04);
+  /**
+   * Holds `weapon` in the right hand (null: none). The weapon is built pointing up (+Y) with its
+   * grip at the origin, in units where `unit` is a metre's share — it's turned so it points up in
+   * the rest pose and sized to the game's scale.
+   */
+  setWeapon(weapon: THREE.Object3D | null, unit: number): void {
+    this.weapon?.removeFromParent();
+    this.weapon = weapon;
+    if (!weapon || !this.wrist) return;
+    weapon.position.set(0, 0, 0);
+    weapon.quaternion.copy(this.wristRest).invert();
+    weapon.scale.setScalar(unit / this.wristScale);
+    this.wrist.add(weapon);
+  }
+
+  /** The basic attack (also what the game calls a "shot"): the clip for the weapon in hand. */
+  attack(weapon: WeaponType | 'none' = 'onehand'): void {
+    if (this.one(ATTACK_CLIPS[weapon], ATTACK_TIME, 0.04)) return;
+    // No clip for this weapon: any attack the model has.
+    const any = [...this.actions.keys()].find((n) => n.startsWith('Attack'));
+    if (any) this.one(any, ATTACK_TIME, 0.04);
   }
 
   /** A skill's flourish (a roar, a jump…), if the model has that clip. */
@@ -153,8 +189,7 @@ export class AnimatedHero {
     const target = { Idle: 1 - move, Walk: move * (1 - run), Run: move * run };
     const back = speed > 0.5 && Math.cos(m.moveYaw - m.facing) < -0.3 ? -1 : 1;
     // While attacking, the attack has the body (the legs keep a little of their stride).
-    const attack = this.actions.get('Attack');
-    const busy = attack?.isRunning() ? 0.2 : 1;
+    const busy = [...this.actions].some(([n, a]) => n.startsWith('Attack') && a.isRunning()) ? 0.2 : 1;
     for (const name of ['Idle', 'Walk', 'Run'] as const) {
       this.weights[name] = damp(this.weights[name], target[name], 10, dt);
       const a = this.actions.get(name);

@@ -1,9 +1,10 @@
 /**
- * The heroes you can play: how each fights (its basic attack), its three skills (action slots
- * 1–3), how tough it is, and its placeholder look (the elf model recoloured, with its own weapon)
- * until proper models arrive. Pure data, unit tested; Game and the rig apply it.
+ * The heroes you can play: how tough each is, its three skills (action slots 1–3) and the weapon
+ * type it's best with — and the weapon types themselves: the weapon in hand decides how a hero
+ * attacks. Pure data, unit tested; Game and the rig apply it.
  */
 import type { AbilityId } from './abilities';
+import type { WeaponType } from './items';
 
 export type HeroClass = 'elf' | 'knight' | 'mage' | 'barbarian' | 'beastmaster';
 export const HERO_CLASSES: HeroClass[] = ['elf', 'knight', 'mage', 'barbarian', 'beastmaster'];
@@ -11,8 +12,32 @@ export const HERO_CLASSES: HeroClass[] = ['elf', 'knight', 'mage', 'barbarian', 
 /** arrow / bolt / spear: projectiles · melee: a swing that hits everything in an arc in front. */
 export type AttackKind = 'arrow' | 'bolt' | 'spear' | 'melee';
 
-/** What the hero holds (the placeholder weapon models). */
-export type WeaponLook = 'bow' | 'swordShield' | 'staff' | 'twinBlades' | 'greatAxe' | 'spear';
+
+export interface Attack {
+  kind: AttackKind;
+  damage: number;
+  /** Seconds between attacks. */
+  interval: number;
+  /** Melee: reach (m) and the arc's half-angle (radians). */
+  range?: number;
+  arc?: number;
+  /** Projectiles fly through foes. */
+  pierce?: boolean;
+}
+
+/** How each weapon type attacks. */
+export const WEAPON_ATTACKS: Record<WeaponType, Attack> = {
+  onehand: { kind: 'melee', damage: 18, interval: 0.45, range: 3.0, arc: 1.0 },
+  twohand: { kind: 'melee', damage: 26, interval: 0.62, range: 3.4, arc: 1.2 },
+  bow: { kind: 'arrow', damage: 10, interval: 0.36 },
+  staff: { kind: 'bolt', damage: 12, interval: 0.42, pierce: true },
+};
+
+/** No weapon in hand: fists. */
+export const FISTS: Attack = { kind: 'melee', damage: 6, interval: 0.45, range: 2.2, arc: 0.9 };
+
+/** Damage bonus with the hero's preferred weapon type. */
+export const PREFERRED_BONUS = 0.15;
 
 export interface HeroDef {
   name: string;
@@ -23,19 +48,9 @@ export interface HeroDef {
   armor: number;
   /** Extra mana per second. */
   mana: number;
-  attack: {
-    kind: AttackKind;
-    damage: number;
-    /** Seconds between attacks. */
-    interval: number;
-    /** Melee: reach (m) and the arc's half-angle (radians). */
-    range?: number;
-    arc?: number;
-    /** Projectiles fly through foes. */
-    pierce?: boolean;
-  };
   skills: [AbilityId, AbilityId, AbilityId];
-  weapon: WeaponLook;
+  /** The weapon type it starts with and fights best with (+15% damage). */
+  preferred: WeaponType;
   /** Placeholder colours: main (vest, cloak), second (shirt, sleeves). */
   colors: [number, number];
   /** A wolf fights beside the hero. */
@@ -46,61 +61,56 @@ export const HEROES: Record<HeroClass, HeroDef> = {
   elf: {
     name: 'Elf Archer',
     icon: '🏹',
-    blurb: 'Quick and deadly at range.',
+    blurb: 'Quick and deadly with a bow.',
     hp: 100,
     armor: 0,
     mana: 0,
-    attack: { kind: 'arrow', damage: 10, interval: 0.36 },
     skills: ['dash', 'windwalk', 'doubleshot'],
-    weapon: 'bow',
+    preferred: 'bow',
     colors: [0, 0],
   },
   knight: {
     name: 'Knight',
     icon: '🛡️',
-    blurb: 'Sword and shield: the toughest, up close.',
+    blurb: 'The toughest; best with one-handed blades.',
     hp: 150,
     armor: 0.25,
     mana: 0,
-    attack: { kind: 'melee', damage: 24, interval: 0.6, range: 3.2, arc: 1.0 },
     skills: ['dash', 'shieldwall', 'bash'],
-    weapon: 'swordShield',
+    preferred: 'onehand',
     colors: [0x8a95a8, 0x2f4f8f],
   },
   mage: {
     name: 'Mage',
     icon: '🔮',
-    blurb: 'Fragile, but bolts fly through foes; more mana.',
+    blurb: 'Fragile, more mana; best with a staff.',
     hp: 85,
     armor: 0,
     mana: 4,
-    attack: { kind: 'bolt', damage: 12, interval: 0.42, pierce: true },
     skills: ['blink', 'fireball', 'frostring'],
-    weapon: 'staff',
+    preferred: 'staff',
     colors: [0x3b4fb8, 0xd8c8f0],
   },
   barbarian: {
     name: 'Barbarian',
     icon: '🪓',
-    blurb: 'A great axe: heavy, wide chops.',
+    blurb: 'Tough; best with two-handed weapons.',
     hp: 125,
     armor: 0.1,
     mana: 0,
-    attack: { kind: 'melee', damage: 22, interval: 0.5, range: 3.4, arc: 1.2 },
     skills: ['dash', 'whirlwind', 'rage'],
-    weapon: 'greatAxe',
+    preferred: 'twohand',
     colors: [0x9a2a24, 0x6a4a30],
   },
   beastmaster: {
     name: 'Beast Master',
     icon: '🐺',
-    blurb: 'Long spear-staff sweeps; a wolf fights beside you.',
+    blurb: 'A wolf fights beside you; best with two-handed weapons.',
     hp: 105,
     armor: 0.05,
     mana: 0,
-    attack: { kind: 'melee', damage: 18, interval: 0.45, range: 3.6, arc: 0.95 },
     skills: ['dash', 'sic', 'mend'],
-    weapon: 'spear',
+    preferred: 'twohand',
     colors: [0x6a5030, 0x4a7a3a],
     pet: true,
   },

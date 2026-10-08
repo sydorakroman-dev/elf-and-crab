@@ -771,7 +771,7 @@ kbd {
   display: grid;
   grid-template-columns: 82px 104px 82px;
   grid-template-rows: 62px 62px 62px 62px 62px;
-  grid-template-areas: 'cape helmet amulet' 'bow armor offhand' 'bow armor offhand' 'gloves belt ring' '. boots ring2';
+  grid-template-areas: 'cape helmet amulet' 'weapon armor offhand' 'weapon armor offhand' 'gloves belt ring' '. boots ring2';
   gap: 10px 16px;
   justify-content: center;
   align-items: center;

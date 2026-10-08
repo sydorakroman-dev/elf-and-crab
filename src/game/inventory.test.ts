@@ -22,7 +22,7 @@ describe('items', () => {
     }
     const avg = (rarity: 'common' | 'epic', level: number) => {
       let s = 0;
-      for (let i = 0; i < 200; i++) s += makeItem(rng, rarity, level, 'bow').stats.damage ?? 0;
+      for (let i = 0; i < 200; i++) s += makeItem(rng, rarity, level, 'weapon').stats.damage ?? 0;
       return s / 200;
     };
     expect(avg('epic', 1)).toBeGreaterThan(avg('common', 1) * 1.5);
@@ -51,15 +51,15 @@ describe('inventory', () => {
   it('equips from the bag, swapping what was worn back into that bag slot', () => {
     const inv = new Inventory();
     const rng = mulberry32(3);
-    const a = makeItem(rng, 'common', 1, 'bow');
-    const b = makeItem(rng, 'rare', 1, 'bow');
+    const a = makeItem(rng, 'common', 1, 'weapon');
+    const b = makeItem(rng, 'rare', 1, 'weapon');
     inv.add(a);
     inv.add(b);
     expect(inv.apply({ op: 'equip', i: 0 }, null)).not.toBeNull();
-    expect(inv.gear.bow).toBe(a);
+    expect(inv.gear.weapon).toBe(a);
     expect(inv.bag[0]).toBeNull();
     inv.apply({ op: 'equip', i: 1 }, null);
-    expect(inv.gear.bow).toBe(b);
+    expect(inv.gear.weapon).toBe(b);
     expect(inv.bag[1]).toBe(a);
     expect(inv.heroStats().damage).toBe(b.stats.damage ?? 0);
   });
@@ -95,8 +95,8 @@ describe('inventory', () => {
   it('moves things round the bag, and takes gear off into a chosen slot', () => {
     const inv = new Inventory();
     const rng = mulberry32(11);
-    const bow = makeItem(rng, 'rare', 1, 'bow');
-    const bow2 = makeItem(rng, 'common', 1, 'bow');
+    const bow = makeItem(rng, 'rare', 1, 'weapon');
+    const bow2 = makeItem(rng, 'common', 1, 'weapon');
     inv.add(bow);
     inv.add(makePotion('health'));
     expect(inv.apply({ op: 'move', i: 0, j: 9 }, null)).not.toBeNull();
@@ -104,13 +104,13 @@ describe('inventory', () => {
     expect(inv.bag[0]).toBeNull();
     expect(inv.apply({ op: 'move', i: 0, j: 3 }, null)).toBeNull(); // nothing there
     inv.apply({ op: 'equip', i: 9 }, null);
-    inv.apply({ op: 'unequip', slot: 'bow', to: 5 }, null);
+    inv.apply({ op: 'unequip', slot: 'weapon', to: 5 }, null);
     expect(inv.bag[5]).toBe(bow);
     inv.add(bow2);
     inv.apply({ op: 'equip', i: 5 }, null); // the rare bow on again
     const at = inv.bag.indexOf(bow2);
-    inv.apply({ op: 'unequip', slot: 'bow', to: at }, null); // dropped onto the other bow: swap
-    expect(inv.gear.bow).toBe(bow2);
+    inv.apply({ op: 'unequip', slot: 'weapon', to: at }, null); // dropped onto the other bow: swap
+    expect(inv.gear.weapon).toBe(bow2);
     expect(inv.bag[at]).toBe(bow);
   });
 
@@ -137,13 +137,13 @@ describe('inventory', () => {
     inv.add(makePotion('mana'));
     inv.add(makeItem(rng, 'common', 1, 'boots'));
     inv.add(makePotion('health'));
-    inv.add(makeItem(rng, 'common', 1, 'bow'));
-    inv.add(makeItem(rng, 'epic', 1, 'bow'));
+    inv.add(makeItem(rng, 'common', 1, 'weapon'));
+    inv.add(makeItem(rng, 'epic', 1, 'weapon'));
     inv.apply({ op: 'drop', i: 1 }, null);
     inv.add(makeItem(rng, 'rare', 1, 'boots'));
     inv.apply({ op: 'sort' }, null);
     const order = inv.bag.map((e) => (e ? (e.kind === 'item' ? `${e.rarity} ${e.slot}` : e.potion) : '-'));
-    expect(order.slice(0, 5)).toEqual(['epic bow', 'common bow', 'rare boots', 'health', 'mana']);
+    expect(order.slice(0, 5)).toEqual(['epic weapon', 'common weapon', 'rare boots', 'health', 'mana']);
     expect(order.slice(5).every((x) => x === '-')).toBe(true);
   });
 
@@ -152,8 +152,8 @@ describe('inventory', () => {
     let epic = 0;
     let common = 0;
     for (let i = 0; i < 100; i++) {
-      epic += itemScore(makeItem(rng, 'epic', 3, 'bow'));
-      common += itemScore(makeItem(rng, 'common', 3, 'bow'));
+      epic += itemScore(makeItem(rng, 'epic', 3, 'weapon'));
+      common += itemScore(makeItem(rng, 'common', 3, 'weapon'));
     }
     expect(epic).toBeGreaterThan(common * 3);
     expect(itemScore(null)).toBe(0);

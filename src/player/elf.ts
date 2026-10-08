@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { attachAtPivot, loadParts } from './rig';
 import { toonify, toonifyMeshes } from './toon';
 import { Spring, angleDelta, cadence, damp, legPose, splitBody } from './gait';
-import { HEROES, HERO_CLASSES, type HeroClass, type WeaponLook } from '../game/heroes';
+import { HEROES, HERO_CLASSES, type HeroClass } from '../game/heroes';
+import type { WeaponType } from '../game/items';
 import { AnimatedHero } from './animatedHero';
 
 const MODEL_SCALE = 0.42; // model is ~4.8 units tall → ~2 m
@@ -18,14 +19,19 @@ const DRAW_SHOULDER = new THREE.Vector3(-0.5, 3.5, 0);
 const DRAW_ELBOW = new THREE.Vector3(-0.8, 3.0, 0.02);
 const BOW_SHOULDER = new THREE.Vector3(0.5, 3.5, 0);
 const BOW_ELBOW = new THREE.Vector3(0.85, 3.08, 0.04);
-/** The hands, in their elbow's frame (where the placeholder weapons are held). */
-const BOW_HAND = new THREE.Vector3(1.33, 2.96, 0.22).sub(BOW_ELBOW);
-const DRAW_HAND = new THREE.Vector3(-0.84, 2.41, 0.08).sub(DRAW_ELBOW);
 /** Parts recoloured for the other heroes (main colour / second colour), and the archer's kit hidden for them. */
 const MAIN_PARTS = /^(vest|hips_vest|cloak|hood)/;
 const SECOND_PARTS = /^(shirt|hips_shirt|armL_upper$|armR_upper$|armL_lower_sleeve)/;
-const ARCHER_KIT = /bow|^quiver|^arrow_/;
-const SHIELD_TURN = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.35, 0));
+/** The elf's quiver and arrows: worn only while a bow is in hand. */
+const ARCHER_KIT = /^quiver|^arrow_/;
+/** The elf's own bow parts: taken off the model and used as the bow weapon for every hero. */
+const BOW_PARTS = /_bow/;
+/** The weapon hand in model space (weapons are held here: grip at the origin, pointing up +Y). */
+const HAND = new THREE.Vector3(1.33, 2.96, 0.22);
+/** Weapon parts the built hero models used to carry (they're weapons now, held separately). */
+/** How far (radians) each weapon is tipped forward in the built rig's fist. */
+const GRIP_TILT: Partial<Record<WeaponType | 'none', number>> = { onehand: 0.6, twohand: 1.2, staff: 0.9 };
+const MODEL_WEAPON = /^arm[LR]_lower_(grip|pommel|guard|blade|fuller|shield|staff|prong|crystal|haft|wrap|axe|tip)/;
 
 /** Parts too small or thin for an outline (it would swallow them). */
 const NO_OUTLINE = /^head_(eye|iris|pupil|shine|lid|brow|mouth|nose|circlet)|bowstring|_nock|_wrap|fletch|^arrow_|gem|_ring|buckle|shirt_lapel|vest_edge|_strand|strap$/;
@@ -144,6 +150,16 @@ export class Elf {
 
   /** Sorts a model's parts into the skeleton's slots (and gives them the cartoon look). */
   private partition(parts: Map<string, THREE.Mesh>): THREE.Mesh[][] {
+    // Weapons aren't part of a hero: the elf's bow becomes the bow weapon, others are dropped.
+    for (const [name, mesh] of [...parts]) {
+      if (BOW_PARTS.test(name)) {
+        parts.delete(name);
+        if (!this.bowParts.length || !this.bowParts.some((b) => b.name === name)) {
+          mesh.position.copy(HAND).negate();
+          this.bowParts.push(mesh);
+        }
+      } else if (MODEL_WEAPON.test(name)) parts.delete(name);
+    }
     const out = this.slots.map(([, , prefix]) => takePrefix(parts, prefix));
     out.push([...parts.values()]);
     toonifyMeshes(out.flat(), NO_OUTLINE);
@@ -221,7 +237,7 @@ export class Elf {
 
   /** Release: the string snaps forward and the bow kicks; then it's redrawn (others: a swing, a cast, a throw). */
   shoot(): void {
-    this.active?.attack();
+    this.active?.attack(this.weaponLook);
     this.recoil = 1;
     this.draw = 0;
     this.swing = 1;
@@ -234,14 +250,16 @@ export class Elf {
   }
 
   private heroClass: HeroClass = 'elf';
-  private weaponLook: WeaponLook = 'bow';
+  /** What's in the weapon hand ('none': fists). */
+  private weaponLook: WeaponType | 'none' = 'bow';
+  /** The bow (the elf model's own bow parts, held by any hero). */
+  private readonly bowParts: THREE.Mesh[] = [];
   private readonly weapons = new THREE.Group();
   private readonly offWeapons = new THREE.Group();
   private swing = 0;
   private swingSide = 1;
   private guard = false;
   private guardAmount = 0;
-  private shield: THREE.Group | null = null;
 
   get hero(): HeroClass {
     return this.heroClass;
@@ -252,115 +270,119 @@ export class Elf {
    * and its weapon in hand instead of the bow and quiver.
    */
   setHeroClass(h: HeroClass): void {
-    if (h === this.heroClass && this.weapons.parent) return;
+    if (h === this.heroClass && this.modelKey) {
+      this.applyWeapon();
+      return;
+    }
     this.heroClass = h;
     const def = HEROES[h];
-    this.weaponLook = def.weapon;
     // An animated model of its own: show it instead of the built rig.
     this.active?.setPose('none');
     for (const [k, a] of this.animated) a.group.visible = k === h;
     this.active = this.animated.get(h) ?? null;
     this.body.visible = !this.active;
-    if (this.active) {
-      this.buildWeapons('bow', 0);
-      return;
-    }
-    // Its own model where there is one; otherwise the elf's, recoloured, with a placeholder weapon.
+    // Its own built model where there is one; otherwise the elf's, recoloured.
     const own = this.models.has(h);
     this.useModel(own ? h : 'elf');
-    if (own) {
-      this.buildWeapons('bow', 0); // (clears any placeholder weapon: the model holds its own)
-      return;
-    }
-    this.group.traverse((o) => {
-      if (!(o instanceof THREE.Mesh) || o.userData.outline || o.parent === this.weapons || o.parent === this.offWeapons) return;
-      const name = o.name;
-      const mat = o.material as THREE.MeshToonMaterial;
-      if (!o.userData.ownMat) {
-        o.material = mat.clone(); // its own, so recolouring one part leaves the others alone
-        o.userData.ownMat = true;
-        o.userData.baseColor = (o.material as THREE.MeshToonMaterial).color.getHex();
-      }
-      const m = o.material as THREE.MeshToonMaterial;
-      const base = o.userData.baseColor as number;
-      if (h !== 'elf' && MAIN_PARTS.test(name)) m.color.setHex(def.colors[0]);
-      else if (h !== 'elf' && SECOND_PARTS.test(name)) m.color.setHex(def.colors[1]);
-      else m.color.setHex(base);
-      if (ARCHER_KIT.test(name)) o.visible = h === 'elf';
-    });
-    this.buildWeapons(def.weapon, def.colors[0]);
+    if (!own && !this.active)
+      this.group.traverse((o) => {
+        if (!(o instanceof THREE.Mesh) || o.userData.outline || o.name === 'weapon') return;
+        const mat = o.material as THREE.MeshToonMaterial;
+        if (!o.userData.ownMat) {
+          o.material = mat.clone(); // its own, so recolouring one part leaves the others alone
+          o.userData.ownMat = true;
+          o.userData.baseColor = (o.material as THREE.MeshToonMaterial).color.getHex();
+        }
+        const m = o.material as THREE.MeshToonMaterial;
+        const base = o.userData.baseColor as number;
+        if (h !== 'elf' && MAIN_PARTS.test(o.name)) m.color.setHex(def.colors[0]);
+        else if (h !== 'elf' && SECOND_PARTS.test(o.name)) m.color.setHex(def.colors[1]);
+        else m.color.setHex(base);
+      });
+    this.applyWeapon();
   }
 
-  private buildWeapons(look: WeaponLook, main: number): void {
+  /** Puts a weapon of this type in the hero's hand (null: empty-handed). */
+  setWeapon(type: WeaponType | null): void {
+    const look = type ?? 'none';
+    if (look === this.weaponLook && (this.weapons.parent || look === 'none')) return;
+    this.weaponLook = look;
+    this.applyWeapon();
+  }
+
+  /** Builds the weapon in hand and attaches it (to the built rig's hand, or the animated model's wrist). */
+  private applyWeapon(): void {
     for (const g of [this.weapons, this.offWeapons]) {
       g.parent?.remove(g);
       g.clear();
     }
-    this.shield = null;
-    if (look === 'bow') return;
+    // The quiver and arrows only with a bow (and only on the elf's model).
+    this.group.traverse((o) => {
+      if (o instanceof THREE.Mesh && ARCHER_KIT.test(o.name)) o.visible = this.weaponLook === 'bow';
+    });
+    this.buildWeapons(this.weaponLook);
+    if (this.active) {
+      this.active.setWeapon(this.weapons.children.length ? this.weapons : null, MODEL_SCALE);
+      return;
+    }
+    if (!this.weapons.children.length) return;
+    this.weapons.position.copy(HAND).sub(BOW_ELBOW);
+    // Long hafts are tipped forward in the fist, so they stand up when carried (not back over the shoulder).
+    this.weapons.rotation.set(GRIP_TILT[this.weaponLook] ?? 0, 0, 0);
+    this.bowElbow.add(this.weapons);
+  }
+
+  /** Placeholder weapon models by type (grip at the origin, pointing up), until weapon art arrives. */
+  private buildWeapons(look: WeaponType | 'none'): void {
+    if (look === 'none') return;
+    if (look === 'bow') {
+      for (const m of this.bowParts) this.weapons.add(m);
+      return;
+    }
     const toon = (color: number, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.5, ...extra });
     const steel = toon(0xd8dde4, { metalness: 0.7, roughness: 0.3 });
     const wood = toon(0x7a4a26);
     const gold = toon(0xe0b040, { metalness: 0.7, roughness: 0.35 });
-    const add = (g: THREE.Group, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) => {
+    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) => {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
       m.rotation.set(rx, ry, rz);
       m.name = 'weapon';
-      g.add(m);
+      this.weapons.add(m);
       return m;
     };
-    /** A blade standing up from the hand: grip, guard, blade. */
-    const blade = (g: THREE.Group, length: number, width: number) => {
-      add(g, new THREE.CylinderGeometry(0.06, 0.06, 0.55, 6), wood, 0, 0, 0);
-      add(g, new THREE.BoxGeometry(width * 3.5, 0.1, 0.14), gold, 0, 0.3, 0);
-      add(g, new THREE.BoxGeometry(width, length, 0.05), steel, 0, 0.35 + length / 2, 0);
-      add(g, new THREE.ConeGeometry(width * 0.7, 0.3, 4), steel, 0, 0.5 + length, 0);
-      add(g, new THREE.SphereGeometry(0.09, 8, 6), gold, 0, -0.32, 0);
-    };
     switch (look) {
-      case 'swordShield': {
-        blade(this.weapons, 2.4, 0.16);
-        // A round shield on the other forearm, facing forward.
-        // (Turned every frame to face the way the hero faces, whatever the arm is doing.)
-        const shield = new THREE.Group();
-        add(shield, new THREE.CylinderGeometry(0.85, 0.85, 0.12, 20), toon(main), 0, 0, 0, Math.PI / 2);
-        add(shield, new THREE.TorusGeometry(0.85, 0.06, 6, 20), gold, 0, 0, 0);
-        add(shield, new THREE.SphereGeometry(0.2, 10, 8), gold, 0, 0, 0.08);
-        shield.position.set(-0.1, 0.1, 0.3);
-        this.offWeapons.add(shield);
-        this.shield = shield;
+      case 'onehand':
+        // An arming sword: grip, guard, blade, pommel.
+        add(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 6), wood, 0, 0, 0);
+        add(new THREE.BoxGeometry(0.62, 0.1, 0.14), gold, 0, 0.28, 0);
+        add(new THREE.BoxGeometry(0.17, 2.1, 0.05), steel, 0, 1.38, 0);
+        add(new THREE.ConeGeometry(0.12, 0.32, 4), steel, 0, 2.58, 0, 0, Math.PI / 4);
+        add(new THREE.SphereGeometry(0.09, 8, 6), gold, 0, -0.3, 0);
+        break;
+      case 'twohand': {
+        // A greataxe: a long haft, a broad crescent head.
+        add(new THREE.CylinderGeometry(0.07, 0.07, 4.6, 7), wood, 0, 0.9, 0);
+        const blade = new THREE.Shape();
+        blade.moveTo(0, 0.25);
+        blade.lineTo(0.3, 0.3);
+        blade.quadraticCurveTo(0.9, 0.7, 0.95, 0);
+        blade.quadraticCurveTo(0.9, -0.7, 0.3, -0.3);
+        blade.lineTo(0, -0.25);
+        blade.closePath();
+        add(new THREE.ExtrudeGeometry(blade, { depth: 0.08, bevelEnabled: false }), steel, 0.02, 2.85, -0.04, 0, -Math.PI / 2, 0);
+        add(new THREE.BoxGeometry(0.2, 0.55, 0.2), toon(0x8a929c, { metalness: 0.6 }), 0, 2.85, 0);
         break;
       }
       case 'staff': {
-        add(this.weapons, new THREE.CylinderGeometry(0.07, 0.09, 4.4, 7), wood, 0, 0.8, 0);
-        add(this.weapons, new THREE.TorusGeometry(0.28, 0.06, 6, 12), gold, 0, 3.05, 0);
-        const orb = add(this.weapons, new THREE.SphereGeometry(0.26, 14, 10), new THREE.MeshStandardMaterial({ color: 0x9fd0ff, emissive: 0x4f8fff, emissiveIntensity: 1.4 }), 0, 3.05, 0);
+        add(new THREE.CylinderGeometry(0.07, 0.09, 4.4, 7), wood, 0, 0.8, 0);
+        add(new THREE.TorusGeometry(0.28, 0.06, 6, 12), gold, 0, 3.05, 0);
+        const orb = add(new THREE.SphereGeometry(0.26, 14, 10), new THREE.MeshStandardMaterial({ color: 0xc8a8ff, emissive: 0x8f5fff, emissiveIntensity: 1.4 }), 0, 3.05, 0);
         orb.name = 'weapon_orb';
         break;
       }
-      case 'twinBlades':
-        blade(this.weapons, 1.7, 0.2);
-        blade(this.offWeapons, 1.7, 0.2);
-        break;
-      case 'greatAxe':
-        add(this.weapons, new THREE.CylinderGeometry(0.07, 0.07, 4.6, 7), wood, 0, 0.9, 0);
-        add(this.weapons, new THREE.BoxGeometry(0.08, 0.9, 0.9), steel, 0, 2.8, 0.35);
-        break;
-      case 'spear':
-        add(this.weapons, new THREE.CylinderGeometry(0.06, 0.06, 4.6, 6), wood, 0, 0.9, 0);
-        add(this.weapons, new THREE.ConeGeometry(0.16, 0.7, 5), steel, 0, 3.55, 0);
-        add(this.weapons, new THREE.TorusGeometry(0.1, 0.035, 5, 8).rotateX(Math.PI / 2), gold, 0, 3.15, 0);
-        break;
-    }
-    this.weapons.position.copy(BOW_HAND);
-    this.bowElbow.add(this.weapons);
-    if (this.offWeapons.children.length) {
-      this.offWeapons.position.copy(DRAW_HAND);
-      this.drawElbow.add(this.offWeapons);
     }
     toonify(this.weapons, /^$/);
-    toonify(this.offWeapons, /^$/);
   }
 
   /** Recoil from a hit: a jolt back, the head snapping, a stagger. */
@@ -437,7 +459,7 @@ export class Elf {
     let bz = -0.25;
     let ex = -0.5;
     switch (this.weaponLook) {
-      case 'greatAxe':
+      case 'twohand':
         if (active) {
           // A big two-handed chop: raised high, brought down across.
           bx = -2.7 + 3.1 * p;
@@ -446,9 +468,9 @@ export class Elf {
           ex = -0.2;
         }
         break;
-      case 'swordShield':
-      case 'twinBlades': {
-        if (active && (this.weaponLook === 'swordShield' || this.swingSide > 0)) {
+      case 'onehand':
+      case 'none': {
+        if (active) {
           // A sweeping cut: from high on the outside, across and down.
           bx = -2.2 + 2.6 * p;
           by = 0.8 - 1.9 * p;
@@ -462,39 +484,18 @@ export class Elf {
         bx = -0.5 - 0.9 * sw;
         ex = -0.2 - 0.3 * sw;
         break;
-      case 'spear':
-        if (active) {
-          // A wide sweep of the spear-staff, across the body.
-          bx = -1.6 + 1.2 * p;
-          by = 1.0 - 2.2 * p;
-          bz = -0.5;
-          ex = -0.2;
-        }
-        break;
     }
     this.bowShoulder.rotation.set(bx, by, bz);
     this.bowElbow.rotation.set(ex, 0, 0);
-    // The other arm: the knight's shield, the barbarian's second blade, otherwise a free swing.
-    if (this.weaponLook === 'swordShield' && this.modelKey !== 'elf') {
-      // The knight's own shield is modelled on the hanging arm: keep it near that, raise it to guard.
+    // The other arm: raised to guard behind a one-handed weapon (Shield Wall), helping with a
+    // two-handed one, otherwise swinging free.
+    if (this.weaponLook === 'onehand' || this.weaponLook === 'none') {
       const g = this.guardAmount;
-      this.drawShoulder.rotation.set(-0.1 - 1.1 * g, 0.1 + 0.5 * g, -0.12);
-      this.drawElbow.rotation.x = -0.25 - 0.5 * g;
-    } else if (this.weaponLook === 'swordShield') {
-      const g = this.guardAmount;
-      this.drawShoulder.rotation.set(-0.4 - 0.9 * g, 0.3 + 0.4 * g, -0.2);
-      this.drawElbow.rotation.x = -1.1 - 0.3 * g;
-      if (this.shield) {
-        // Face forward (angled out a little), whatever the arm's doing.
-        this.drawElbow.updateWorldMatrix(true, false);
-        const parent = this.drawElbow.getWorldQuaternion(new THREE.Quaternion()).invert();
-        const body = this.group.getWorldQuaternion(new THREE.Quaternion());
-        this.shield.quaternion.copy(parent.multiply(body).multiply(SHIELD_TURN));
-      }
-    } else if (this.weaponLook === 'twinBlades') {
-      if (active && this.swingSide < 0) this.drawShoulder.rotation.set(-2.2 + 2.6 * p, -0.8 + 1.9 * p, 0.3);
-      else this.drawShoulder.rotation.set(-0.35 + s * 0.12 * move, 0, 0.25);
-      this.drawElbow.rotation.x = -0.5;
+      this.drawShoulder.rotation.set(-0.15 - 1.1 * g + s * 0.15 * move * (1 - g), 0.1 + 0.5 * g, -0.15);
+      this.drawElbow.rotation.x = -0.35 - 0.6 * g;
+    } else if (this.weaponLook === 'twohand' && active) {
+      this.drawShoulder.rotation.set(bx * 0.85, -by * 0.6, 0.35);
+      this.drawElbow.rotation.x = -0.6;
     }
   }
 
