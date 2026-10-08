@@ -101,11 +101,43 @@ with), so that one's attack clip matters most:
 **In-place motion only:** the game moves the character; a clip must not travel. Loops must
 start and end on the same pose.
 
+**Attacks on the move:** when the hero attacks while walking or running, the game plays the attack
+clip on the **upper body only** (every bone except `pelvis`, the hips, knees, ankles and skirt
+pieces) and the legs keep their walk / run. So an attack must read from the waist up: put the
+swing, the draw or the thrust in the spine, chest, arms and head, not in a lunge of the legs.
+
+**The bow draw (`AttackBow`):** the bow is in the **right** hand (`wrR`, like every weapon); the
+**left** hand draws the string. At full draw:
+
+- the **bow arm** is straight out in front of the face, the bow upright;
+- the **drawing hand** anchors at the **side of the jaw**, just in front of the face — never into
+  the head;
+- the **drawing elbow** points straight back along the arrow's line, beside the head at about
+  shoulder height — not up over the head;
+- the line from the bow hand to the drawing hand is **level and straight ahead (+Z)**: that's how
+  the arrows fly.
+
+The torso may turn side-on, but the head keeps facing forward (+Z). (`prepare-hero.mjs` corrects the
+arms toward this pose with IK if a clip misses it, but a clip made right looks best.)
+
 ## 5. Style
 
 Match the hero art and the game's look: chunky, readable shapes, bold flat colours, a strong
 silhouette that reads from a camera about 15 m away. Avoid hair-thin strands and very thin
 parts (under ~2 cm): they get lost or turn into black outline noise.
+
+**The face** (it's seen up close on the title screen and when the camera comes round):
+
+- Paired features are **mirror images**: left and right eyes, brows, ears (and moustache halves)
+  at the same height and the same distance from the centre line (`x = ±d`). Name the pair
+  `head_eye` / `head_eye2`, `head_brow` / `head_brow2` and so on.
+- **Eyes stand out of the face** by about **5 mm** (not flattened into the skull), roughly
+  3 × 4 cm, about 9 cm apart (centre to centre), level with the ears.
+- Keep the **nose small** and close to the face (no ball on the front): about 3 cm, sticking out
+  under 2 cm.
+- Give small face parts names containing `eye`, `brow`, `nose`, `mouth`, `lip`, `pupil`, `lash`,
+  `mustache` or `gem`: they're kept as separate meshes and drawn **without the black outline**
+  (an outline turns them into blobs). Everything else gets one.
 
 ## 6. Check before sending
 
@@ -114,8 +146,11 @@ parts (under ~2 cm): they get lost or turn into black outline noise.
 - [ ] **no weapon or shield** in the model; the right hand is a fist with `wrR` at its centre
 - [ ] `Idle`, `Walk`, `Run` and at least one attack clip (`Attack1H` / `Attack2H` / `AttackBow` /
   `AttackStaff`, ideally all four, the hero's preferred one first) — plus `Skill`, `Hit`, `Death` if possible
-- [ ] clips in place (no root motion), loops seamless
+- [ ] clips in place (no root motion), loops seamless; attacks read from the waist up
+- [ ] `AttackBow`: drawing hand at the side of the jaw, elbow straight back, the arrow line level
+- [ ] the face symmetrical (`head_eye` / `head_eye2` at `x = ±d`), eyes standing out, a small nose
 - [ ] flat colours, no textures, ≤ 60k triangles
 
 Then: `node scripts/models/prepare-hero.mjs model.glb <hero>` — it prints any missing bones or
-clips, lists any weapon it removed, and prints the triangle and draw-call count.
+clips, lists any weapon it removed, evens up mirrored face parts and lifts the eyes, corrects the
+bow draw, and prints the triangle and draw-call count.

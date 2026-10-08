@@ -14,6 +14,7 @@ import { dedup, join, prune, simplify, weld } from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fixBowDraw } from './fix-bow-draw.mjs';
 
 const [src, hero, budgetArg] = process.argv.slice(2);
 if (!src || !hero) {
@@ -54,6 +55,33 @@ for (const node of root.listNodes()) {
   node.dispose();
 }
 
+// ── The face: paired parts mirrored evenly (head_eye / head_eye2), eyes brought out of the skull ──
+/** Face details: kept as their own meshes (not merged into the head), so the game can leave them without an outline. */
+const FACE = /eye|brow|nose|mouth|lip|pupil|lash|mustache|gem/i;
+for (const node of root.listNodes()) {
+  const twin = root.listNodes().find((n) => n.getName() === `${node.getName()}2` && n.getParentNode() === node.getParentNode());
+  if (!twin || !FACE.test(node.getName())) continue;
+  const [x1, y1, z1] = node.getTranslation();
+  const [x2, y2, z2] = twin.getTranslation();
+  if (x1 * x2 >= 0 || Math.abs(y1 - y2) > 1e-3 || Math.abs(z1 - z2) > 1e-3) continue;
+  const x = (Math.abs(x1) + Math.abs(x2)) / 2;
+  if (Math.abs(Math.abs(x1) - x) < 1e-3) continue;
+  node.setTranslation([Math.sign(x1) * x, y1, z1]);
+  twin.setTranslation([Math.sign(x2) * x, y2, z2]);
+  console.log(`- face: ${node.getName()} / ${twin.getName()} mirrored evenly (x ±${x.toFixed(3)})`);
+}
+for (const node of root.listNodes()) {
+  if (!/(^|_)eye\d*$/i.test(node.getName())) continue;
+  // Flattened eyes sunk into the skull barely show: rounder, a little bigger, a little further out.
+  const [sx, sy, sz] = node.getScale();
+  const [x, y, z] = node.getTranslation();
+  node.setScale([sx * 1.15, sy * 1.1, Math.max(sz, 0.9)]);
+  node.setTranslation([x, y, z + 0.004]);
+}
+
+// ── The bow draw: the string hand to the cheek (not into the head) ─────────────────────────────
+if (await fixBowDraw(doc, io)) console.log('- AttackBow: drawing hand re-anchored at the cheek');
+
 // ── Colours into the vertices, one shared material ───────────────────────────────────────────
 const shared = doc.createMaterial('hero').setBaseColorFactor([1, 1, 1, 1]).setRoughnessFactor(0.85).setMetallicFactor(0);
 for (const mesh of root.listMeshes())
@@ -80,7 +108,7 @@ const count = () => {
     }
   return { tris: Math.round(t), prims: p };
 };
-await doc.transform(dedup(), weld(), join({ keepNamed: false }), prune());
+await doc.transform(dedup(), weld(), join({ keepNamed: false, filter: (node) => !FACE.test(node.getName()) }), prune());
 const before = count().tris;
 const ratio = Math.min(1, BUDGET / before);
 if (ratio < 1) await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio, error: ERROR }), prune());

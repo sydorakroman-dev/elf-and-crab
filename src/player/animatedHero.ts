@@ -9,6 +9,15 @@ import type { WeaponType } from '../game/items';
 /** The attack clip for each weapon type ('Attack' when the model doesn't have that one). */
 const ATTACK_CLIPS: Record<WeaponType | 'none', string> = { onehand: 'Attack1H', twohand: 'Attack2H', bow: 'AttackBow', staff: 'AttackStaff', none: 'Attack1H' };
 
+/** Tracks that move the legs (and what hangs from the hips); everything else is the upper body. */
+const LEGS = /^(pelvis|hip|knee|ankle|skirt)/;
+const LOCOMOTION = ['Idle', 'Walk', 'Run'] as const;
+/** Faster than this (m/s), an attack plays on the upper body only and the legs keep their stride. */
+const ATTACK_ON_THE_MOVE = 1.2;
+
+/** Face details (kept separate by prepare-hero.mjs). */
+const FACE = /eye|brow|nose|mouth|lip|pupil|lash|mustache|gem/i;
+
 /** How tall a hero stands (m), whatever size the delivered model is. */
 const HEIGHT = 2.05;
 /** The attack clip is squeezed into about this long (s), to keep up with the game's swings. */
@@ -37,6 +46,8 @@ export class AnimatedHero {
   private poseT = 0;
   private stepPhase = 0;
   private ghost = false;
+  /** The latest ground speed (an attack on the move is played on the upper body only). */
+  private speed = 0;
   /** The right wrist (weapons are held there), and its rest-pose turn and size. */
   private readonly wrist: THREE.Object3D | null;
   private readonly wristRest = new THREE.Quaternion();
@@ -63,7 +74,7 @@ export class AnimatedHero {
     });
     // Weapons are held separately: drop any the model came with.
     model.getObjectByName('Axe')?.removeFromParent();
-    toonify(model, /^$/);
+    toonify(model, FACE); // small face parts get no outline (it would turn them into black blobs)
     this.group.add(model);
     // Where a weapon goes (measured in the rest pose, before any clip plays).
     model.updateMatrixWorld(true);
@@ -73,13 +84,25 @@ export class AnimatedHero {
       this.wristScale = this.wrist.getWorldScale(new THREE.Vector3()).x;
     }
     this.mixer = new THREE.AnimationMixer(model);
-    for (const clip of clips) this.actions.set(clip.name, this.mixer.clipAction(clip));
-    for (const name of ['Idle', 'Walk', 'Run'] as const) {
-      const a = this.actions.get(name);
-      if (!a) continue;
-      a.play();
-      a.setEffectiveWeight(this.weights[name]);
+    // Every clip whole, and split into legs ("Walk:legs") and upper body ("Walk:upper"), so the legs
+    // can keep walking while the arms attack.
+    for (const clip of clips) {
+      this.actions.set(clip.name, this.mixer.clipAction(clip));
+      for (const [part, keep] of [['legs', true], ['upper', false]] as const) {
+        const tracks = clip.tracks.filter((t) => LEGS.test(t.name) === keep);
+        if (tracks.length) this.actions.set(`${clip.name}:${part}`, this.mixer.clipAction(new THREE.AnimationClip(`${clip.name}:${part}`, clip.duration, tracks)));
+      }
     }
+    this.playLocomotion();
+  }
+
+  /** Locomotion plays as its two halves (legs, upper body), each weighted on its own. */
+  private playLocomotion(): void {
+    for (const name of LOCOMOTION)
+      for (const part of ['legs', 'upper']) {
+        const a = this.actions.get(`${name}:${part}`);
+        a?.reset().play().setEffectiveWeight(this.weights[name]);
+      }
   }
 
   private one(name: string, duration?: number, fade = 0.08): boolean {
@@ -111,10 +134,13 @@ export class AnimatedHero {
 
   /** The basic attack (also what the game calls a "shot"): the clip for the weapon in hand. */
   attack(weapon: WeaponType | 'none' = 'onehand'): void {
-    if (this.one(ATTACK_CLIPS[weapon], ATTACK_TIME, 0.04)) return;
-    // No clip for this weapon: any attack the model has.
-    const any = [...this.actions.keys()].find((n) => n.startsWith('Attack'));
-    if (any) this.one(any, ATTACK_TIME, 0.04);
+    // On the move: the upper body only, so the legs keep running.
+    const part = this.speed > ATTACK_ON_THE_MOVE ? ':upper' : '';
+    const name = this.actions.has(ATTACK_CLIPS[weapon]) ? ATTACK_CLIPS[weapon] : [...this.actions.keys()].find((n) => /^Attack[^:]*$/.test(n)); // no clip for this weapon: any attack it has
+    if (!name) return;
+    // Stop the other version, if it's still playing from the last attack.
+    this.actions.get(part ? name : `${name}:upper`)?.stop();
+    this.one(name + part, ATTACK_TIME, 0.04);
   }
 
   /** A skill's flourish (a roar, a jump…), if the model has that clip. */
@@ -141,7 +167,7 @@ export class AnimatedHero {
       a?.reset().setLoop(THREE.LoopRepeat, Infinity).setEffectiveWeight(1).play();
     } else {
       this.mixer.stopAllAction();
-      for (const name of ['Idle', 'Walk', 'Run'] as const) this.actions.get(name)?.reset().play();
+      this.playLocomotion();
     }
   }
 
@@ -188,20 +214,30 @@ export class AnimatedHero {
     const move = THREE.MathUtils.clamp(speed / 1.6, 0, 1);
     const target = { Idle: 1 - move, Walk: move * (1 - run), Run: move * run };
     const back = speed > 0.5 && Math.cos(m.moveYaw - m.facing) < -0.3 ? -1 : 1;
-    // While attacking, the attack has the body (the legs keep a little of their stride).
-    const busy = [...this.actions].some(([n, a]) => n.startsWith('Attack') && a.isRunning()) ? 0.2 : 1;
-    for (const name of ['Idle', 'Walk', 'Run'] as const) {
+    this.speed = speed;
+    // While attacking, the attack has the body — all of it standing (the legs keep a little of their
+    // stride), only the upper body on the move (the legs keep running).
+    let busyLegs = 1;
+    let busyUpper = 1;
+    for (const [n, a] of this.actions) {
+      if (!n.startsWith('Attack') || !a.isRunning()) continue;
+      if (n.endsWith(':upper')) busyUpper = 0.02;
+      else if (!n.includes(':')) busyLegs = busyUpper = 0.2;
+    }
+    for (const name of LOCOMOTION) {
       this.weights[name] = damp(this.weights[name], target[name], 10, dt);
-      const a = this.actions.get(name);
-      if (!a) continue;
-      a.setEffectiveWeight(this.weights[name] * busy + 1e-4);
-      if (name === 'Walk') a.timeScale = back * THREE.MathUtils.clamp(speed / WALK_SPEED, 0.6, 1.8);
-      if (name === 'Run') a.timeScale = back * THREE.MathUtils.clamp(speed / RUN_SPEED, 0.7, 1.5);
+      const scale = name === 'Walk' ? THREE.MathUtils.clamp(speed / WALK_SPEED, 0.6, 1.8) : name === 'Run' ? THREE.MathUtils.clamp(speed / RUN_SPEED, 0.7, 1.5) : 1;
+      for (const [part, busy] of [['legs', busyLegs], ['upper', busyUpper]] as const) {
+        const a = this.actions.get(`${name}:${part}`);
+        if (!a) continue;
+        a.setEffectiveWeight(this.weights[name] * busy + 1e-4);
+        if (name !== 'Idle') a.timeScale = back * scale;
+      }
     }
     this.mixer.update(dt);
 
     // Footsteps: twice per walk / run cycle.
-    const lead = this.weights.Run > this.weights.Walk ? this.actions.get('Run') : this.actions.get('Walk');
+    const lead = this.weights.Run > this.weights.Walk ? this.actions.get('Run:legs') : this.actions.get('Walk:legs');
     if (lead && move > 0.15) {
       const phase = Math.floor((lead.time / lead.getClip().duration) * 2);
       if (phase !== this.stepPhase) this.onStep?.(move);
