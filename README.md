@@ -160,6 +160,20 @@ Through the exit door you reach the **merchant's camp**: four pieces of gear, tw
 and anything in the bag sells for 30% of its worth. Both players can buy from the shared purse; the elf decides when
 to move on. The bag pauses a solo game; with a familiar along, the game keeps going.
 
+## Quests
+
+Optional stories inside a level, designed in [`docs/quests.md`](docs/quests.md), are shown by a tracker under the
+level label on both screens. They're placed from the level's seed, so the tablet sees the same.
+
+- 🦊 **The Lantern Fox** (the Woodland): a lost fox kit waits a little way north of the start. Walk up to it and it
+  follows the familiar (the hero, playing solo) home to its den under the Hollow Oak. Glowing paw prints show the
+  way. It hides whenever a monster is awake within 10 m and comes out once it's been clear for 2 s, so the hero
+  clears the way, lures the monsters off, or takes the quiet route. Home safe: +300 XP, the **Lantern Charm**
+  (familiar +10% speed) drops, and the foxes' burrow opens. Step in at the oak and come out just outside the
+  guardian's hall. If the guardian falls first, the kit finds its own way home (no reward).
+
+Next: The Knight Who Would Not Rest (the Crypt) and Cages of the War Camp (the orc camp).
+
 ## The run
 
 Seven **levels**, each **generated afresh every run** (`src/world/levelgen.ts`, seeded — your familiar's tablet

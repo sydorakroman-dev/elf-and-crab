@@ -12,6 +12,11 @@ export function hpBarHtml(health: number, max: number): string {
   return `<div class="hp ${tone}"><span class="hp-heart">♥</span><div class="hp-track"><div class="hp-fill" style="width:${pct}%"></div></div><b>${hp}</b></div>`;
 }
 
+/** The quest tracker: a line per quest (icon first, a few words, done ones struck through). */
+export function questTrackerHtml(lines: readonly { text: string; done: boolean }[]): string {
+  return lines.map((l) => `<div class="quest-line${l.done ? ' done' : ''}">${l.text}</div>`).join('');
+}
+
 /** The party's level and experience: a star with the level, and a thin bar to the next. */
 export function xpBarHtml(level: number, progress: number, max: number): string {
   const pct = level >= max ? 100 : Math.max(0, Math.min(100, progress * 100));

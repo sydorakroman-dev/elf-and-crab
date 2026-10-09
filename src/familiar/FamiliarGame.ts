@@ -8,6 +8,8 @@ import { Pet } from '../game/pet';
 import { TreantAlly } from '../game/ally';
 import { makeDecoy, makeMarkRing, placeDecoy, placeMarkRing } from '../game/treefx';
 import { MAX_LEVEL, levelFor, levelProgress } from '../game/progression';
+import { FOX_STATES, foxTrackerLine, placeFoxQuest, type FoxPlan } from '../game/quests';
+import { FoxKit, FoxSite } from '../game/fox';
 import { HERO_CLASSES } from '../game/heroes';
 import { WEAPON_TYPES } from '../game/items';
 import type { InvState, StockEntry } from '../game/inventory';
@@ -116,6 +118,8 @@ export class FamiliarGame {
   private readonly decoyFx = makeDecoy();
   private readonly markRing = makeMarkRing();
   private readonly markBox = new THREE.Box3();
+  /** Q01 The Lantern Fox, placed from the level's seed like on the hero's browser. */
+  private fox: { plan: FoxPlan; kit: FoxKit; site: FoxSite } | null = null;
 
   constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarLink) {
     this.renderer = renderer;
@@ -410,7 +414,22 @@ export class FamiliarGame {
     const room = ROOMS[index];
     if (!room) return;
     this.dungeon.dispose(this.scene);
-    this.dungeon = new Dungeon(this.scene, room, generateLevel(practice ? { ...room, layout: 'practice' } : room, seed), 1024);
+    const level = generateLevel(practice ? { ...room, layout: 'practice' } : room, seed);
+    this.dungeon = new Dungeon(this.scene, room, level, 1024);
+    // The level's quests.
+    if (this.fox) {
+      this.scene.remove(this.fox.kit.group);
+      this.fox.site.dispose();
+      this.fox = null;
+    }
+    const plan = practice ? null : placeFoxQuest(level, room, seed);
+    if (plan) {
+      const kit = new FoxKit(plan.kit.x, plan.kit.z);
+      kit.setDen(plan.den);
+      const site = new FoxSite(plan);
+      this.scene.add(kit.group, site.group);
+      this.fox = { plan, kit, site };
+    }
     // Drop everything from the old level.
     for (const v of this.slimes.values()) this.scene.remove(v.group);
     this.slimes.clear();
@@ -484,6 +503,14 @@ export class FamiliarGame {
       markRadius = Math.max(0.6, (box.max.y - box.min.y) / 2.4 - 0.6);
     }
     placeMarkRing(this.markRing, marked ? { x: marked[2], z: marked[3], radius: markRadius } : null, this.time);
+    // Quests: the fox kit and its places, and the tracker.
+    const fs = s.fox && this.fox ? FOX_STATES[s.fox[0]] : null;
+    if (this.fox && fs) {
+      this.fox.kit.showFrom(s.fox!.slice(1), fs, dt, this.time);
+      this.fox.site.update(fs, dt, this.time);
+      const line = foxTrackerLine(fs, Math.hypot(s.fox![1] - this.fox.plan.den.x, s.fox![2] - this.fox.plan.den.z));
+      this.hud.setQuests(line ? [line] : []);
+    } else this.hud.setQuests([]);
     // The party's level (shared with the elf).
     const xp = s.lv?.[0] ?? 0;
     this.hud.setXp(levelFor(xp), levelProgress(xp), MAX_LEVEL);

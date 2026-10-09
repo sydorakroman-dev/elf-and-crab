@@ -42,6 +42,8 @@ import { TreantAlly } from './ally';
 import { FLEET_STAMINA, Leveling, MARK, MAX_LEVEL, RAIN, TRAP, TREANT_ALLY, TREES, TREE_VALUES, TUMBLE, XP_AT_ROOM, levelProgress, respecCost, treeSkills, type TreeSkillId } from './progression';
 import { SkillTreePanel, type TreeView } from '../ui/skilltree';
 import { makeDecoy, makeMarkRing, placeDecoy, placeMarkRing } from './treefx';
+import { FOX, FOX_STATES, FoxQuest, foxTrackerLine, placeFoxQuest, type FoxPlan } from './quests';
+import { FoxKit, FoxSite } from './fox';
 import { POTIONS, RARITY_INFO, WEAPON_TYPES, makeItem, makePotion, type BagEntry, type WeaponType } from './items';
 import { ENCHANT_CHAIN, ENCHANT_FIRE, ENCHANT_FROST, type ArrowHit } from './arrows';
 import type { HeroLink } from '../net/client';
@@ -205,6 +207,8 @@ export class Game {
   private mark: { id: number; t: number } | null = null;
   private readonly markRing = makeMarkRing();
   private ally: TreantAlly | null = null;
+  /** Q01 The Lantern Fox (docs/quests.md): its places, state, the kit and how it looks, while in this level. */
+  private fox: { plan: FoxPlan; quest: FoxQuest; kit: FoxKit; site: FoxSite } | null = null;
   /** The hero the tree's points were spent for. */
   private treeHero: HeroClass | null = null;
   private freeDash = 0;
@@ -474,6 +478,97 @@ export class Game {
     this.enemies.alarmRadius = ROOMS[index].alarm ?? 0;
     this.enemies.alarms = 0;
     this.minimap?.setLevel(this.level.map);
+    this.setupQuests();
+  }
+
+  // ── Quests (docs/quests.md) ───────────────────────────────────────────────────────────────
+
+  /** A new level: its quests, placed from its seed (the tablet places the same). */
+  private setupQuests(): void {
+    if (this.fox) {
+      this.scene.remove(this.fox.kit.group);
+      this.fox.site.dispose();
+      this.fox = null;
+    }
+    const plan = this.practice ? null : placeFoxQuest(this.level, ROOMS[this.room], this.level.seed);
+    if (plan) {
+      const kit = new FoxKit(plan.kit.x, plan.kit.z);
+      kit.setDen(plan.den);
+      const site = new FoxSite(plan);
+      this.scene.add(kit.group, site.group);
+      this.fox = { plan, quest: new FoxQuest(), kit, site };
+    }
+    this.hud.setQuests([]);
+  }
+
+  /** Runs the level's quests this step. */
+  private updateQuests(dt: number): void {
+    const f = this.fox;
+    if (!f) return;
+    const hero = this.player.position;
+    const fam = this.net?.familiarConnected && this.companion.kind ? this.companion.position : null;
+    const kit = { x: f.kit.x, z: f.kit.z };
+    const near = (p: { x: number; z: number } | null, q: { x: number; z: number }, r: number) => !!p && Math.hypot(p.x - q.x, p.z - q.z) <= r;
+    const threat = this.enemies.all.some((s) => s.alive && !s.hidden && !s.calmed && !s.stunned && !this.enemies.isAsleep(s) && near(s, kit, FOX.spookRange + s.radius));
+    const event = f.quest.step(dt, {
+      playerNear: near(hero, kit, FOX.findRange) || near(fam, kit, FOX.findRange),
+      threat,
+      atDen: near(kit, f.plan.den, FOX.homeRange),
+      guardianDown: !this.enemies.guardianAlive,
+    });
+    switch (event) {
+      case 'found':
+        this.banner(`🦊 A lost fox kit! ${fam ? 'Familiar, lead' : 'Lead'} it home to the Hollow Oak`);
+        this.sfx.calm();
+        break;
+      case 'spooked':
+        this.hud.toast('🦊 The kit is scared — it hides!', 0xffc45a);
+        this.events.push({ e: 'banner', text: '🦊 The kit is hiding — clear the monsters near it!' });
+        break;
+      case 'calmed':
+        this.hud.toast('🦊 The kit peeks out and follows again', 0xffc45a);
+        break;
+      case 'home':
+        this.foxHome();
+        break;
+    }
+    // The familiar leads it (the hero, playing solo); home, it trots into the den.
+    f.kit.update(dt, f.quest.state, fam ?? hero, f.plan.den, walkMap(), this.dungeon.obstacles, this.time);
+    f.site.update(f.quest.state, dt, this.time);
+    // The open burrow: step in at the oak, come out by the guardian's hall.
+    if (f.quest.burrowOpen) {
+      if (near(hero, f.plan.den, FOX.burrowRange)) this.throughBurrow('hero');
+      if (fam && near(fam, f.plan.den, FOX.burrowRange)) this.throughBurrow('familiar');
+    }
+    const line = foxTrackerLine(f.quest.state, Math.hypot(kit.x - f.plan.den.x, kit.z - f.plan.den.z));
+    this.hud.setQuests(line ? [line] : []);
+  }
+
+  private foxHome(): void {
+    const f = this.fox!;
+    if (!f.quest.claimReward()) return;
+    this.banner('🦊 Home safe! The foxes open their burrow for you');
+    this.gainXp(FOX.xp);
+    const charm = makeItem(Math.random, 'rare', this.room + 1, 'charm');
+    this.pickups.spawn('item_rare', f.plan.den.x + 1.5, f.plan.den.z + 1.5, undefined, 0, { ...charm, name: 'Lantern Charm', stats: { famSpeed: FOX.charmSpeed } });
+    this.effects.burst(f.plan.den.x, 1, f.plan.den.z, new THREE.Color(0xffc45a), 40, 5, 0.14);
+    this.effects.ring(f.plan.den.x, f.plan.den.z, 0xffc45a, 3);
+    this.events.push({ e: 'ring', x: q(f.plan.den.x), z: q(f.plan.den.z), r: 3, c: 0xffc45a });
+    this.sfx.powerUp();
+  }
+
+  /** Through the foxes' burrow: from the oak to just outside the guardian's hall. */
+  private throughBurrow(who: 'hero' | 'familiar'): void {
+    const { exit } = this.fox!.plan;
+    const at = walkMap().nearestFloor(exit.x, exit.z - 1.8); // a step toward the hall (north is −z)
+    if (who === 'hero') {
+      this.player.position.set(at.x, 0, at.z);
+      this.effects.burst(at.x, 0.8, at.z, new THREE.Color(0xffc45a), 24, 4, 0.12);
+      this.sfx.whoosh();
+      this.hud.toast('🦊 Through the fox burrow', 0xffc45a);
+    } else if (this.companion.kind) {
+      this.companion.appear(this.companion.kind, at.x + 1.2, at.z);
+    }
   }
 
   private frame(timestamp: number): void {
@@ -540,6 +635,7 @@ export class Game {
     this.shoot(dt);
     this.updateZones(dt);
     this.updateTreeSkills(dt);
+    this.updateQuests(dt);
     // Tumble's decoy draws the foes; with Wind Walk they lose track and head for where the elf vanished.
     const seen = this.decoy ? this.decoySpot.set(this.decoy.x, 0, this.decoy.z) : this.invisible > 0 ? this.vanishSpot : this.player.position;
     // Nothing stirs before the hero starts, or while walking between levels.
@@ -983,6 +1079,7 @@ export class Game {
       ...(this.sealPending ? { seal: 1 } : {}),
       ...(this.pet ? { pet: this.pet.tuple() } : {}),
       lv: this.leveling.encode(),
+      ...(this.fox ? { fox: [FOX_STATES.indexOf(this.fox.quest.state), ...this.fox.kit.tuple()] } : {}),
       ...(this.decoy ? { decoy: [q(this.decoy.x), q(this.decoy.z), q(this.decoy.t)] } : {}),
       ...(this.mark ? { mark: this.mark.id } : {}),
       ...(this.ally ? { ally: this.ally.tuple() } : {}),

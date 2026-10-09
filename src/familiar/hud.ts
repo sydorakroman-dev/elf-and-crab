@@ -2,7 +2,7 @@ import { POWER_CODES } from '../net/snapshot';
 import type { Snapshot } from '../net/snapshot';
 import { normalizeCode } from '../net/protocol';
 import { fullscreenSupported, isAppleTouch, isFullscreen, isStandalone, onFullscreenChange, toggleFullscreen } from '../ui/fullscreen';
-import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey, xpBarHtml } from '../ui/shared';
+import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey, questTrackerHtml, xpBarHtml } from '../ui/shared';
 import { ROOMS, runLabel } from '../world/rooms';
 import { enemyName, type EnemyKind } from '../game/enemies';
 import type { PowerUpType } from '../game/powerups';
@@ -50,6 +50,8 @@ export class FamiliarHud {
   private readonly hearts: HTMLElement;
   private readonly xp: HTMLElement;
   private xpKey = '';
+  private readonly quests: HTMLElement;
+  private questsKey = '';
   private readonly powers: HTMLElement;
   private readonly wave: HTMLElement;
   private readonly score: HTMLElement;
@@ -91,7 +93,7 @@ export class FamiliarHud {
       'beforeend',
       `<div class="hud fam-hud">
          <div class="left"><div class="hearts" data-f-hearts></div><div class="xp-row" data-f-xp></div><div class="powers" data-f-powers></div></div>
-         <div class="wave" data-f-wave></div>
+         <div class="mid"><div class="wave" data-f-wave></div><div class="quest-list" data-f-quests></div></div>
          <div class="right">
            <button type="button" class="role-badge parade-btn" data-f-riddle-try hidden title="Try a rune seal">🔮</button>
            <button type="button" class="role-badge parade-btn" data-f-parade hidden>👾 Monsters</button>
@@ -126,6 +128,7 @@ export class FamiliarHud {
     this.fade = new Fade(root);
     this.hearts = root.querySelector('[data-f-hearts]')!;
     this.xp = root.querySelector('[data-f-xp]')!;
+    this.quests = root.querySelector('[data-f-quests]')!;
     this.powers = root.querySelector('[data-f-powers]')!;
     this.wave = root.querySelector('[data-f-wave]')!;
     this.score = root.querySelector('[data-f-score]')!;
@@ -334,6 +337,14 @@ export class FamiliarHud {
     this.seal.classList.remove('wrong');
     void this.seal.offsetWidth; // restart the shake
     this.seal.classList.add('wrong');
+  }
+
+  /** The quest tracker lines (docs/quests.md). */
+  setQuests(lines: readonly { text: string; done: boolean }[]): void {
+    const html = questTrackerHtml(lines);
+    if (html === this.questsKey) return;
+    this.questsKey = html;
+    this.quests.innerHTML = html;
   }
 
   /** The party level (shared with the elf) and the way to the next. */

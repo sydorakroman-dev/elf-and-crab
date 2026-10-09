@@ -142,6 +142,8 @@ export interface Snapshot {
   amb?: number[];
   /** The beast master's wolf: [x, z, yaw, speed, mode, y]. */
   pet?: number[];
+  /** Q01 The Lantern Fox: [state (FOX_STATES index), kit x, z, yaw, speed]. */
+  fox?: number[];
   /** The party's experience and the hero's skill tree ranks (Leveling.encode). */
   lv?: number[];
   /** Skill-tree effects: Tumble's decoy [x, z, secondsLeft], the foe under Hunter's Mark (id), the treant [x, z, yaw, speed, mode, grow]. */

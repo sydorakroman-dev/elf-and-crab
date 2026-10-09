@@ -1,7 +1,7 @@
 import type { Best } from '../game/highscore';
 import type { InputMode } from '../player/controls';
 import type { PowerUpType } from '../game/powerups';
-import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey, xpBarHtml } from './shared';
+import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey, questTrackerHtml, xpBarHtml } from './shared';
 import { normalizeCode } from '../net/protocol';
 import { ActionBar } from './actionbar';
 import { DIFFICULTIES, DIFFICULTY_LIST, difficulty, setDifficulty, type Difficulty } from '../game/difficulty';
@@ -21,6 +21,8 @@ export class Hud {
   private readonly hearts: HTMLElement;
   private readonly xp: HTMLElement;
   private xpKey = '';
+  private readonly quests: HTMLElement;
+  private questsKey = '';
   private readonly wave: HTMLElement;
   private readonly score: HTMLElement;
   private readonly gold: HTMLElement;
@@ -56,7 +58,7 @@ export class Hud {
            <div class="xp-row" data-xp></div>
            <div class="powers" data-powers></div>
          </div>
-         <div class="wave" data-wave></div>
+         <div class="mid"><div class="wave" data-wave></div><div class="quest-list" data-quests></div></div>
          <div class="right">
            <span class="familiar-badge" data-familiar hidden title="Familiar connected">🦀</span>
            <span class="muted" data-muted hidden>🔇</span>
@@ -133,6 +135,7 @@ export class Hud {
     );
     this.hearts = root.querySelector('[data-hearts]')!;
     this.xp = root.querySelector('[data-xp]')!;
+    this.quests = root.querySelector('[data-quests]')!;
     this.wave = root.querySelector('[data-wave]')!;
     this.score = root.querySelector('[data-score]')!;
     this.gold = root.querySelector('[data-gold]')!;
@@ -286,6 +289,14 @@ export class Hud {
       this.showDifficulty();
       this.showHero();
     }
+  }
+
+  /** The quest tracker lines (docs/quests.md). */
+  setQuests(lines: readonly { text: string; done: boolean }[]): void {
+    const html = questTrackerHtml(lines);
+    if (html === this.questsKey) return;
+    this.questsKey = html;
+    this.quests.innerHTML = html;
   }
 
   /** The party level and the way to the next. */
