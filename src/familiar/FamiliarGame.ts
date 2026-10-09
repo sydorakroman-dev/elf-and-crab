@@ -5,6 +5,9 @@ import { generateLevel } from '../world/levelgen';
 import { Minimap } from '../ui/minimap';
 import { InventoryPanel } from '../ui/inventory';
 import { Pet } from '../game/pet';
+import { TreantAlly } from '../game/ally';
+import { makeDecoy, makeMarkRing, placeDecoy, placeMarkRing } from '../game/treefx';
+import { MAX_LEVEL, levelFor, levelProgress } from '../game/progression';
 import { HERO_CLASSES } from '../game/heroes';
 import { WEAPON_TYPES } from '../game/items';
 import type { InvState, StockEntry } from '../game/inventory';
@@ -108,6 +111,11 @@ export class FamiliarGame {
   private lastPhase = '';
   private beaconMoved = false;
   private pet: Pet | null = null;
+  /** The elf's skill-tree effects: the treant, Tumble's decoy, Hunter's Mark. */
+  private ally: TreantAlly | null = null;
+  private readonly decoyFx = makeDecoy();
+  private readonly markRing = makeMarkRing();
+  private readonly markBox = new THREE.Box3();
 
   constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarLink) {
     this.renderer = renderer;
@@ -455,6 +463,30 @@ export class FamiliarGame {
       this.scene.remove(this.pet.group);
       this.pet = null;
     }
+    if (s.ally) {
+      if (!this.ally) {
+        this.ally = new TreantAlly(s.ally[0], s.ally[1], 1);
+        this.scene.add(this.ally.group);
+      }
+      this.ally.show(s.ally, dt, this.time);
+    } else if (this.ally) {
+      this.scene.remove(this.ally.group);
+      this.ally = null;
+    }
+    if (!this.decoyFx.parent) this.scene.add(this.decoyFx, this.markRing);
+    placeDecoy(this.decoyFx, s.decoy ? { x: s.decoy[0], z: s.decoy[1], left: s.decoy[2] } : null, this.time);
+    const marked = s.mark !== undefined ? s.slimes.find((t) => t[0] === s.mark) : undefined;
+    let markRadius = 1;
+    const markedLook = marked ? this.slimes.get(marked[0]) : undefined;
+    if (markedLook) {
+      // No radius on the tablet: judge the foe's size from its model.
+      const box = this.markBox.setFromObject(markedLook.group);
+      markRadius = Math.max(0.6, (box.max.y - box.min.y) / 2.4 - 0.6);
+    }
+    placeMarkRing(this.markRing, marked ? { x: marked[2], z: marked[3], radius: markRadius } : null, this.time);
+    // The party's level (shared with the elf).
+    const xp = s.lv?.[0] ?? 0;
+    this.hud.setXp(levelFor(xp), levelProgress(xp), MAX_LEVEL);
     // The shared bag and the merchant (opens by itself at the merchant's camp).
     if (s.inv) this.invState = s.inv;
     if (s.shop) this.shopStock = s.shop;

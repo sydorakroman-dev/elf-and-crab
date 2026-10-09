@@ -142,6 +142,12 @@ export interface Snapshot {
   amb?: number[];
   /** The beast master's wolf: [x, z, yaw, speed, mode, y]. */
   pet?: number[];
+  /** The party's experience and the hero's skill tree ranks (Leveling.encode). */
+  lv?: number[];
+  /** Skill-tree effects: Tumble's decoy [x, z, secondsLeft], the foe under Hunter's Mark (id), the treant [x, z, yaw, speed, mode, grow]. */
+  decoy?: number[];
+  mark?: number;
+  ally?: number[];
   /** The party's gear and bag (sent when it changes). */
   inv?: InvState;
   /** The merchant's wares (while at the merchant's camp). */
@@ -229,7 +235,8 @@ export function interpolate(a: Snapshot, b: Snapshot, t: number): Snapshot {
   // The wolf glides too (unless it leapt far).
   const pet = a.pet && b.pet && Math.hypot(a.pet[0] - b.pet[0], a.pet[1] - b.pet[1]) <= TELEPORT ? [lerp(a.pet[0], b.pet[0], k), lerp(a.pet[1], b.pet[1], k), lerpAngle(a.pet[2], b.pet[2], k), ...b.pet.slice(3)] : b.pet;
 
-  return { ...b, t: lerp(a.t, b.t, k), hero, fam, slimes, arrows, globs, ev: [], ...(pet ? { pet } : {}) };
+  const ally = a.ally && b.ally && Math.hypot(a.ally[0] - b.ally[0], a.ally[1] - b.ally[1]) <= TELEPORT ? [lerp(a.ally[0], b.ally[0], k), lerp(a.ally[1], b.ally[1], k), lerpAngle(a.ally[2], b.ally[2], k), ...b.ally.slice(3)] : b.ally;
+  return { ...b, t: lerp(a.t, b.t, k), hero, fam, slimes, arrows, globs, ev: [], ...(pet ? { pet } : {}), ...(ally ? { ally } : {}) };
 }
 
 /**

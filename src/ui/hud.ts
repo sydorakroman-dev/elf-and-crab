@@ -1,7 +1,7 @@
 import type { Best } from '../game/highscore';
 import type { InputMode } from '../player/controls';
 import type { PowerUpType } from '../game/powerups';
-import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey } from './shared';
+import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey, xpBarHtml } from './shared';
 import { normalizeCode } from '../net/protocol';
 import { ActionBar } from './actionbar';
 import { DIFFICULTIES, DIFFICULTY_LIST, difficulty, setDifficulty, type Difficulty } from '../game/difficulty';
@@ -19,6 +19,8 @@ const KEYS_TOUCH = 'Left thumb: move · Right thumb: look · Hold 🏹 to shoot 
 /** DOM overlay: hearts, wave and score, wave banners, hurt flash, and the title / pause / game-over screen. */
 export class Hud {
   private readonly hearts: HTMLElement;
+  private readonly xp: HTMLElement;
+  private xpKey = '';
   private readonly wave: HTMLElement;
   private readonly score: HTMLElement;
   private readonly gold: HTMLElement;
@@ -51,6 +53,7 @@ export class Hud {
       `<div class="hud" hidden>
          <div class="left">
            <div class="hearts" data-hearts></div>
+           <div class="xp-row" data-xp></div>
            <div class="powers" data-powers></div>
          </div>
          <div class="wave" data-wave></div>
@@ -129,6 +132,7 @@ export class Hud {
        </div>`,
     );
     this.hearts = root.querySelector('[data-hearts]')!;
+    this.xp = root.querySelector('[data-xp]')!;
     this.wave = root.querySelector('[data-wave]')!;
     this.score = root.querySelector('[data-score]')!;
     this.gold = root.querySelector('[data-gold]')!;
@@ -282,6 +286,14 @@ export class Hud {
       this.showDifficulty();
       this.showHero();
     }
+  }
+
+  /** The party level and the way to the next. */
+  setXp(level: number, progress: number, max: number): void {
+    const key = `${level}:${Math.round(progress * 200)}`;
+    if (key === this.xpKey) return;
+    this.xpKey = key;
+    this.xp.innerHTML = xpBarHtml(level, progress, max);
   }
 
   setHealth(health: number): void {

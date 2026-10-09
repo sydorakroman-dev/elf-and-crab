@@ -22,14 +22,23 @@ describe('spellbook', () => {
     expect(b.rank('frost')).toBe(MAX_RANK);
   });
 
-  it('reading books fills the six slots, then only ranks up what you know', () => {
+  it('reading books learns every spell while there are free slots, then only ranks up', () => {
     const b = new Spellbook();
     const rng = mulberry32(3);
-    for (let i = 0; i < 200; i++) b.read(rng);
-    expect(b.known.length).toBe(6);
-    expect(b.slots.every((k) => k !== null)).toBe(true);
+    for (let i = 0; i < 300; i++) b.read(rng);
+    expect(b.known.length).toBe(SPELL_KEYS.length);
     for (const k of b.known) expect(b.rank(k)).toBe(MAX_RANK);
     expect(b.read(rng)).toEqual({ kind: 'mastered' });
+  });
+
+  it('skips slots the skill tree has taken, and stops learning new spells when the rest are full', () => {
+    const b = new Spellbook();
+    const taken = new Set([3, 4, 5, 6, 7]); // five tree actives in slots 4–8
+    b.blocked = (slot) => taken.has(slot);
+    const rng = mulberry32(5);
+    for (let i = 0; i < 300; i++) b.read(rng);
+    expect(b.known.length).toBe(4);
+    for (const k of b.known) expect(taken.has(b.slots.indexOf(k) + 3)).toBe(false);
   });
 
   it('favours new spells while there is room', () => {

@@ -21,6 +21,8 @@ interface Arrow {
   enchant: number;
   /** 0 an arrow, 1 a magic bolt (the mage), 2 a spear (the beast master). */
   look: number;
+  /** Its own damage (0: a normal shot's). */
+  damage: number;
   hitSlimes: Set<Enemy>;
 }
 
@@ -30,6 +32,8 @@ export interface ArrowHit {
   dirZ: number;
   /** Spell enchantments the arrow carried (ENCHANT_* bits). */
   enchant: number;
+  /** Its own damage (Piercing Arrow), instead of a normal shot's. */
+  damage?: number;
 }
 
 /** Arrow enchantments from the elf's spells (bits). */
@@ -78,11 +82,12 @@ export class Arrows {
       mesh.userData.glow = glow;
       mesh.visible = false;
       this.group.add(mesh);
-      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false, pierce: false, enchant: 0, look: 0, hitSlimes: new Set() });
+      this.arrows.push({ mesh, dir: new THREE.Vector3(), life: 0, stuck: 0, active: false, pierce: false, enchant: 0, look: 0, damage: 0, hitSlimes: new Set() });
     }
   }
 
-  fire(x: number, z: number, dir: { x: number; z: number }, pierce = false, enchant = 0, look = 0): void {
+  /** Shoots an arrow; `damage` (Piercing Arrow) gives it its own damage, and a heavier look. */
+  fire(x: number, z: number, dir: { x: number; z: number }, pierce = false, enchant = 0, look = 0, damage = 0): void {
     // Reuse a free arrow, or the oldest stuck one.
     const a = this.arrows.find((a) => !a.active) ?? this.arrows.reduce((o, a) => (a.stuck && a.stuck < o.stuck ? a : o));
     a.active = true;
@@ -91,6 +96,8 @@ export class Arrows {
     a.pierce = pierce;
     a.enchant = enchant;
     a.look = look;
+    a.damage = damage;
+    a.mesh.scale.setScalar(damage ? 1.6 : 1);
     a.hitSlimes.clear();
     a.dir.set(dir.x, 0, dir.z).normalize();
     this.setLook(a.mesh, look);
@@ -197,12 +204,12 @@ export class Arrows {
 
       if (hitSlime && a.pierce) {
         // Punch through: register the hit and keep flying from here this step.
-        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z, enchant: a.enchant });
+        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z, enchant: a.enchant, damage: a.damage || undefined });
         a.hitSlimes.add(hitSlime);
         p.x += (bx - p.x) * bestT;
         p.z += (bz - p.z) * bestT;
       } else if (hitSlime) {
-        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z, enchant: a.enchant });
+        hits.push({ slime: hitSlime, dirX: a.dir.x, dirZ: a.dir.z, enchant: a.enchant, damage: a.damage || undefined });
         a.active = false;
         a.mesh.visible = false;
       } else if (solid) {

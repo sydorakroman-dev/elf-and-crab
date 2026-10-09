@@ -2,7 +2,7 @@ import { POWER_CODES } from '../net/snapshot';
 import type { Snapshot } from '../net/snapshot';
 import { normalizeCode } from '../net/protocol';
 import { fullscreenSupported, isAppleTouch, isFullscreen, isStandalone, onFullscreenChange, toggleFullscreen } from '../ui/fullscreen';
-import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey } from '../ui/shared';
+import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey, xpBarHtml } from '../ui/shared';
 import { ROOMS, runLabel } from '../world/rooms';
 import { enemyName, type EnemyKind } from '../game/enemies';
 import type { PowerUpType } from '../game/powerups';
@@ -48,6 +48,8 @@ export class FamiliarHud {
   private readonly paradeBtn: HTMLButtonElement;
   private readonly paradePanel: HTMLElement;
   private readonly hearts: HTMLElement;
+  private readonly xp: HTMLElement;
+  private xpKey = '';
   private readonly powers: HTMLElement;
   private readonly wave: HTMLElement;
   private readonly score: HTMLElement;
@@ -88,7 +90,7 @@ export class FamiliarHud {
     root.insertAdjacentHTML(
       'beforeend',
       `<div class="hud fam-hud">
-         <div class="left"><div class="hearts" data-f-hearts></div><div class="powers" data-f-powers></div></div>
+         <div class="left"><div class="hearts" data-f-hearts></div><div class="xp-row" data-f-xp></div><div class="powers" data-f-powers></div></div>
          <div class="wave" data-f-wave></div>
          <div class="right">
            <button type="button" class="role-badge parade-btn" data-f-riddle-try hidden title="Try a rune seal">🔮</button>
@@ -123,6 +125,7 @@ export class FamiliarHud {
     this.bossBar = new BossBar(root);
     this.fade = new Fade(root);
     this.hearts = root.querySelector('[data-f-hearts]')!;
+    this.xp = root.querySelector('[data-f-xp]')!;
     this.powers = root.querySelector('[data-f-powers]')!;
     this.wave = root.querySelector('[data-f-wave]')!;
     this.score = root.querySelector('[data-f-score]')!;
@@ -331,6 +334,14 @@ export class FamiliarHud {
     this.seal.classList.remove('wrong');
     void this.seal.offsetWidth; // restart the shake
     this.seal.classList.add('wrong');
+  }
+
+  /** The party level (shared with the elf) and the way to the next. */
+  setXp(level: number, progress: number, max: number): void {
+    const key = `${level}:${Math.round(progress * 200)}`;
+    if (key === this.xpKey) return;
+    this.xpKey = key;
+    this.xp.innerHTML = xpBarHtml(level, progress, max);
   }
 
   update(s: Snapshot): void {

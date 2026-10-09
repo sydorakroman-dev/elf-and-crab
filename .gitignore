@@ -25,3 +25,6 @@ dist-ssr
 
 # Built server
 server/dist
+
+# Local reference art and source models (not part of the game build)
+Concept art/

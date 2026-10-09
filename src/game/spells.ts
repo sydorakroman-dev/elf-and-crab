@@ -7,9 +7,9 @@
 export type SpellKey = 'fire' | 'frost' | 'chain' | 'volley' | 'roots' | 'nova' | 'bloom' | 'bark';
 export const SPELL_KEYS: SpellKey[] = ['fire', 'frost', 'chain', 'volley', 'roots', 'nova', 'bloom', 'bark'];
 export const MAX_RANK = 3;
-/** Spells go in action slots 4–9 (indices 3–8). */
+/** Spells go in action slots 4–12 (indices 3–11), sharing them with the skill tree's actives. */
 export const FIRST_SPELL_SLOT = 3;
-export const SPELL_SLOTS = 6;
+export const SPELL_SLOTS = 9;
 
 export interface ElfSpellDef {
   name: string;
@@ -75,8 +75,15 @@ export type BookResult = { kind: 'learned'; key: SpellKey; slot: number } | { ki
 /** The spells the elf knows this run, their ranks, and which action slot each sits in. */
 export class Spellbook {
   private readonly ranks = new Map<SpellKey, number>();
-  /** Slot contents for action slots 4–9. */
+  /** Slot contents for action slots 4–12. */
   readonly slots: (SpellKey | null)[] = Array(SPELL_SLOTS).fill(null);
+  /** Action slots taken by something else (the skill tree's actives): spells skip them. */
+  blocked: (slot: number) => boolean = () => false;
+
+  /** The first slot (index into `slots`) a new spell can go in, or −1. */
+  private freeSlot(): number {
+    return this.slots.findIndex((k, i) => k === null && !this.blocked(i + FIRST_SPELL_SLOT));
+  }
 
   rank(key: SpellKey): number {
     return this.ranks.get(key) ?? 0;
@@ -86,7 +93,7 @@ export class Spellbook {
     return [...this.ranks.keys()];
   }
 
-  /** The spell in action slot `slot` (0-based over all nine slots), if any. */
+  /** The spell in action slot `slot` (0-based over all the slots), if any. */
   inSlot(slot: number): SpellKey | null {
     return this.slots[slot - FIRST_SPELL_SLOT] ?? null;
   }
@@ -97,7 +104,7 @@ export class Spellbook {
     if (!open.length) return { kind: 'mastered' };
     // New spells come first while there's room for them; then rank-ups.
     const fresh = open.filter((k) => this.rank(k) === 0);
-    const free = this.slots.indexOf(null);
+    const free = this.freeSlot();
     const pool = fresh.length && free >= 0 && rng() < 0.7 ? fresh : open.filter((k) => this.rank(k) > 0 || free >= 0);
     const key = (pool.length ? pool : open)[Math.floor(rng() * (pool.length ? pool : open).length)];
     return this.learn(key);
@@ -111,7 +118,7 @@ export class Spellbook {
       this.ranks.set(key, r + 1);
       return { kind: 'ranked', key, rank: r + 1 };
     }
-    const free = this.slots.indexOf(null);
+    const free = this.freeSlot();
     if (free < 0) return { kind: 'mastered' };
     this.ranks.set(key, 1);
     this.slots[free] = key;

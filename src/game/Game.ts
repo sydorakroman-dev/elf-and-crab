@@ -14,9 +14,9 @@ import { Effects } from './effects';
 import { Companion } from './companion';
 import { ELEMENTAL_ATTACKS, HEALING, HERO, MONSTER_SHOTS, POISON, VICTORY_SCORE_PER_HP } from './balance';
 import { BUBBLE_HITS, TONGUE_BOSS_FLINCH, WARD, FAMILIARS, FAMILIAR_KINDS, HOWL_BOSS_FLINCH, HOWL_RAPID_SECONDS, JET, POUNCE_DAMAGE, inJet, SPELLS, SPELL_IDS, SPRING_SLOW, type FamiliarKind, type SpellId } from './familiars';
-import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_SPRING, type ZoneTuple } from './zones';
+import { SpringPools, ZONE_FIRE, ZONE_POISON, ZONE_RAIN, ZONE_SPRING, ZONE_THORN, type ZoneTuple } from './zones';
 import { Monster } from './monsters';
-import { ABILITIES, DOUBLE_GAP, DOUBLE_SHOTS, Resources, WIND_WALK_SECONDS, type AbilityId } from './abilities';
+import { ABILITIES, DOUBLE_GAP, DOUBLE_SHOTS, RESOURCES, Resources, SLOT_COUNT, WIND_WALK_SECONDS, type AbilityId } from './abilities';
 import { DIFFICULTIES, difficulty, scaledDamage } from './difficulty';
 import { DamageNumbers } from './numbers';
 import { AutoQuality } from '../ui/quality';
@@ -38,6 +38,10 @@ import { chestLoot, rollLoot, tierOf, type Drop } from './loot';
 import { Inventory, makeStock, type InvOp, type StockEntry } from './inventory';
 import { FISTS, HEROES, HERO_CLASSES, PREFERRED_BONUS, WEAPON_ATTACKS, inSwing, loadHero, type Attack, type HeroClass } from './heroes';
 import { Pet } from './pet';
+import { TreantAlly } from './ally';
+import { FLEET_STAMINA, Leveling, MARK, MAX_LEVEL, RAIN, TRAP, TREANT_ALLY, TREES, TREE_VALUES, TUMBLE, XP_AT_ROOM, levelProgress, respecCost, treeSkills, type TreeSkillId } from './progression';
+import { SkillTreePanel, type TreeView } from '../ui/skilltree';
+import { makeDecoy, makeMarkRing, placeDecoy, placeMarkRing } from './treefx';
 import { POTIONS, RARITY_INFO, WEAPON_TYPES, makeItem, makePotion, type BagEntry, type WeaponType } from './items';
 import { ENCHANT_CHAIN, ENCHANT_FIRE, ENCHANT_FROST, type ArrowHit } from './arrows';
 import type { HeroLink } from '../net/client';
@@ -117,7 +121,8 @@ export class Game {
   private nextPickup = 0;
   private readonly springPools = new SpringPools();
   /** Live Soothing Spring pools; `healed` = it already gave the elf their heart. */
-  private zones: { id: number; kind: number; x: number; z: number; r: number; t: number; healed: boolean }[] = [];
+  /** Ground zones; the elf's traps and arrow rain carry their damage (and root time, tick timer). */
+  private zones: { id: number; kind: number; x: number; z: number; r: number; t: number; healed: boolean; dmg?: number; root?: number; tick?: number }[] = [];
   /** Burn damage owed from standing in fire (dealt in small ticks). */
   private burn = 0;
   private burnTick = 0;
@@ -188,6 +193,21 @@ export class Game {
   private doubleShots = 0;
   /** Bosses whose second phase has been announced. */
   private readonly enragedShown = new Set<number>();
+  /** The party's level and the hero's skill tree (this run). */
+  private readonly leveling = new Leveling();
+  private readonly treePanel: SkillTreePanel;
+  /** Which skill-tree active sits in each action slot. */
+  private readonly treeSlots: (AbilityId | null)[] = [];
+  /** Tumble's decoy (foes chase it), Hunter's Mark (on one foe), the treant, and Tumble's free dash. */
+  private decoy: { x: number; z: number; t: number } | null = null;
+  private readonly decoyFx = makeDecoy();
+  private readonly decoySpot = new THREE.Vector3();
+  private mark: { id: number; t: number } | null = null;
+  private readonly markRing = makeMarkRing();
+  private ally: TreantAlly | null = null;
+  /** The hero the tree's points were spent for. */
+  private treeHero: HeroClass | null = null;
+  private freeDash = 0;
   /** Spells learned from books this run, and the party's gold. */
   private readonly spellbook = new Spellbook();
   /** Gear, the 16-slot bag and the gold purse (shared by the elf and the familiar). */
@@ -243,7 +263,7 @@ export class Game {
     );
     this.shieldBubble.visible = false;
     this.wardRing = jadeRing(SPELLS.ward.radius);
-    this.scene.add(this.wardRing, this.numbers.group);
+    this.scene.add(this.wardRing, this.numbers.group, this.markRing, this.decoyFx);
     this.scene.add(...Object.values(familiars).map((b) => b.group));
     this.scene.add(elf.group, this.springPools.group, this.enemies.group, this.arrows.group, this.globs.group, this.pickups.group, this.shieldBubble, this.effects.mesh, this.effects.rings, this.telegraph.group);
 
@@ -267,11 +287,17 @@ export class Game {
     this.bagPanel.onClose = () => this.closeBag();
     this.bagPanel.onContinue = () => this.leaveShop();
     this.hud.actionBar.onBag = () => this.toggleBag();
+    this.treePanel = new SkillTreePanel(root);
+    this.treePanel.onLearn = (id) => this.learnTreeSkill(id);
+    this.treePanel.onRespec = () => this.respecTree();
+    this.treePanel.onClose = () => this.closeTree();
+    this.hud.actionBar.onTree = () => this.toggleTree();
+    this.spellbook.blocked = (slot) => !!this.treeSlots[slot]; // spells skip slots the tree's actives sit in
     this.hud.onHero = (h) => this.setHero(h);
     this.minimap.setLevel(this.level.map);
     if (mode === 'touch') this.touch = new TouchControls(root, this.player);
     this.player.onActiveChange = (active) => {
-      if (!active && this.bagPanel.isOpen) return; // the bag or the merchant took the mouse
+      if (!active && (this.bagPanel.isOpen || this.treePanel.isOpen)) return; // the bag, the tree or the merchant took the mouse
       this.hud.setPaused(!active, this.state === 'playing');
       this.touch?.setVisible(active);
     };
@@ -279,7 +305,10 @@ export class Game {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.player.deactivate();
     });
-    this.player.onDash = () => this.sfx.whoosh();
+    this.player.onDash = () => {
+      this.sfx.whoosh();
+      this.tumble();
+    };
     this.player.canDash = () => this.resources.spend('dash'); // a dash costs stamina
     this.hud.actionBar.onUse = (slot) => this.useSlot(slot);
     elf.onStep = (strength) => this.sfx.footstep(strength);
@@ -291,6 +320,8 @@ export class Game {
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
       else if ((e.code === 'KeyI' || e.code === 'KeyB') && !e.repeat && !this.hud.actionBar.rebinding) this.toggleBag();
+      else if (e.code === 'KeyT' && !e.repeat && !this.hud.actionBar.rebinding) this.toggleTree();
+      else if (e.code === 'Escape' && this.treePanel.isOpen) this.closeTree();
       else if (e.code === 'Escape' && this.bagPanel.isOpen && this.phase !== 'shop') this.closeBag();
       else if ((e.code === 'KeyQ' || e.code === 'KeyE') && !e.repeat && this.state === 'playing') this.quickPotion(e.code === 'KeyQ' ? 'health' : 'mana');
       else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && (this.phase === 'ready' || this.victoryPending)) this.pressStart();
@@ -382,10 +413,12 @@ export class Game {
     this.doubleShots = 0;
     this.hud.actionBar.setCharges('doubleshot', 0);
     this.spellbook.clear();
-    for (let i = 0; i < 6; i++) {
-      this.hud.actionBar.setSlot(FIRST_SPELL_SLOT + i, null);
-      this.hud.actionBar.setSlotCharges(FIRST_SPELL_SLOT + i, 0);
-    }
+    for (let i = FIRST_SPELL_SLOT; i < SLOT_COUNT; i++) this.hud.actionBar.setTreeAbility(i, null); // empties the slot (spell or skill)
+    // Levels start over (a run continued from a later level starts with about the experience it'd have by then).
+    this.treeSlots.length = 0;
+    this.leveling.reset();
+    this.leveling.addXp(this.practice ? 0 : XP_AT_ROOM[room] ?? 0);
+    this.clearTreeEffects();
     for (const e of Object.values(this.enchants)) e.shots = 0;
     this.bloom.left = this.bark.left = 0;
     this.inv.clear();
@@ -393,6 +426,7 @@ export class Game {
     this.inv.gear.weapon = makeItem(Math.random, 'common', 1, 'weapon', HEROES[this.hud.hero].preferred);
     this.inv.version++;
     this.setHero(this.hud.hero);
+    this.treePanel.close();
     this.ward = 0;
     this.riddle = null;
     this.sealPending = false;
@@ -423,6 +457,7 @@ export class Game {
   /** Swaps in level `index`: generates and builds it, points everything at its walls and obstacles, places its packs. */
   private loadRoom(index: number): void {
     this.dungeon.dispose(this.scene);
+    this.clearTreeEffects();
     this.room = index;
     this.level = this.makeLevel(index);
     this.dungeon = new Dungeon(this.scene, ROOMS[index], this.level, this.shadowSize);
@@ -472,8 +507,9 @@ export class Game {
     this.time += dt;
     this.dungeon.update(this.time, dt, this.player.position);
     this.updateAmbience(dt);
-    // The bag pauses a solo game; with a familiar along (or at the merchant) the game keeps going.
-    const menu = this.bagPanel.isOpen && (this.phase === 'shop' || !!this.net?.familiarConnected);
+    // The bag and the skill tree pause a solo game; with a familiar along (or at the merchant) the game keeps going.
+    const panel = this.bagPanel.isOpen || this.treePanel.isOpen;
+    const menu = panel && (this.phase === 'shop' || !!this.net?.familiarConnected);
     const running = this.state === 'playing' && (this.player.isActive || this.practice || menu);
     if (this.inv.version !== this.gearVersion) this.refreshGear();
     this.steps++;
@@ -496,15 +532,16 @@ export class Game {
     this.invisible = Math.max(0, this.invisible - dt);
     this.elf.setGhost(this.invisible > 0);
     this.hud.actionBar.update(this.resources);
-    this.player.update(dt, !this.bagPanel.isOpen);
+    this.player.update(dt, !panel);
     this.playTime += dt;
     this.invulnerable = Math.max(0, this.invulnerable - dt);
     this.elf.group.visible = this.invulnerable === 0 || Math.floor(this.time * 16) % 2 === 0;
 
     this.shoot(dt);
     this.updateZones(dt);
-    // Wind Walk: enemies lose track and head for the spot where the elf vanished.
-    const seen = this.invisible > 0 ? this.vanishSpot : this.player.position;
+    this.updateTreeSkills(dt);
+    // Tumble's decoy draws the foes; with Wind Walk they lose track and head for where the elf vanished.
+    const seen = this.decoy ? this.decoySpot.set(this.decoy.x, 0, this.decoy.z) : this.invisible > 0 ? this.vanishSpot : this.player.position;
     // Nothing stirs before the hero starts, or while walking between levels.
     const still = !this.practice && (this.phase === 'ready' || this.phase === 'transition' || this.phase === 'shop');
     const { spits, strikes } = still ? { spits: [], strikes: [] } : this.enemies.update(dt, seen, this.dungeon.obstacles);
@@ -526,7 +563,7 @@ export class Game {
     this.updateGlobs(dt);
 
     for (const hit of this.arrows.update(dt, this.enemies.all, this.dungeon.obstacles)) {
-      this.damage(hit.slime, hit.dirX, hit.dirZ, this.arrowDamage());
+      this.damage(hit.slime, hit.dirX, hit.dirZ, hit.damage ?? this.arrowDamage());
       if (hit.enchant) this.enchantHit(hit);
     }
 
@@ -534,7 +571,7 @@ export class Game {
     this.rest(dt);
     this.updateBlessings(dt);
     this.shieldWall = Math.max(0, this.shieldWall - dt);
-    this.player.speedScale = (1 + this.heroGear.moveSpeed) * (this.powers.has('swift') ? 1.35 : 1); // Swiftness
+    this.player.speedScale = (1 + this.heroGear.moveSpeed) * (1 + this.leveling.value('fleetfoot')) * (this.powers.has('swift') ? 1.35 : 1); // gear, Fleet Foot, Swiftness
     this.elf.setGuard(this.shieldWall > 0);
     this.rage = Math.max(0, this.rage - dt);
     if (this.pet) this.updatePet(dt);
@@ -779,6 +816,14 @@ export class Game {
     let burning = 0; // damage per second from fire / poison underfoot
     for (const z of this.zones) {
       z.t -= dt;
+      if (z.kind === ZONE_THORN) {
+        this.springTrap(z);
+        continue;
+      }
+      if (z.kind === ZONE_RAIN) {
+        this.rainDown(z, dt);
+        continue;
+      }
       if (z.kind !== ZONE_SPRING) {
         if (Math.hypot(p.x - z.x, p.z - z.z) <= z.r + PLAYER_RADIUS * 0.5) burning = Math.max(burning, z.kind === ZONE_FIRE ? ELEMENTAL_ATTACKS.fire.burnDps : POISON.dps);
         continue;
@@ -937,6 +982,10 @@ export class Game {
       ch: this.chestsOpened,
       ...(this.sealPending ? { seal: 1 } : {}),
       ...(this.pet ? { pet: this.pet.tuple() } : {}),
+      lv: this.leveling.encode(),
+      ...(this.decoy ? { decoy: [q(this.decoy.x), q(this.decoy.z), q(this.decoy.t)] } : {}),
+      ...(this.mark ? { mark: this.mark.id } : {}),
+      ...(this.ally ? { ally: this.ally.tuple() } : {}),
       ...(this.ambushed.length ? { amb: this.ambushed } : {}),
       powers: this.powers.list().map((pw) => [POWER_CODES.indexOf(pw.type), q(pw.remaining)]),
       cds: c.kind ? FAMILIARS[c.kind].spells.map((id) => [SPELL_IDS.indexOf(id), q(c.cooldowns.remaining(id))]) : [],
@@ -1020,6 +1069,7 @@ export class Game {
 
   private damage(slime: Enemy, dirX: number, dirZ: number, amount = HERO.arrowDamage): void {
     if (this.phase === 'ready' && !this.practice) return; // monsters can't be hurt before the start
+    if (this.mark?.id === slime.id) amount *= 1 + this.leveling.value('huntersmark'); // Hunter's Mark
     const hpBefore = slime.hp;
     const killed = slime.hurt(amount, dirX, dirZ);
     const y = slime.radius;
@@ -1038,6 +1088,8 @@ export class Game {
     if (killed) {
       this.score += Math.round(slime.score * DIFFICULTIES[difficulty()].score);
       this.hud.setScore(this.score);
+      if (!this.practice) this.gainXp(slime.score);
+      if (this.mark?.id === slime.id) this.mark = null;
       this.effects.burst(slime.x, y, slime.z, slime.color, big ? 40 : 22, big ? 8 : 6);
       this.sfx.splat(big);
       this.events.push({ e: 'splat', x: q(slime.x), z: q(slime.z), c: slime.color.getHex(), big });
@@ -1370,6 +1422,50 @@ export class Game {
         this.spellFx(target.x, target.z, 0xd9cbb0, 1.6, 18);
         break;
       }
+      case 'piercing': {
+        const dir = this.aimAt();
+        this.player.faceShot(dir);
+        this.arrows.fire(p.x + dir.x * 0.6, p.z + dir.z * 0.6, dir, true, 0, 0, TREE_VALUES.piercing[this.leveling.rank('piercing') - 1]);
+        this.effects.burst(p.x + dir.x, 1.3, p.z + dir.z, new THREE.Color(0xffe8a0), 12, 4, 0.08);
+        this.sfx.twang();
+        this.shake = Math.max(this.shake, 0.1);
+        break;
+      }
+      case 'rainofarrows': {
+        const at = this.aimedSpot(RAIN.range, 10);
+        this.player.faceShot(this.aim.set(at.x - p.x, 0, at.z - p.z).normalize());
+        this.zones.push({ id: this.nextZoneId++, kind: ZONE_RAIN, x: at.x, z: at.z, r: RAIN.radius, t: RAIN.seconds, healed: true, dmg: TREE_VALUES.rainofarrows[this.leveling.rank('rainofarrows') - 1], tick: 0.3 });
+        this.sfx.twang();
+        break;
+      }
+      case 'huntersmark': {
+        const at = this.aimedSpot(MARK.range, 0);
+        if (!at.foe) {
+          this.hud.toast('👁️ No foe in your sights', 0x9a9a9a);
+          return;
+        }
+        this.mark = { id: at.foe.id, t: MARK.seconds };
+        this.enemies.wake(at.foe);
+        this.spellFx(at.foe.x, at.foe.z, 0xffc23a, at.foe.radius + 0.8, 16);
+        break;
+      }
+      case 'thorntrap': {
+        const traps = this.zones.filter((z) => z.kind === ZONE_THORN);
+        if (traps.length >= TRAP.max) traps[0].t = 0; // the oldest goes
+        const [root, dmg] = TREE_VALUES.thorntrap[this.leveling.rank('thorntrap') - 1];
+        this.zones.push({ id: this.nextZoneId++, kind: ZONE_THORN, x: p.x, z: p.z, r: TRAP.radius, t: TRAP.seconds, healed: true, dmg, root });
+        this.spellFx(p.x, p.z, 0x9ccf5a, TRAP.radius, 14);
+        break;
+      }
+      case 'callforest': {
+        if (this.ally) this.scene.remove(this.ally.group);
+        const back = this.player.aimDirection(this.aim);
+        this.ally = new TreantAlly(p.x - back.x * 2.5, p.z - back.z * 2.5, TREE_VALUES.callforest[this.leveling.rank('callforest') - 1]);
+        this.scene.add(this.ally.group);
+        this.spellFx(this.ally.x, this.ally.z, 0x7dff8a, 2.4, 30);
+        this.sfx.spring();
+        break;
+      }
       case 'mend':
         this.heal(25);
         this.spellFx(p.x, p.z, 0x7dff8a, 2, 24);
@@ -1394,18 +1490,236 @@ export class Game {
     if (bitten && foe) this.damage(foe, foe.x - pet.x, foe.z - pet.z, 7 * (1 + this.heroGear.damage));
   }
 
+  // ── Levels and the skill tree ─────────────────────────────────────────────────────────────
+
+  /** Experience for the party (a kill's score: shared by the hero and the familiar). */
+  private gainXp(amount: number): void {
+    if (this.leveling.addXp(amount) > 0) this.levelUp();
+    this.syncLevel();
+  }
+
+  private levelUp(): void {
+    const lv = this.leveling.level;
+    const p = this.player.position;
+    const tree = !!TREES[this.heroClass];
+    this.banner(`⭐ Level ${lv}${tree ? ' · a skill point (T)' : ''}`);
+    this.effects.ring(p.x, p.z, 0xffd36b, 3.2);
+    this.effects.burst(p.x, 1.2, p.z, new THREE.Color(0xffd36b), 34, 5, 0.12);
+    this.events.push({ e: 'ring', x: q(p.x), z: q(p.z), r: 3.2, c: 0xffd36b });
+    this.sfx.powerUp();
+  }
+
+  /** The XP bar, the tree button's badge and the open panel, from the run's levels. */
+  private syncLevel(): void {
+    const l = this.leveling;
+    this.hud.setXp(l.level, levelProgress(l.xp), MAX_LEVEL);
+    this.hud.actionBar.setTreePoints(TREES[this.heroClass] ? l.points : 0);
+    this.treePanel.update(this.treeView());
+  }
+
+  private treeView(): TreeView {
+    const l = this.leveling;
+    const cost = respecCost(l.level);
+    return {
+      hero: this.heroClass,
+      level: l.level,
+      progress: levelProgress(l.xp),
+      points: l.points,
+      rank: (id) => l.rank(id),
+      block: (id) => l.block(this.heroClass, id),
+      respec: { cost, here: this.phase === 'shop', affordable: this.inv.gold >= cost, anySpent: l.level - 1 > l.points },
+    };
+  }
+
+  private toggleTree(): void {
+    if (this.state !== 'playing' || this.headless) return;
+    if (this.treePanel.isOpen) {
+      this.closeTree();
+      return;
+    }
+    if (this.bagPanel.isOpen && this.phase !== 'shop') this.bagPanel.close();
+    this.treePanel.update(this.treeView());
+    this.treePanel.open();
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  private closeTree(): void {
+    this.treePanel.close();
+    if (this.state === 'playing' && this.phase !== 'shop' && !this.bagPanel.isOpen) this.player.activate();
+  }
+
+  private learnTreeSkill(id: TreeSkillId): void {
+    const rank = this.leveling.learn(this.heroClass, id);
+    if (!rank) return;
+    const skill = treeSkills(this.heroClass).find((s) => s.id === id)!;
+    this.hud.toast(`${skill.icon} ${skill.name} ${['I', 'II', 'III'][rank - 1]}`, 0xffd36b);
+    this.sfx.book();
+    this.applyTree();
+  }
+
+  /** The merchant's respec: every point back, for gold. */
+  private respecTree(): void {
+    const cost = respecCost(this.leveling.level);
+    if (this.phase !== 'shop' || this.inv.gold < cost) return;
+    this.inv.gold -= cost;
+    this.inv.version++;
+    this.leveling.respec();
+    this.hud.toast('↺ Skill points reset', 0xffd36b);
+    this.sfx.coin();
+    this.applyTree();
+  }
+
+  /** The tree changed: passives into the stats, actives onto the bar (or off it, after a respec). */
+  private applyTree(): void {
+    this.refreshGear();
+    const learned = new Set(treeSkills(this.heroClass).filter((s) => s.ability && this.leveling.rank(s.id) > 0).map((s) => s.ability!));
+    // Off the bar: actives no longer learned.
+    this.treeSlots.forEach((id, i) => {
+      if (id && !learned.has(id)) {
+        this.treeSlots[i] = null;
+        this.hud.actionBar.setTreeAbility(i, null);
+      }
+    });
+    // Onto the bar: new actives, in the first slot that's free of spells and other skills.
+    for (const id of learned) {
+      if (this.treeSlots.includes(id)) continue;
+      let slot = -1;
+      for (let i = FIRST_SPELL_SLOT; i < SLOT_COUNT; i++) {
+        if (!this.treeSlots[i] && !this.spellbook.inSlot(i)) {
+          slot = i;
+          break;
+        }
+      }
+      if (slot < 0) {
+        this.hud.toast('No free action slot for it', 0x9a9a9a);
+        continue;
+      }
+      this.treeSlots[slot] = id;
+      this.hud.actionBar.setTreeAbility(slot, id);
+      this.hud.actionBar.flash(slot);
+    }
+    this.syncLevel();
+  }
+
+  /** Clears the tree's actives off the bar (another hero). */
+  private clearTreeSlots(): void {
+    this.treeSlots.forEach((id, i) => {
+      if (id) this.hud.actionBar.setTreeAbility(i, null);
+    });
+    this.treeSlots.length = 0;
+  }
+
+  /** Where an aimed skill lands: on the foe you aim at (within `range`), or `ahead` metres along the aim, short of walls. */
+  private aimedSpot(range: number, ahead: number): { x: number; z: number; foe: Enemy | null } {
+    const p = this.player.position;
+    const dir = this.player.aimDirection(this.aim);
+    const alive = this.enemies.all.filter((s) => s.alive && !s.hidden);
+    const i = pickAimTarget(p, dir.x, dir.z, alive, this.mode === 'touch' ? TOUCH_AIM_ASSIST_ANGLE : AIM_ASSIST_ANGLE, range);
+    if (i >= 0) return { x: alive[i].x, z: alive[i].z, foe: alive[i] };
+    const t = walkMap().raycast(p.x, p.z, p.x + dir.x * ahead, p.z + dir.z * ahead, 0.5) ?? 1;
+    return { x: p.x + dir.x * ahead * t, z: p.z + dir.z * ahead * t, foe: null };
+  }
+
+  /** A dash with Tumble: a decoy left where it started; at rank III one dash every few seconds is free. */
+  private tumble(): void {
+    const r = this.leveling.rank('tumble');
+    if (!r) return;
+    const p = this.player.position;
+    this.decoy = { x: p.x, z: p.z, t: TREE_VALUES.tumble[r - 1] };
+    this.effects.burst(p.x, 1, p.z, new THREE.Color(0x7dff9a), 14, 3, 0.1);
+    if (r >= 3 && this.freeDash <= 0) {
+      this.resources.stamina = Math.min(RESOURCES.maxStamina, this.resources.stamina + 1);
+      this.freeDash = TUMBLE.freeEvery;
+    }
+  }
+
+  /** The tree's lasting effects: the decoy, the mark, the treant. */
+  private updateTreeSkills(dt: number): void {
+    this.freeDash = Math.max(0, this.freeDash - dt);
+    if (this.decoy && (this.decoy.t -= dt) <= 0) this.decoy = null;
+    placeDecoy(this.decoyFx, this.decoy ? { x: this.decoy.x, z: this.decoy.z, left: this.decoy.t } : null, this.time);
+    let marked: Enemy | null = null;
+    if (this.mark) {
+      this.mark.t -= dt;
+      marked = this.enemies.all.find((e) => e.id === this.mark!.id && e.alive) ?? null;
+      if (!marked || this.mark.t <= 0) this.mark = marked = null;
+    }
+    placeMarkRing(this.markRing, marked && !marked.hidden ? marked : null, this.time);
+    const ally = this.ally;
+    if (!ally) return;
+    const p = this.player.position;
+    const foe = this.enemies.all
+      .filter((s) => s.alive && !s.hidden && !this.enemies.isAsleep(s) && Math.hypot(s.x - p.x, s.z - p.z) < 16)
+      .sort((a, b) => Math.hypot(a.x - ally.x, a.z - ally.z) - Math.hypot(b.x - ally.x, b.z - ally.z))[0];
+    const slam = ally.update(dt, p, foe ?? null, this.dungeon.obstacles, this.time);
+    if (slam) {
+      const dmg = TREANT_ALLY.damage[Math.max(0, this.leveling.rank('callforest') - 1)];
+      for (const s of [...this.enemies.all]) {
+        if (!s.alive || s.hidden || Math.hypot(s.x - slam.x, s.z - slam.z) > TREANT_ALLY.radius + s.radius) continue;
+        this.damage(s, s.x - ally.x, s.z - ally.z, dmg);
+      }
+      this.effects.ring(slam.x, slam.z, 0x9ccf5a, TREANT_ALLY.radius);
+      this.effects.burst(slam.x, 0.3, slam.z, new THREE.Color(0x8a6a3a), 14, 4, 0.1);
+      this.events.push({ e: 'ring', x: q(slam.x), z: q(slam.z), r: TREANT_ALLY.radius, c: 0x9ccf5a });
+      this.shake = Math.max(this.shake, 0.12);
+    }
+    if (ally.done) {
+      this.scene.remove(ally.group);
+      this.ally = null;
+    }
+  }
+
+  /** Removes the tree's lasting effects (a new level or run). */
+  private clearTreeEffects(): void {
+    this.decoy = null;
+    this.mark = null;
+    if (this.ally) this.scene.remove(this.ally.group);
+    this.ally = null;
+    placeDecoy(this.decoyFx, null, 0);
+    placeMarkRing(this.markRing, null, 0);
+  }
+
+  /** A Thorn Trap: when foes step in, everyone in it is rooted and hurt, and the trap is spent. */
+  private springTrap(z: { x: number; z: number; r: number; t: number; dmg?: number; root?: number }): void {
+    const inside = this.enemies.all.some((s) => s.alive && !s.hidden && !this.enemies.isAsleep(s) && Math.hypot(s.x - z.x, s.z - z.z) <= z.r + s.radius * 0.5);
+    if (!inside) return;
+    for (const s of this.enemies.stunAround(z.x, z.z, z.r, z.root ?? 2)) this.damage(s, s.x - z.x, s.z - z.z, z.dmg ?? 15);
+    this.spellFx(z.x, z.z, 0x9ccf5a, z.r + 0.6, 26);
+    this.sfx.calm();
+    z.t = 0;
+  }
+
+  /** Rain of Arrows: every tick, everything in the circle is hit. */
+  private rainDown(z: { x: number; z: number; r: number; dmg?: number; tick?: number }, dt: number): void {
+    z.tick = (z.tick ?? 0) - dt;
+    if (z.tick > 0) return;
+    z.tick += RAIN.tick;
+    for (const s of [...this.enemies.all]) {
+      if (!s.alive || s.hidden || Math.hypot(s.x - z.x, s.z - z.z) > z.r + s.radius * 0.5) continue;
+      this.enemies.wake(s);
+      this.damage(s, s.x - z.x, s.z - z.z, z.dmg ?? 4);
+    }
+    for (let i = 0; i < 3; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random()) * z.r;
+      this.effects.burst(z.x + Math.cos(a) * d, 0.2, z.z + Math.sin(a) * d, new THREE.Color(0xfff0c0), 4, 2.5, 0.06);
+    }
+    if (Math.random() < 0.5) this.sfx.twang();
+  }
+
   // ── Gear, the bag and the merchant ────────────────────────────────────────────────────────
 
-  /** Max health: the hero's own, plus gear. */
+  /** Max health: the hero's own, plus gear and Toughness. */
   private get maxHealth(): number {
-    return HEROES[this.heroClass].hp + this.heroGear.maxHp;
+    return HEROES[this.heroClass].hp + this.heroGear.maxHp + this.leveling.value('toughness');
   }
 
   /** A basic attack's damage with gear (and Rage): sometimes a critical (double) hit. */
   private arrowDamage(): number {
     const might = this.powers.has('pierce') ? 1.5 : 1; // the Might power-up
     const preferred = this.weaponType() === HEROES[this.heroClass].preferred ? 1 + PREFERRED_BONUS : 1;
-    const base = this.attack().damage * (1 + this.heroGear.damage) * (this.rage > 0 ? 1.3 : 1) * might * preferred;
+    const keen = 1 + this.leveling.value('keeneye'); // Keen Eye
+    const base = this.attack().damage * (1 + this.heroGear.damage) * (this.rage > 0 ? 1.3 : 1) * might * preferred * keen;
     return Math.random() < this.heroGear.crit ? base * 2 : base;
   }
 
@@ -1426,6 +1740,12 @@ export class Game {
     const def = HEROES[h];
     this.elf.setHeroClass(h);
     this.hud.actionBar.setAbilities(def.skills);
+    // Another hero has another tree: its actives come off the bar (the points stay).
+    if (h !== this.treeHero) {
+      this.leveling.respec();
+      this.clearTreeSlots();
+      this.treeHero = h;
+    }
     this.shieldWall = this.rage = 0;
     this.elf.setGuard(false);
     if (def.pet && !this.pet) {
@@ -1435,7 +1755,7 @@ export class Game {
       this.scene.remove(this.pet.group);
       this.pet = null;
     }
-    this.refreshGear();
+    this.applyTree();
     this.health = this.maxHealth;
     this.hud.setHealth(this.health);
   }
@@ -1445,10 +1765,10 @@ export class Game {
     this.gearVersion = this.inv.version;
     this.heroGear = this.inv.heroStats();
     this.famGear = this.inv.familiarStats();
-    this.player.speedScale = 1 + this.heroGear.moveSpeed;
+    this.player.speedScale = (1 + this.heroGear.moveSpeed) * (1 + this.leveling.value('fleetfoot'));
     this.elf.setWeapon(this.weaponType());
     this.resources.manaBonus = this.heroGear.manaRegen + HEROES[this.heroClass].mana;
-    this.resources.staminaBonus = this.heroGear.staminaRegen;
+    this.resources.staminaBonus = this.heroGear.staminaRegen + this.leveling.value('fleetfoot') * FLEET_STAMINA;
     this.companion.cooldownScale = 1 - this.famGear.famCooldown;
     this.companion.speedScale = 1 + this.famGear.famSpeed;
     this.hud.setMaxHealth(this.maxHealth);

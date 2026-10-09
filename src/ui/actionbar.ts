@@ -1,4 +1,4 @@
-import { ABILITIES, DEFAULT_KEYS, DEFAULT_SLOTS, RESOURCES, bindKey, keyLabel, loadKeys, saveKeys, type AbilityId, type Resources } from '../game/abilities';
+import { ABILITIES, DEFAULT_KEYS, DEFAULT_SLOTS, RESOURCES, SLOT_COUNT, bindKey, keyLabel, loadKeys, saveKeys, type AbilityId, type Resources } from '../game/abilities';
 
 /** What a slot shows: an ability (skills) or a learned spell. */
 export interface SlotDef {
@@ -13,12 +13,12 @@ export interface SlotDef {
 }
 
 const abilitySlot = (id: AbilityId): SlotDef => ({ ...ABILITIES[id], description: ABILITIES[id].description });
-const EMPTY_TITLE = 'Empty: read a spell book to learn a spell';
+const EMPTY_TITLE = 'Empty: learn a skill from the skill tree (T), or read a spell book';
 
 /**
  * The elf's resources and abilities on screen: a mana bar and stamina pips (under the health
- * bar), the nine-slot action bar along the bottom (tap a slot on touch screens), and the
- * key-binding panel opened from the title / pause screen.
+ * bar), the twelve-slot action bar along the bottom (tap a slot on touch screens) with the skill
+ * tree and bag buttons, and the key-binding panel opened from the title / pause screen.
  */
 export class ActionBar {
   /** Current key for each slot (KeyboardEvent.code). */
@@ -26,8 +26,9 @@ export class ActionBar {
   /** True while the panel waits for a key to bind. */
   rebinding = false;
   onUse?: (slot: number) => void;
-  /** The bag button at the end of the bar. */
+  /** The bag and skill tree buttons at the end of the bar. */
   onBag?: () => void;
+  onTree?: () => void;
   private readonly bar: HTMLElement;
   private readonly slots: HTMLElement[];
   private readonly manaFill: HTMLElement;
@@ -35,10 +36,11 @@ export class ActionBar {
   private readonly pips: HTMLElement;
   private readonly panel: HTMLElement;
   private lastKey = '';
-  /** What's in each of the nine slots. */
+  /** What's in each slot. */
   private readonly defs: (SlotDef | null)[] = DEFAULT_SLOTS.map((id) => (id ? abilitySlot(id) : null));
-  /** The skills in slots 1–3 (they depend on the hero). */
+  /** The skills in the slots: the hero's in 1–3, the skill tree's actives after them. */
   private readonly abilityIds: (AbilityId | null)[] = [...DEFAULT_SLOTS];
+  private readonly treeBadge: HTMLElement;
 
 
   constructor(hudLeft: HTMLElement, root: HTMLElement, touch: boolean) {
@@ -54,16 +56,24 @@ export class ActionBar {
     this.pips = hudLeft.querySelector('.stamina')!;
 
     const slotHtml = this.defs.map((_, i) => `<button type="button" class="slot" data-slot="${i}"></button>`).join('');
+    const treeHtml = '<button type="button" class="slot tree-slot" data-tree-open title="Skill tree (T)"><span class="slot-key">T</span><span class="slot-icon">⭐</span><span class="tree-badge" hidden></span></button>';
     const bagHtml = '<button type="button" class="slot bag-slot" data-bag-open title="Bag (I)"><span class="slot-key">I</span><span class="slot-icon">🎒</span></button>';
-    root.insertAdjacentHTML('beforeend', `<div class="action-bar${touch ? ' touch-bar' : ''}" hidden>${slotHtml}${bagHtml}</div>`);
+    root.insertAdjacentHTML('beforeend', `<div class="action-bar${touch ? ' touch-bar' : ''}" hidden>${slotHtml}${treeHtml}${bagHtml}</div>`);
     this.bar = root.querySelector('.action-bar')!;
     this.slots = [...this.bar.querySelectorAll<HTMLElement>('.slot[data-slot]')];
+    this.treeBadge = this.bar.querySelector('.tree-badge')!;
     this.defs.forEach((_, i) => this.renderSlot(i));
     this.bar.addEventListener('pointerdown', (e) => {
       if ((e.target as HTMLElement).closest('[data-bag-open]')) {
         e.preventDefault();
         e.stopPropagation();
         this.onBag?.();
+        return;
+      }
+      if ((e.target as HTMLElement).closest('[data-tree-open]')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onTree?.();
         return;
       }
       const slot = (e.target as HTMLElement).closest<HTMLElement>('[data-slot]');
@@ -77,9 +87,9 @@ export class ActionBar {
       'beforeend',
       `<div class="keys-panel" data-keys-panel hidden>
          <div class="keys-head"><h2>⚙️ Keys</h2><button type="button" data-keys-close>✕</button></div>
-         <p class="keys-note">Click a slot, then press the key you want. Space always dashes; WASD, Esc, M, Enter, I / B (bag) and Q / E (potions) are taken.</p>
+         <p class="keys-note">Click a slot, then press the key you want. Space always dashes; WASD, Esc, M, Enter, I / B (bag), T (skill tree) and Q / E (potions) are taken.</p>
          <div class="keys-list"></div>
-         <button type="button" class="keys-reset" data-keys-reset>Reset to 1–9</button>
+         <button type="button" class="keys-reset" data-keys-reset>Reset to 1–9, 0, -, =</button>
        </div>`,
     );
     this.panel = root.querySelector('[data-keys-panel]')!;
@@ -88,7 +98,7 @@ export class ActionBar {
       const t = e.target as HTMLElement;
       if (t.closest('[data-keys-close]')) this.closePanel();
       if (t.closest('[data-keys-reset]')) {
-        this.keys.splice(0, 9, ...DEFAULT_KEYS);
+        this.keys.splice(0, SLOT_COUNT, ...DEFAULT_KEYS);
         saveKeys(this.keys);
         this.renderPanel();
       }
@@ -144,6 +154,20 @@ export class ActionBar {
       this.setSlotCharges(i, 0);
       this.setSlot(i, abilitySlot(id));
     });
+  }
+
+  /** Puts a skill-tree active (or nothing) in slot `i`. */
+  setTreeAbility(i: number, id: AbilityId | null): void {
+    this.abilityIds[i] = id;
+    this.setSlotCharges(i, 0);
+    this.setSlot(i, id ? abilitySlot(id) : null);
+  }
+
+  /** The skill tree button's badge: points waiting to be spent (0 hides it). */
+  setTreePoints(n: number): void {
+    this.treeBadge.hidden = n <= 0;
+    this.treeBadge.textContent = String(n);
+    this.bar.querySelector('.tree-slot')!.classList.toggle('has-points', n > 0);
   }
 
   /** Puts a learned spell (or nothing) in slot `i`. */
@@ -209,7 +233,7 @@ export class ActionBar {
 
   private renderPanel(): void {
     this.panel.querySelector('.keys-list')!.innerHTML = this.defs.map((d, i) => {
-      const name = d ? `${d.icon} ${d.name}` : '<span class="keys-empty">empty (spells)</span>';
+      const name = d ? `${d.icon} ${d.name}` : '<span class="keys-empty">empty (skills, spells)</span>';
       return `<button type="button" class="keys-row" data-bind="${i}"><span>Slot ${i + 1} · ${name}</span><kbd>${keyLabel(this.keys[i])}</kbd></button>`;
     }).join('');
     this.renderKeys();

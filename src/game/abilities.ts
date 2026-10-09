@@ -4,7 +4,10 @@
  * and rules, unit tested; Game applies the effects.
  */
 
-export type AbilityId = 'dash' | 'windwalk' | 'doubleshot' | 'shieldwall' | 'bash' | 'blink' | 'fireball' | 'frostring' | 'whirlwind' | 'rage' | 'sic' | 'mend';
+export type AbilityId =
+  | 'dash' | 'windwalk' | 'doubleshot' | 'shieldwall' | 'bash' | 'blink' | 'fireball' | 'frostring' | 'whirlwind' | 'rage' | 'sic' | 'mend'
+  // From the skill tree (progression.ts):
+  | 'piercing' | 'rainofarrows' | 'huntersmark' | 'thorntrap' | 'callforest';
 
 export interface AbilityDef {
   name: string;
@@ -28,10 +31,16 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
   rage: { name: 'Rage', icon: '😡', kind: 'skill', cost: 2, description: 'For 6 s, swing 50% faster and hit 30% harder.' },
   sic: { name: 'Sic ’Em', icon: '🐺', kind: 'skill', cost: 1, description: 'Your wolf leaps at the nearest foe for 30 damage.' },
   mend: { name: 'Mend', icon: '🌿', kind: 'skill', cost: 2, description: 'Heal yourself 25 and your wolf fully.' },
+  piercing: { name: 'Piercing Arrow', icon: '➶', kind: 'skill', cost: 2, description: 'A heavy arrow through every foe in its line.' },
+  rainofarrows: { name: 'Rain of Arrows', icon: '🌧️', kind: 'skill', cost: 3, description: 'Arrows rain on a 5 m circle where you aim for 3 s.' },
+  huntersmark: { name: 'Hunter’s Mark', icon: '👁️', kind: 'skill', cost: 1, description: 'The foe you aim at takes more damage for 8 s and shows through walls.' },
+  thorntrap: { name: 'Thorn Trap', icon: '🌿', kind: 'skill', cost: 1, description: 'A trap at your feet roots and hurts the first foes in it (two at once).' },
+  callforest: { name: 'Call of the Forest', icon: '🌳', kind: 'skill', cost: 3, description: 'A treant fights beside you for a while.' },
 };
 
-/** What sits in each of the nine slots (spells from the magic book will fill the empty ones). */
-export const DEFAULT_SLOTS: (AbilityId | null)[] = ['dash', 'windwalk', 'doubleshot', null, null, null, null, null, null];
+/** Action slots: the hero's three skills, then skill-tree actives and spells as they're learned. */
+export const SLOT_COUNT = 12;
+export const DEFAULT_SLOTS: (AbilityId | null)[] = ['dash', 'windwalk', 'doubleshot', ...Array<null>(SLOT_COUNT - 3).fill(null)];
 
 export const RESOURCES = {
   maxMana: 100,
@@ -102,13 +111,16 @@ export class Resources {
 // ── Key bindings ────────────────────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'elf-and-crab:keys';
-export const DEFAULT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
+export const DEFAULT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal'];
 
 /** Keys that are already taken by movement and the menus. */
-export const RESERVED_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'KeyM', 'Enter', 'NumpadEnter', 'KeyI', 'KeyB', 'KeyQ', 'KeyE']);
+export const RESERVED_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'KeyM', 'Enter', 'NumpadEnter', 'KeyI', 'KeyB', 'KeyQ', 'KeyE', 'KeyT']);
 
-/** "Digit1" → "1", "KeyQ" → "Q", "Space" → "Space". */
+/** "Digit1" → "1", "KeyQ" → "Q", "Minus" → "-", "Space" → "Space". */
 export function keyLabel(code: string): string {
+  if (code.startsWith('Unbound')) return '–';
+  if (code === 'Minus') return '-';
+  if (code === 'Equal') return '=';
   if (code.startsWith('Digit')) return code.slice(5);
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Numpad')) return `Num ${code.slice(6)}`;
@@ -119,8 +131,12 @@ export function loadKeys(storage: Pick<Storage, 'getItem'> | null = safeStorage(
   try {
     const saved = JSON.parse(storage?.getItem(STORAGE_KEY) ?? 'null') as unknown;
     // Keys taken by something else since they were saved fall back to the default for that slot.
-    if (Array.isArray(saved) && saved.length === 9 && saved.every((k) => typeof k === 'string' && k.length < 32))
-      return (saved as string[]).map((k, i) => (RESERVED_KEYS.has(k) && !(saved as string[]).includes(DEFAULT_KEYS[i]) ? DEFAULT_KEYS[i] : k));
+    // (Saved before the bar grew from 9 slots to 12: the new slots get their default keys, unless taken.)
+    if (Array.isArray(saved) && (saved.length === 9 || saved.length === SLOT_COUNT) && saved.every((k) => typeof k === 'string' && k.length < 32)) {
+      const keys = (saved as string[]).map((k, i) => (RESERVED_KEYS.has(k) && !(saved as string[]).includes(DEFAULT_KEYS[i]) ? DEFAULT_KEYS[i] : k));
+      for (let i = keys.length; i < SLOT_COUNT; i++) keys.push(keys.includes(DEFAULT_KEYS[i]) ? `Unbound${i}` : DEFAULT_KEYS[i]);
+      return keys;
+    }
   } catch {
     // fall through to the defaults
   }

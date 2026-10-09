@@ -12,6 +12,12 @@ export function hpBarHtml(health: number, max: number): string {
   return `<div class="hp ${tone}"><span class="hp-heart">♥</span><div class="hp-track"><div class="hp-fill" style="width:${pct}%"></div></div><b>${hp}</b></div>`;
 }
 
+/** The party's level and experience: a star with the level, and a thin bar to the next. */
+export function xpBarHtml(level: number, progress: number, max: number): string {
+  const pct = level >= max ? 100 : Math.max(0, Math.min(100, progress * 100));
+  return `<div class="xp${level >= max ? ' maxed' : ''}" title="Party level ${level}${level >= max ? ' (max)' : ''}"><span class="xp-level">⭐ ${level}</span><div class="xp-track"><div class="xp-fill" style="width:${pct}%"></div></div></div>`;
+}
+
 export function powerChipsHtml(list: { type: PowerUpType; remaining: number }[]): string {
   return list
     .map(({ type, remaining }) => {

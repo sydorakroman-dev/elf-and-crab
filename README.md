@@ -44,7 +44,7 @@ play and the final level have no seal. In the practice room, the 🔮 button sta
 ## Heroes
 
 Pick your hero on the title screen (remembered). Each fights differently; skills sit in slots 1–3
-(stamina), spells from books in 4–9 (mana). Each hero has its own animated model, delivered to the
+(stamina), skill-tree skills and spells from books in 4–12. Each hero has its own animated model, delivered to the
 spec below with idle, walk, run, an attack per weapon type, skill, hit, death, victory and jump clips (older
 built-in-code versions, `scripts/models/build-heroes.mjs`, are the fallback).
 
@@ -86,22 +86,48 @@ Death / Victory): see [`docs/hero-model-spec.md`](docs/hero-model-spec.md).
 ## Skills and spells
 
 The elf has **stamina** (5 charges, one back every 4 s) and **mana** (a 100-point bar, refilling 4 per second).
-Skills cost stamina, spells cost mana. Nine action slots, used with keys **1–9** (rebind them under **⚙️ Keys** on
-the title / pause screen; saved in your browser); on touch screens, tap the slots.
+Skills cost stamina, spells cost mana. Twelve action slots, used with keys **1–9, 0, -, =** (rebind them under
+**⚙️ Keys** on the title / pause screen; saved in your browser); on touch screens, tap the slots. Then the ⭐ skill
+tree (**T**) and the 🎒 bag (**I**).
 
 | Slot | | Cost | |
 | --- | --- | --- | --- |
 | 1 | 💨 **Dash** (also Space) | 1 stamina | a quick dash; you can't be hit while dashing |
 | 2 | 🌬️ **Wind Walk** | 2 stamina | invisible for 3 s: enemies lose track of you and head for where you vanished; shooting breaks it |
 | 3 | 🏹 **Double Shot** | 1 stamina | the next 3 shots fire two arrows side by side |
-| 4–9 | spells | mana | learned from **spell books** (below) |
+| 4–12 | skill-tree skills and spells | stamina / mana | from the **skill tree** (next) and **spell books** (below), each into the first free slot |
+
+### Levels and the skill tree
+
+Every kill gives the party **experience** (the foe's score) — shared by the hero and the familiar, so they're always
+the same level. Levels go from **1 to 12** and start over each run (a run continued from a later level starts with
+about the experience it would have by then); clearing about half of each level's foes reaches ~4 after the Woodland
+and 12 by the Ash King. The level and the way to the next show under the health bar (on the tablet too); a level-up
+plays a golden ring and a banner.
+
+Each level after the first gives a **skill point** (11 in a run) for the hero's **skill tree** (**T**, or the ⭐
+button, which glows while points wait). There are no other stat gains — the tree's passive skills are the stats.
+Every skill has three ranks; some need another first. With 27 ranks in the tree and 11 points, a run never takes
+everything. The tree pauses a solo game (not with a familiar along). At the **merchant's camp**, the points can be
+reset for gold (40 × level).
+
+**The Elf Archer's tree** (the other heroes' come next; until then they level up and keep their points):
+
+| | Marksman | Ranger | Wildcraft |
+| --- | --- | --- | --- |
+| 1 | 🎯 **Keen Eye** (passive): +10 / 20 / 30% arrow damage | 🍃 **Fleet Foot** (passive): +6 / 12 / 18% speed, stamina back 10 / 20 / 30% faster | 🌰 **Toughness** (passive): +15 / 30 / 45 max health |
+| 2 | ➶ **Piercing Arrow** (2 stamina; needs Keen Eye I): a heavy arrow through every foe in its line, 30 / 45 / 60 | 🤸 **Tumble** (Dash upgrade; needs Fleet Foot I): a dash leaves a decoy the foes chase for 2 / 3.5 / 5 s; at III one dash every 8 s is free | 🌿 **Thorn Trap** (1 stamina; needs Toughness I): a trap at your feet roots the first foes in it 2 / 2.5 / 3 s and deals 15 / 25 / 35; two at once |
+| 3 | 🌧️ **Rain of Arrows** (3 stamina; needs Piercing Arrow II): arrows rain on a 5 m circle where you aim for 3 s, 4 / 6 / 8 to each foe every ¼ s | 👁️ **Hunter's Mark** (1 stamina; needs Tumble I): the foe you aim at takes +20 / 30 / 40% damage from both of you for 8 s, and shows through walls | 🌳 **Call of the Forest** (3 stamina; needs Thorn Trap II): a treant rises and fights beside you for 12 / 16 / 20 s (slams for 14 / 18 / 22 round where it hits) |
+
+The tree's data and rules are in `src/game/progression.ts` (unit tested); the panel is `src/ui/skilltree.ts`.
 
 ### Spells and loot
 
 Monsters drop **gold** (more from tough ones, guardians and later levels) and now and then a **spell book**;
 guardians always drop one, and **treasure chests** in the levels' dead-end side rooms hold gold and often a book.
 Coins fly to whoever's near — the familiar can pick up loot too, for the party. A book teaches a new spell into the
-first free slot (4–9), or raises one you know a rank (I → II → III); once all six slots are full, books only rank up.
+first free slot (4–12, shared with the skill tree's skills), or raises one you know a rank (I → II → III); once the
+slots are full, books only rank up.
 
 | Spell | Mana | Rank I (II and III are stronger) |
 | --- | --- | --- |
