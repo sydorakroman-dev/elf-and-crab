@@ -167,8 +167,8 @@ export class FamiliarHud {
       'beforeend',
       `<div class="seal" data-seal hidden>
          <div class="seal-stone">
-           <div class="seal-title">✦ Rune Seal ✦</div>
-           <div class="seal-sub">The door is bound by old magic. Solve the runes to break it.</div>
+           <div class="seal-title" data-seal-title>✦ Rune Seal ✦</div>
+           <div class="seal-sub" data-seal-sub>The door is bound by old magic. Solve the runes to break it.</div>
            <div class="seal-gems" data-seal-gems></div>
            <div class="seal-riddle" data-seal-riddle></div>
            <div class="seal-choices" data-seal-choices></div>
@@ -319,6 +319,9 @@ export class FamiliarHud {
     const missed = (r.m ?? 0) > this.sealMisses;
     this.sealMisses = r.m ?? 0;
     this.sealKey = key;
+    // The door's seal, or Sir Aldric's rune stones (Q02).
+    this.seal.querySelector('[data-seal-title]')!.textContent = r.k ? '✦ Sir Aldric’s Rune ✦' : '✦ Rune Seal ✦';
+    this.seal.querySelector('[data-seal-sub]')!.textContent = r.k ? 'A spell binds the knight’s spirit. Solve the rune to break this stone!' : 'The door is bound by old magic. Solve the runes to break it.';
     this.seal.querySelector('[data-seal-gems]')!.innerHTML = Array.from({ length: r.t }, (_, i) => `<span class="gem${i < r.n ? ' lit' : ''}"></span>`).join('');
     this.seal.querySelector('[data-seal-riddle]')!.innerHTML = `<span>${r.a}</span><span class="op">${r.op}</span><span>${r.b}</span><span class="op">=</span><span class="q">?</span>`;
     this.seal.querySelector('[data-seal-choices]')!.innerHTML = r.c.map((v) => `<button type="button" class="rune" data-answer="${v}">${v}</button>`).join('');
@@ -363,7 +366,7 @@ export class FamiliarHud {
       this.powersKey = key;
       this.powers.innerHTML = powerChipsHtml(list);
     }
-    const w = s.seal ? '🔮 Go to the exit door (follow the light) to break the rune seal' : s.rid && !s.practice ? `🔮 Break the rune seal to open the door (${s.rid.n}/${s.rid.t})` : s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.remaining, s.phase, s.boss?.name ?? null);
+    const w = s.seal ? '🔮 Go to the exit door (follow the light) to break the rune seal' : s.rid?.k ? `🔵 Break Sir Aldric’s rune stones (${s.rid.n}/3)` : s.rid && !s.practice ? `🔮 Break the rune seal to open the door (${s.rid.n}/${s.rid.t})` : s.practice ? '🧪 Practice room' : s.phase === 'ready' ? 'Waiting for the elf to start…' : runLabel(s.room, s.remaining, s.phase, s.boss?.name ?? null);
     if (this.wave.textContent !== w) this.wave.textContent = w;
     this.score.textContent = String(s.score);
     const g = `🪙 ${s.gold ?? 0}`;

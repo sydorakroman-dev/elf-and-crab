@@ -1,7 +1,7 @@
 # Elf & Crab — Quests
 
 - **Version:** 0.1 · 2026-10-09
-- **Status:** approved. **Q01 is implemented** (`src/game/quests.ts`, `src/game/fox.ts`); Q02 and Q03 are designed, not built yet.
+- **Status:** approved, and all three are implemented: Q01 (`src/game/fox.ts`), Q02 (`src/game/knight.ts`) and Q03 (`src/game/cages.ts`), with the rules and placement in `src/game/quests.ts`.
 - **Owner:** design (written by Claude for review)
 - **Method:** written to `RPG_Quest_and_Campaign_Design_Guide.md`:
   - a brief built from established canon and assumptions;
@@ -448,3 +448,12 @@ Results without playtest evidence are marked *design-checked*. **Nothing has bee
   - The shortcut is the foxes' **burrow**: step into it at the oak, come out just south of the guardian's hall. This replaces a bush wall opening into a carved path; it has the same outcome without changing the level's walls mid-run.
   - The Lantern Charm drops as loot at the den, so either player can pick it up.
   - No persistent memory across runs yet (§7.4).
+- 0.3 (2026-10-10): Q02 and Q03 built. Open questions settled: **F** is the interact key, and the camp's alarm timer keeps running in co-op while a panel is open. Changes from the design while building:
+  - **Where they happen:** each level's *middle* landmark. That's the Weeping Obelisk in the Crypt and the Chieftain's Standard in the camp. The Grave Obelisk and the War Banner are the southern landmarks, too near the start.
+  - **Q03 unlatching:** stand at the cage (2 s for the familiar, 3 s for the hero), instead of a hold button. Progress is kept if you step away.
+  - **Q03 sneaking:** packs only wake for the hero (and Wind Walk hides the hero), so sneaking up to the cages is naturally the familiar's job.
+  - **Q03 alarm reach:** an alarm reaches the captives only if it's raised near the cages (20 m) or near a war horn still standing (25 m). Otherwise packs woken at the far end of the camp, before you've seen the cages, would move them unseen. The horns are inert "monsters" (60 HP): arrows, swings and aim-assist work on them. With all three broken, the camp can't be raised at all.
+  - **Q03 never found:** if the captives were never found, the merchant says nothing (no potion).
+  - **Q02 rune stones:** they're inert props too. The familiar standing at one gets its riddle in the Rune Seal panel, titled "Sir Aldric's Rune". Playing solo, the hero breaks them in order by hitting them (a ring marks the next).
+  - **Q02 taking the blade:** hold **F**, or hold the prompt that appears over the action bar (touch). Letting go starts the 1.5 s over; being knocked briefly out of reach only pauses it.
+  - **Tracker:** finished lines show for 10 s, then go. The tracker moves below the boss bar during a boss fight.

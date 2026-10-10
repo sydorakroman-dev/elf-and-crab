@@ -59,9 +59,9 @@ describe('key bindings', () => {
     const store = new Map<string, string>();
     const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
     const keys = [...DEFAULT_KEYS];
-    bindKey(keys, 4, 'KeyF');
+    bindKey(keys, 4, 'KeyG');
     saveKeys(keys, storage);
-    expect(loadKeys(storage)[4]).toBe('KeyF');
+    expect(loadKeys(storage)[4]).toBe('KeyG');
     store.set('elf-and-crab:keys', '"nonsense"');
     expect(loadKeys(storage)).toEqual(DEFAULT_KEYS);
   });

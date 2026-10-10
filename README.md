@@ -172,7 +172,28 @@ level label on both screens. They're placed from the level's seed, so the tablet
   (familiar +10% speed) drops, and the foxes' burrow opens. Step in at the oak and come out just outside the
   guardian's hall. If the guardian falls first, the kit finds its own way home (no reward).
 
-Next: The Knight Who Would Not Rest (the Crypt) and Cages of the War Camp (the orc camp).
+- 🔵 **The Knight Who Would Not Rest** (the Crypt): Sir Aldric's glowing tomb stands by the Weeping Obelisk, with
+  three rune stones round it. Choose one:
+  - **Free him:** the familiar stands at each stone and solves its riddle (the Rune Seal panel) while the hero
+    holds off the skeletons each broken stone raises. Playing solo, the hero breaks the stones in order. Freed
+    (+250 XP), he fights beside you against the Necromancer, who can raise fewer skeletons with him there.
+  - **Take his blade:** hold **F** (or the prompt over the action bar) at the lid for 1.5 s. You get **Aldric's
+    Oath**, an epic sword, and +100 XP, but at 75% health the Necromancer raises Aldric against you.
+
+  Breaking a rune locks out the blade, and opening the lid ends the freeing.
+- 🔓 **Cages of the War Camp** (the orc camp): the merchant before the camp asks you to free his brother Pip and
+  the caravan folk, caged by a sleeping guard pack near the Chieftain's Standard. Stand at a cage to unlatch it
+  (familiar 2 s, hero 3 s). Packs only wake for the hero, so the familiar is the one to sneak in. If the camp is
+  raised near the cages, or near a **war horn** still standing, the guards take whoever's still caged to the keep
+  in 20 s (35 s with a horn broken). They're freed when the Chieftain falls. Break all three horns (60 HP each)
+  and the camp can't be raised at all. XP: +150 per captive freed straight away, +50 per one freed after the
+  battle. The next merchant thanks you:
+  - **all three freed:** a quarter off everything and an extra rare item;
+  - **some freed:** 10% off;
+  - **only freed after the battle:** a free health potion.
+
+**F** is the interact key (holding the on-screen prompt works on touch). Finished quests show on the tracker for
+10 s.
 
 ## The run
 

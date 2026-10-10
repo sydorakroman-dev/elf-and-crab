@@ -2,39 +2,85 @@ import * as THREE from 'three';
 import type { BeastPose } from './beastVisual';
 import { clampToArena, pushOutOfCircles, type Circle, type Point } from './combat';
 import { ElementalVisual } from './elementalVisual';
+import { MonsterVisual } from './monsterVisual';
 import { TREANT_ALLY } from './progression';
-
-const SPEED = 5.5;
-const HEIGHT = 2.7;
-/** Where it stands when there's nothing to fight: beside and behind the hero. */
-const HEEL = 2.8;
-/** Seconds to grow out of the ground / sink back. */
-const GROW = 0.6;
+import { KNIGHT } from './quests';
 
 /**
- * Call of the Forest: a treant (the woodland treant's model, tinted a friendly fresh green) that
- * rises beside the hero, stomps to the nearest awake foe close by and slams it (hurting everything
- * round where its fists land), then sinks back into the ground when its time is up. Invulnerable.
+ * Who fights beside the hero:
+ * - **treant:** Call of the Forest, the elf's skill tree.
+ * - **aldric:** Sir Aldric's spirit, freed in the Crypt (Q02, docs/quests.md).
  */
-export class TreantAlly {
-  readonly visual = new ElementalVisual('treant', HEIGHT);
+export type AllyKind = 'treant' | 'aldric';
+export const ALLY_KINDS: AllyKind[] = ['treant', 'aldric']; // index = wire code
+
+interface AllyLook {
+  /** Builds its visual. */
+  make: () => { group: THREE.Group; apply: (p: BeastPose, dt: number, time: number) => void };
+  height: number;
+  speed: number;
+  /** Its strike: every `every` s, reaching `reach` m, hurting everything within `radius` of where it lands. */
+  every: number;
+  reach: number;
+  radius: number;
+  /** Seconds to rise into the world / fade away. */
+  grow: number;
+  /** Rises out of the ground (the treant), or fades in like a ghost (Sir Aldric). */
+  ghost: boolean;
+  /** Tint: colour, and how far toward it. */
+  tint: [number, number];
+}
+
+const LOOKS: Record<AllyKind, AllyLook> = {
+  treant: { make: () => new ElementalVisual('treant', 2.7), height: 2.7, speed: 5.5, every: TREANT_ALLY.every, reach: TREANT_ALLY.reach, radius: TREANT_ALLY.radius, grow: 0.6, ghost: false, tint: [0x7fe08a, 0.3] },
+  aldric: { make: () => new MonsterVisual('knight'), height: 2.4, speed: 6.5, every: KNIGHT.ally.every, reach: 1.8, radius: KNIGHT.ally.radius, grow: 0.9, ghost: true, tint: [0x8fc8ff, 0.65] },
+};
+
+/** Where it stands when there's nothing to fight: beside and behind the hero. */
+const HEEL = 2.8;
+
+/**
+ * An ally: rises (or fades in) beside the hero, goes for the nearest awake foe close by and strikes
+ * it (hurting everything round where the blow lands), and leaves when its time is up. It can't be
+ * hurt. The hero's browser runs it; the tablet shows it from the snapshot.
+ */
+export class Ally {
+  readonly kind: AllyKind;
+  private readonly look: AllyLook;
+  private readonly visual: ReturnType<AllyLook['make']>;
+  private readonly mats: THREE.Material[] = [];
   private readonly pose: BeastPose = { x: 0, z: 0, yaw: 0, y: 0, speed: 0, act: 0, mode: 0, flash: 0, stun: 0, death: 0, calm: 0 };
-  private slamTimer = 0.6;
+  private strikeTimer = 0.6;
   private age = 0;
   private grow = 0;
-  /** Seconds left. */
+  /** Seconds left (Infinity: until told to go). */
   life: number;
 
-  constructor(x: number, z: number, seconds: number) {
+  constructor(kind: AllyKind, x: number, z: number, seconds: number) {
+    this.kind = kind;
+    this.look = LOOKS[kind];
+    this.visual = this.look.make();
     this.pose.x = x;
     this.pose.z = z;
     this.life = seconds;
+    const [color, k] = this.look.tint;
     this.visual.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
       const m = mesh.material as THREE.MeshToonMaterial | undefined;
-      if (!mesh.isMesh || !m || o.userData.outline) return;
-      mesh.material = m.clone();
-      (mesh.material as THREE.MeshToonMaterial).color.lerp(new THREE.Color(0x7fe08a), 0.3);
+      if (!mesh.isMesh || !m) return;
+      if (o.userData.outline) {
+        if (this.look.ghost) o.visible = false; // a ghost has no hard outline
+        return;
+      }
+      const c = m.clone();
+      c.color.lerp(new THREE.Color(color), k);
+      if (this.look.ghost) {
+        c.transparent = true;
+        c.depthWrite = false;
+        if ('emissive' in c) c.emissive.setHex(0x2a5a9a);
+      }
+      mesh.material = c;
+      this.mats.push(c);
     });
     this.apply(0, 0);
   }
@@ -52,17 +98,20 @@ export class TreantAlly {
     return this.life <= 0 && this.grow <= 0;
   }
 
-  /**
-   * Moves; returns where a slam lands this step (everything within TREANT_ALLY.radius takes the
-   * hit), or null.
-   */
+  /** Tells it to go (fading / sinking away). */
+  dismiss(): void {
+    this.life = Math.min(this.life, 0);
+  }
+
+  /** Moves; returns where its blow lands this step, or null. */
   update(dt: number, hero: Point, foe: Point | null, obstacles: readonly Circle[], time: number): Point | null {
     const p = this.pose;
+    const look = this.look;
     this.age += dt;
     this.life -= dt;
-    this.grow = THREE.MathUtils.clamp(this.life > 0 ? this.age / GROW : this.grow - dt / GROW, 0, 1);
-    this.slamTimer = Math.max(0, this.slamTimer - dt);
-    let slam: Point | null = null;
+    this.grow = THREE.MathUtils.clamp(this.life > 0 ? this.age / look.grow : this.grow - dt / look.grow, 0, 1);
+    this.strikeTimer = Math.max(0, this.strikeTimer - dt);
+    let strike: Point | null = null;
     p.mode = 0;
     p.speed = 0;
     if (this.life > 0 && this.grow >= 1) {
@@ -70,47 +119,52 @@ export class TreantAlly {
       const dx = goal.x - p.x;
       const dz = goal.z - p.z;
       const d = Math.hypot(dx, dz);
-      const stop = foe ? TREANT_ALLY.reach : 1.5;
+      const stop = foe ? look.reach : 1.5;
       if (Math.hypot(hero.x - p.x, hero.z - p.z) > 40) {
         p.x = hero.x - 2;
         p.z = hero.z - 1;
       } else if (d > stop) {
-        const speed = Math.min(SPEED, d * 4);
+        const speed = Math.min(look.speed, d * 4);
         p.x += (dx / d) * speed * dt;
         p.z += (dz / d) * speed * dt;
         p.speed = speed;
       }
       if (d > 0.1) p.yaw = Math.atan2(dx, dz);
-      if (foe && d <= TREANT_ALLY.reach + 0.6 && this.slamTimer === 0) {
-        this.slamTimer = TREANT_ALLY.every;
-        slam = { x: p.x + (dx / (d || 1)) * Math.min(d, TREANT_ALLY.reach), z: p.z + (dz / (d || 1)) * Math.min(d, TREANT_ALLY.reach) };
+      if (foe && d <= look.reach + 0.6 && this.strikeTimer === 0) {
+        this.strikeTimer = look.every;
+        const r = Math.min(d, look.reach);
+        strike = { x: p.x + (dx / (d || 1)) * r, z: p.z + (dz / (d || 1)) * r };
       }
-      // Wind-up then the slam, shown by the arms.
-      if (this.slamTimer > TREANT_ALLY.every - 0.35) p.mode = 2;
+      // The blow, shown by the arms.
+      if (this.strikeTimer > look.every - 0.35) p.mode = 2;
       p.act = p.mode === 2 ? 1 : 0;
     }
     pushOutOfCircles(p, 1, obstacles.filter((o) => !o.low));
     clampToArena(p, 1);
     this.apply(dt, time);
-    return slam;
+    return strike;
   }
 
   private apply(dt: number, time: number): void {
-    // Rises out of the ground, and sinks back.
-    this.pose.y = -(1 - this.grow) * HEIGHT;
+    if (this.look.ghost) {
+      // Fades in and out, and floats a little.
+      this.pose.y = 0.15 + Math.sin(time * 2) * 0.08;
+      for (const m of this.mats) (m as THREE.MeshToonMaterial).opacity = 0.62 * this.grow;
+      this.visual.group.visible = this.grow > 0.01;
+    } else this.pose.y = -(1 - this.grow) * this.look.height; // rises out of the ground, and sinks back
     this.visual.apply(this.pose, dt, time);
   }
 
-  /** Network form: [x, z, yaw, speed, mode, grow]. */
+  /** Network form: [kind, x, z, yaw, speed, mode, grow]. */
   tuple(): number[] {
     const p = this.pose;
-    return [p.x, p.z, p.yaw, p.speed, p.mode, this.grow].map((v) => Math.round(v * 100) / 100);
+    return [ALLY_KINDS.indexOf(this.kind), ...[p.x, p.z, p.yaw, p.speed, p.mode, this.grow].map((v) => Math.round(v * 100) / 100)];
   }
 
   /** Shows it from a network tuple (the familiar's tablet). */
   show(t: readonly number[], dt: number, time: number): void {
     const p = this.pose;
-    [p.x, p.z, p.yaw, p.speed, p.mode, this.grow] = t;
+    [, p.x, p.z, p.yaw, p.speed, p.mode, this.grow] = t;
     p.act = p.mode === 2 ? 1 : 0;
     this.apply(dt, time);
   }

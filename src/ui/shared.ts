@@ -12,9 +12,22 @@ export function hpBarHtml(health: number, max: number): string {
   return `<div class="hp ${tone}"><span class="hp-heart">♥</span><div class="hp-track"><div class="hp-fill" style="width:${pct}%"></div></div><b>${hp}</b></div>`;
 }
 
-/** The quest tracker: a line per quest (icon first, a few words, done ones struck through). */
-export function questTrackerHtml(lines: readonly { text: string; done: boolean }[]): string {
-  return lines.map((l) => `<div class="quest-line${l.done ? ' done' : ''}">${l.text}</div>`).join('');
+/** Seconds a finished quest's line stays on the tracker. */
+const DONE_SHOWN = 10;
+const doneSince = new Map<string, number>();
+
+/** The quest tracker: a line per quest (icon first, a few words); finished ones show a little while, then go. */
+export function questTrackerHtml(lines: readonly { text: string; done: boolean }[], now = performance.now() / 1000): string {
+  // Forget lines no longer on the list (a new level, a new run): the same quest done again shows again.
+  for (const text of doneSince.keys()) if (!lines.some((l) => l.done && l.text === text)) doneSince.delete(text);
+  return lines
+    .filter((l) => {
+      if (!l.done) return true;
+      const since = doneSince.get(l.text) ?? doneSince.set(l.text, now).get(l.text)!;
+      return now - since < DONE_SHOWN;
+    })
+    .map((l) => `<div class="quest-line${l.done ? ' done' : ''}">${l.text}</div>`)
+    .join('');
 }
 
 /** The party's level and experience: a star with the level, and a thin bar to the next. */

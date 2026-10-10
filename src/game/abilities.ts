@@ -114,7 +114,7 @@ const STORAGE_KEY = 'elf-and-crab:keys';
 export const DEFAULT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal'];
 
 /** Keys that are already taken by movement and the menus. */
-export const RESERVED_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'KeyM', 'Enter', 'NumpadEnter', 'KeyI', 'KeyB', 'KeyQ', 'KeyE', 'KeyT']);
+export const RESERVED_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'KeyM', 'Enter', 'NumpadEnter', 'KeyI', 'KeyB', 'KeyQ', 'KeyE', 'KeyT', 'KeyF']);
 
 /** "Digit1" → "1", "KeyQ" → "Q", "Minus" → "-", "Space" → "Space". */
 export function keyLabel(code: string): string {

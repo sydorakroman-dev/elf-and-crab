@@ -9,7 +9,7 @@ import type { MonsterKind } from './enemies';
 type Rig = 'biped' | 'crawler' | 'worm' | 'ghost' | 'blob';
 
 /** Model files (public/models/<group>/) and how tall each stands in the world, in metres. */
-export const MONSTER_MODELS: Record<Exclude<MonsterKind, 'inferno' | 'ashking'>, { file: string; height: number; rig: Rig; hover?: boolean }> = {
+export const MONSTER_MODELS: Record<Exclude<MonsterKind, 'inferno' | 'ashking' | 'horntotem' | 'runestone'>, { file: string; height: number; rig: Rig; hover?: boolean }> = {
   // Goblins (Crystal Cave)
   brawler: { file: 'goblins/scrap-brawler.glb', height: 1.45, rig: 'biped' },
   rotor: { file: 'goblins/rotor-scout.glb', height: 1.45, rig: 'biped', hover: true },

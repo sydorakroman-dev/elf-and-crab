@@ -10,4 +10,6 @@ export const ENEMY_KIND_LIST: EnemyKind[] = [
   'spider', 'ooze', 'sporecrawler', 'mushroom', 'mold', 'caveworm',
   'inferno',
   'ashking',
+  'horntotem',
+  'runestone',
 ];

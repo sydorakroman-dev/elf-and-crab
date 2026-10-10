@@ -5,10 +5,12 @@ import { generateLevel } from '../world/levelgen';
 import { Minimap } from '../ui/minimap';
 import { InventoryPanel } from '../ui/inventory';
 import { Pet } from '../game/pet';
-import { TreantAlly } from '../game/ally';
+import { ALLY_KINDS, Ally, type AllyKind } from '../game/ally';
 import { makeDecoy, makeMarkRing, placeDecoy, placeMarkRing } from '../game/treefx';
 import { MAX_LEVEL, levelFor, levelProgress } from '../game/progression';
-import { FOX_STATES, foxTrackerLine, placeFoxQuest, type FoxPlan } from '../game/quests';
+import { CAGE_STATES, CAMP_STATUSES, FOX_STATES, KNIGHT_STATES, campTrackerLine, foxTrackerLine, knightTrackerLine, placeCampQuest, placeFoxQuest, placeKnightQuest, type CageState, type CampPlan, type FoxPlan, type KnightPlan } from '../game/quests';
+import { KnightSite } from '../game/knight';
+import { CageSite } from '../game/cages';
 import { FoxKit, FoxSite } from '../game/fox';
 import { HERO_CLASSES } from '../game/heroes';
 import { WEAPON_TYPES } from '../game/items';
@@ -114,12 +116,16 @@ export class FamiliarGame {
   private beaconMoved = false;
   private pet: Pet | null = null;
   /** The elf's skill-tree effects: the treant, Tumble's decoy, Hunter's Mark. */
-  private ally: TreantAlly | null = null;
+  private readonly allies = new Map<AllyKind, Ally>();
   private readonly decoyFx = makeDecoy();
   private readonly markRing = makeMarkRing();
   private readonly markBox = new THREE.Box3();
   /** Q01 The Lantern Fox, placed from the level's seed like on the hero's browser. */
   private fox: { plan: FoxPlan; kit: FoxKit; site: FoxSite } | null = null;
+  /** Q03 Cages of the War Camp. */
+  private camp: { plan: CampPlan; site: CageSite } | null = null;
+  /** Q02 The Knight Who Would Not Rest. */
+  private knight: { plan: KnightPlan; site: KnightSite } | null = null;
 
   constructor(renderer: THREE.WebGLRenderer, root: HTMLElement, elf: Elf, bodies: Record<FamiliarKind, FamiliarBody>, session: FamiliarLink) {
     this.renderer = renderer;
@@ -422,6 +428,26 @@ export class FamiliarGame {
       this.fox.site.dispose();
       this.fox = null;
     }
+    if (this.camp) {
+      this.camp.site.dispose();
+      this.camp = null;
+    }
+    if (this.knight) {
+      this.knight.site.dispose();
+      this.knight = null;
+    }
+    const knightPlan = practice ? null : placeKnightQuest(level, room, seed);
+    if (knightPlan) {
+      const site = new KnightSite(knightPlan);
+      this.scene.add(site.group);
+      this.knight = { plan: knightPlan, site };
+    }
+    const campPlan = practice ? null : placeCampQuest(level, room, seed);
+    if (campPlan) {
+      const site = new CageSite(campPlan);
+      this.scene.add(site.group);
+      this.camp = { plan: campPlan, site };
+    }
     const plan = practice ? null : placeFoxQuest(level, room, seed);
     if (plan) {
       const kit = new FoxKit(plan.kit.x, plan.kit.z);
@@ -482,16 +508,24 @@ export class FamiliarGame {
       this.scene.remove(this.pet.group);
       this.pet = null;
     }
-    if (s.ally) {
-      if (!this.ally) {
-        this.ally = new TreantAlly(s.ally[0], s.ally[1], 1);
-        this.scene.add(this.ally.group);
+    const here = new Set<AllyKind>();
+    for (const t of s.allies ?? []) {
+      const kind = ALLY_KINDS[t[0]];
+      if (!kind) continue;
+      here.add(kind);
+      let a = this.allies.get(kind);
+      if (!a) {
+        a = new Ally(kind, t[1], t[2], 1);
+        this.allies.set(kind, a);
+        this.scene.add(a.group);
       }
-      this.ally.show(s.ally, dt, this.time);
-    } else if (this.ally) {
-      this.scene.remove(this.ally.group);
-      this.ally = null;
+      a.show(t, dt, this.time);
     }
+    for (const [kind, a] of this.allies)
+      if (!here.has(kind)) {
+        this.scene.remove(a.group);
+        this.allies.delete(kind);
+      }
     if (!this.decoyFx.parent) this.scene.add(this.decoyFx, this.markRing);
     placeDecoy(this.decoyFx, s.decoy ? { x: s.decoy[0], z: s.decoy[1], left: s.decoy[2] } : null, this.time);
     const marked = s.mark !== undefined ? s.slimes.find((t) => t[0] === s.mark) : undefined;
@@ -504,13 +538,30 @@ export class FamiliarGame {
     }
     placeMarkRing(this.markRing, marked ? { x: marked[2], z: marked[3], radius: markRadius } : null, this.time);
     // Quests: the fox kit and its places, and the tracker.
+    const lines: { text: string; done: boolean }[] = [];
     const fs = s.fox && this.fox ? FOX_STATES[s.fox[0]] : null;
     if (this.fox && fs) {
       this.fox.kit.showFrom(s.fox!.slice(1), fs, dt, this.time);
       this.fox.site.update(fs, dt, this.time);
       const line = foxTrackerLine(fs, Math.hypot(s.fox![1] - this.fox.plan.den.x, s.fox![2] - this.fox.plan.den.z));
-      this.hud.setQuests(line ? [line] : []);
-    } else this.hud.setQuests([]);
+      if (line) lines.push(line);
+    }
+    if (this.knight && s.knight) {
+      const state = KNIGHT_STATES[s.knight[0]] ?? 'sleeping';
+      this.knight.site.update(state, s.knight[1], -1, s.knight[2], dt, this.time);
+      const line = knightTrackerLine({ state, runes: s.knight[1] });
+      if (line) lines.push(line);
+    }
+    if (this.camp && s.camp) {
+      const [status, alarmLeft, hornsDown, ...rest] = s.camp;
+      const cages = rest.slice(0, 3).map((k) => CAGE_STATES[k] ?? 'shut') as [CageState, CageState, CageState];
+      this.camp.site.update(cages, rest.slice(3, 6), dt, this.time);
+      const open = cages.filter((c) => c === 'open').length;
+      const late = CAMP_STATUSES[status] === 'done' ? cages.filter((c) => c !== 'open').length : 0;
+      const line = campTrackerLine({ status: CAMP_STATUSES[status] ?? 'unknown', cages, alarmLeft, freedDirect: open, freedLate: late }, hornsDown);
+      if (line) lines.push(line);
+    }
+    this.hud.setQuests(lines);
     // The party's level (shared with the elf).
     const xp = s.lv?.[0] ?? 0;
     this.hud.setXp(levelFor(xp), levelProgress(xp), MAX_LEVEL);
@@ -523,7 +574,7 @@ export class FamiliarGame {
       else if (this.lastPhase === 'shop') this.bagPanel.close();
       this.lastPhase = s.phase;
     }
-    if (s.inv || s.shop || s.phase !== 'shop') this.bagPanel.update(this.invState, this.shopStock);
+    if (s.inv || s.shop || s.phase !== 'shop') this.bagPanel.update(this.invState, this.shopStock, '', s.note ?? '');
     const bagBtn = document.querySelector<HTMLElement>('[data-f-bag]');
     const showBag = (s.state === 'playing' || s.state === 'paused') && !s.practice;
     if (bagBtn && bagBtn.hidden === showBag) bagBtn.hidden = !showBag;

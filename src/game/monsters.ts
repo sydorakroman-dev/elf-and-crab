@@ -7,6 +7,7 @@ import type { BeastPose } from './beastVisual';
 import { MonsterVisual } from './monsterVisual';
 import { ElementalVisual } from './elementalVisual';
 import { DragonVisual } from './dragonVisual';
+import { HornTotemVisual, RuneStoneVisual } from './totemVisual';
 import type { Enemy, EnemyKind, EnemyTuple, MonsterKind, Spit, Strike, Summon, Telegraph } from './enemies';
 import { PROJECTILES, type ProjectileKind } from './globs';
 import { ENEMY_KIND_LIST } from './enemyKinds';
@@ -100,6 +101,8 @@ export interface MonsterDef {
   summonEvery?: { every: number; kind: EnemyKind; count: number; max: number };
   /** A second phase (bosses). */
   enrage?: Enrage;
+  /** A thing, not a foe (the war horn): never moves, attacks or hurts on contact. */
+  inert?: boolean;
   bossName?: string;
 }
 
@@ -285,6 +288,17 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
     },
   },
 
+  // ── Not a monster: Q03's war horn totem in the orc camp (break all three and the camp can't be raised) ──
+  horntotem: {
+    name: 'War Horn', tier: 'weak', style: 'melee', hp: 60, speed: 0, radius: 0.8, touch: 0, push: 0, score: 40, drop: 0, inert: true,
+    attacks: [],
+  },
+  // ── Not a monster: Q02's rune stone in the Crypt (broken by the familiar's riddles, or the hero's blows playing solo) ──
+  runestone: {
+    name: 'Rune Stone', tier: 'weak', style: 'melee', hp: 10, speed: 0, radius: 0.6, touch: 0, push: 0, score: 0, drop: 0, inert: true,
+    attacks: [],
+  },
+
   // ── The final boss (the Ash King's Lair): a volcanic dragon ──
   ashking: {
     name: 'The Ash King', tier: 'boss', style: 'melee', hp: 2600, speed: 4.0, radius: 2.6, touch: 22, push: 0.25, score: 2500, drop: 0, bossName: 'The Ash King',
@@ -320,6 +334,8 @@ const COLORS: Record<MonsterKind, number> = {
   spider: 0x6a5a9a, ooze: 0x9bd03a, sporecrawler: 0x9a7a3a, mushroom: 0xc04a40, mold: 0xa090c0, caveworm: 0x6a5a8a,
   inferno: 0xff7a2a,
   ashking: 0xd23a2c,
+  horntotem: 0x8a6a3a,
+  runestone: 0x8fd8ff,
 };
 
 /** The Inferno is a giant fire elemental. */
@@ -333,6 +349,8 @@ export interface MonsterLook {
 /** The right visual for a monster kind (shared with the familiar's view). */
 export function createMonsterVisual(kind: MonsterKind): MonsterLook {
   if (kind === 'ashking') return new DragonVisual();
+  if (kind === 'horntotem') return new HornTotemVisual();
+  if (kind === 'runestone') return new RuneStoneVisual();
   return kind === 'inferno' ? new ElementalVisual('fire', INFERNO_HEIGHT) : new MonsterVisual(kind);
 }
 
@@ -382,6 +400,8 @@ export class Monster implements Enemy {
   private windupLen = 1;
   /** Rings turn a little with each one in a chain (a spiral). */
   private spin = 0;
+  /** Fewer raised at once than its kind allows (the Necromancer with Sir Aldric there: docs/quests.md Q02). */
+  summonCap: number | null = null;
   /** The hero's last position and smoothed velocity (for leading shots). */
   private readonly lastTarget = new THREE.Vector2(NaN, NaN);
   private readonly targetVel = new THREE.Vector2();
@@ -438,8 +458,11 @@ export class Monster implements Enemy {
   get calmed(): boolean {
     return this.calmTimer > 0;
   }
+  get inert(): boolean {
+    return !!this.def.inert;
+  }
   get harmless(): boolean {
-    return this.stunned || this.calmed || this.mode === 'retreat' || this.mode === 'sink' || this.mode === 'under' || this.mode === 'rise';
+    return !!this.def.inert || this.stunned || this.calmed || this.mode === 'retreat' || this.mode === 'sink' || this.mode === 'under' || this.mode === 'rise';
   }
   private get lunging(): Extract<Attack, { type: 'lunge' }> | null {
     return this.mode === 'attack' && this.current?.type === 'lunge' ? this.current : null;
@@ -588,7 +611,7 @@ export class Monster implements Enemy {
       const dir = away * 0.4 + this.wander * 0.6;
       speed = this.def.speed * this.speedMul * 0.45 * this.slow;
       this.move(Math.sin(dir), Math.cos(dir), speed, dt, others, walls);
-    } else {
+    } else if (!this.def.inert) {
       [speed, spits] = this.think(dt, target, others, walls);
     }
 
@@ -626,7 +649,7 @@ export class Monster implements Enemy {
       if (this.summonTimer <= 0) {
         this.summonTimer = s.every;
         const alive = others.filter((o) => o.alive && o.kind === s.kind).length;
-        const count = Math.min(s.count, s.max - alive);
+        const count = Math.min(s.count, (this.summonCap ?? s.max) - alive);
         if (count > 0) this.summon = { kind: s.kind, count };
       }
     }

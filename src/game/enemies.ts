@@ -13,7 +13,10 @@ export type MonsterKind =
   | 'orcscout' | 'orcwarrior' | 'orcarcher' | 'shaman' | 'shieldguard' | 'chieftain'
   | 'spider' | 'ooze' | 'sporecrawler' | 'mushroom' | 'mold' | 'caveworm'
   | 'inferno'
-  | 'ashking';
+  | 'ashking'
+  // Not monsters: Q03's war horn totem and Q02's rune stone (quest props that can be broken).
+  | 'horntotem'
+  | 'runestone';
 export type EnemyKind = BeastKind | ElementalKind | MonsterKind;
 export const BEAST_KIND_LIST: BeastKind[] = ['beetle', 'snake', 'direwolf', 'boar', 'bear'];
 export const ELEMENTAL_KIND_LIST: ElementalKind[] = ['vine', 'wind', 'water', 'fire', 'treant', 'golem'];
@@ -84,6 +87,8 @@ export interface Enemy {
   readonly bossName: string | null;
   /** A boss in its second phase (after the roar at half health). */
   readonly enraged?: boolean;
+  /** A thing, not a foe (a war horn): never attacks or moves, isn't counted as a foe. */
+  readonly inert?: boolean;
   /** Where an attack is about to land (warning ring), if any. */
   readonly telegraph: Telegraph | null;
   /** Set during update(): an area attack that landed this step. */
@@ -169,12 +174,12 @@ export class Enemies {
 
   /** Monsters still alive in the level. */
   get remaining(): number {
-    return this.all.filter((s) => s.alive).length;
+    return this.all.filter((s) => s.alive && !s.inert).length;
   }
 
   /** Monsters awake and hunting. */
   get hunting(): number {
-    return this.all.filter((s) => s.alive && !this.brains.get(s)?.asleep).length;
+    return this.all.filter((s) => s.alive && !s.inert && !this.brains.get(s)?.asleep).length;
   }
 
   /** The mini-boss or boss, once it's awake (it gets a health bar then). */
@@ -240,8 +245,9 @@ export class Enemies {
 
   /** War camps: a pack that wakes calls the sleeping packs within this many metres (0: none). */
   alarmRadius = 0;
-  /** Times the alarm has been raised (Game shows it). */
+  /** Times the alarm has been raised (Game shows it), and where it was last raised. */
   alarms = 0;
+  lastAlarm = { x: 0, z: 0 };
 
   /** Wakes `e` and its whole pack (it was hit, or saw the hero) — in a war camp, its neighbours too. */
   wake(e: Enemy, spread = true): void {
@@ -257,7 +263,10 @@ export class Enemies {
       this.wake(o, false); // one call each: the alarm doesn't run through the whole camp
       raised = true;
     }
-    if (raised) this.alarms++;
+    if (raised) {
+      this.alarms++;
+      this.lastAlarm = { x: e.x, z: e.z };
+    }
   }
 
   /** New monsters, awake at once (the dead rising from a sarcophagus). */

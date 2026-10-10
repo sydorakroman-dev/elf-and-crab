@@ -38,11 +38,13 @@ import { chestLoot, rollLoot, tierOf, type Drop } from './loot';
 import { Inventory, makeStock, type InvOp, type StockEntry } from './inventory';
 import { FISTS, HEROES, HERO_CLASSES, PREFERRED_BONUS, WEAPON_ATTACKS, inSwing, loadHero, type Attack, type HeroClass } from './heroes';
 import { Pet } from './pet';
-import { TreantAlly } from './ally';
+import { Ally } from './ally';
 import { FLEET_STAMINA, Leveling, MARK, MAX_LEVEL, RAIN, TRAP, TREANT_ALLY, TREES, TREE_VALUES, TUMBLE, XP_AT_ROOM, levelProgress, respecCost, treeSkills, type TreeSkillId } from './progression';
 import { SkillTreePanel, type TreeView } from '../ui/skilltree';
 import { makeDecoy, makeMarkRing, placeDecoy, placeMarkRing } from './treefx';
-import { FOX, FOX_STATES, FoxQuest, foxTrackerLine, placeFoxQuest, type FoxPlan } from './quests';
+import { CAGE_STATES, CAMP, CAMP_STATUSES, CampQuest, FOX, FOX_STATES, FoxQuest, KNIGHT, KNIGHT_STATES, KnightQuest, campTrackerLine, foxTrackerLine, knightTrackerLine, placeCampQuest, placeFoxQuest, placeKnightQuest, type CampPlan, type FoxPlan, type KnightPlan } from './quests';
+import { KnightSite } from './knight';
+import { CageSite } from './cages';
 import { FoxKit, FoxSite } from './fox';
 import { POTIONS, RARITY_INFO, WEAPON_TYPES, makeItem, makePotion, type BagEntry, type WeaponType } from './items';
 import { ENCHANT_CHAIN, ENCHANT_FIRE, ENCHANT_FROST, type ArrowHit } from './arrows';
@@ -206,9 +208,34 @@ export class Game {
   private readonly decoySpot = new THREE.Vector3();
   private mark: { id: number; t: number } | null = null;
   private readonly markRing = makeMarkRing();
-  private ally: TreantAlly | null = null;
+  private ally: Ally | null = null;
   /** Q01 The Lantern Fox (docs/quests.md): its places, state, the kit and how it looks, while in this level. */
   private fox: { plan: FoxPlan; quest: FoxQuest; kit: FoxKit; site: FoxSite } | null = null;
+  /** Q03 Cages of the War Camp: its places, state, cages, the war horns (enemies), and alarms already counted. */
+  private camp: { plan: CampPlan; quest: CampQuest; site: CageSite; horns: Enemy[]; alarmsSeen: number; silenced: boolean } | null = null;
+  /** Q02 The Knight Who Would Not Rest: places, state, the tomb, the rune stones (enemies), the familiar's
+   * riddle at a stone, a stone broken this step, and the Necromancer fight's payoff (begun, Aldric raised). */
+  private knight: {
+    plan: KnightPlan;
+    quest: KnightQuest;
+    site: KnightSite;
+    stones: Enemy[];
+    riddle: Riddle | null;
+    stoneAt: number;
+    misses: number;
+    broke: boolean;
+    fought: boolean;
+    raised: boolean;
+    soloHint: boolean;
+  } | null = null;
+  /** Sir Aldric's spirit, fighting beside the hero against the Necromancer. */
+  private aldric: Ally | null = null;
+  /** Interact (F, or holding the prompt) is held down. */
+  private interactHeld = false;
+  /** The merchant told you about the captives (before the war camp, this run). */
+  private campHooked = false;
+  /** The merchant's word over the wares, this visit. */
+  private shopNote = '';
   /** The hero the tree's points were spent for. */
   private treeHero: HeroClass | null = null;
   private freeDash = 0;
@@ -296,6 +323,11 @@ export class Game {
     this.treePanel.onRespec = () => this.respecTree();
     this.treePanel.onClose = () => this.closeTree();
     this.hud.actionBar.onTree = () => this.toggleTree();
+    this.hud.actionBar.onPromptHold = (down) => (this.interactHeld = down);
+    addEventListener('keyup', (e) => {
+      if (e.code === 'KeyF') this.interactHeld = false;
+    });
+    addEventListener('blur', () => (this.interactHeld = false));
     this.spellbook.blocked = (slot) => !!this.treeSlots[slot]; // spells skip slots the tree's actives sit in
     this.hud.onHero = (h) => this.setHero(h);
     this.minimap.setLevel(this.level.map);
@@ -325,6 +357,7 @@ export class Game {
       if (e.code === 'KeyM') this.hud.setMuted(this.sfx.toggleMute());
       else if ((e.code === 'KeyI' || e.code === 'KeyB') && !e.repeat && !this.hud.actionBar.rebinding) this.toggleBag();
       else if (e.code === 'KeyT' && !e.repeat && !this.hud.actionBar.rebinding) this.toggleTree();
+      else if (e.code === 'KeyF' && !this.hud.actionBar.rebinding) this.interactHeld = true;
       else if (e.code === 'Escape' && this.treePanel.isOpen) this.closeTree();
       else if (e.code === 'Escape' && this.bagPanel.isOpen && this.phase !== 'shop') this.closeBag();
       else if ((e.code === 'KeyQ' || e.code === 'KeyE') && !e.repeat && this.state === 'playing') this.quickPotion(e.code === 'KeyQ' ? 'health' : 'mana');
@@ -408,6 +441,7 @@ export class Game {
   /** Starts a run in room `start` (0: the Woodland; later rooms once reached — "continue"). */
   private newGame(start = 0): void {
     const room = Math.max(0, Math.min(ROOMS.length - 1, start));
+    this.campHooked = false; // the merchant hasn't told this run's party anything yet
     this.loadRoom(room); // a freshly generated level every run
     this.resetWorld();
     this.state = 'playing';
@@ -498,13 +532,57 @@ export class Game {
       this.scene.add(kit.group, site.group);
       this.fox = { plan, quest: new FoxQuest(), kit, site };
     }
+    if (this.camp) {
+      this.camp.site.dispose();
+      this.camp = null;
+    }
+    const camp = this.practice ? null : placeCampQuest(this.level, ROOMS[this.room], this.level.seed);
+    if (camp) {
+      const site = new CageSite(camp);
+      this.scene.add(site.group);
+      // The war horns: things that can be broken (inert "monsters": arrows, swings and aim-assist work on them).
+      const horns = camp.horns.map((h) => {
+        const [horn] = this.enemies.spawnAwake(['horntotem'], h.x, h.z, []);
+        horn.setPosition?.(h.x, h.z);
+        return horn;
+      });
+      const quest = new CampQuest();
+      if (this.campHooked) quest.hook();
+      this.camp = { plan: camp, quest, site, horns, alarmsSeen: this.enemies.alarms, silenced: false };
+    }
+    if (this.knight) {
+      this.knight.site.dispose();
+      this.knight = null;
+    }
+    if (this.aldric) {
+      this.scene.remove(this.aldric.group);
+      this.aldric = null;
+    }
+    const knight = this.practice ? null : placeKnightQuest(this.level, ROOMS[this.room], this.level.seed);
+    if (knight) {
+      const site = new KnightSite(knight);
+      this.scene.add(site.group);
+      const stones = knight.stones.map((p) => {
+        const [stone] = this.enemies.spawnAwake(['runestone'], p.x, p.z, []);
+        stone.setPosition?.(p.x, p.z);
+        return stone;
+      });
+      this.knight = { plan: knight, quest: new KnightQuest(), site, stones, riddle: null, stoneAt: -1, misses: 0, broke: false, fought: false, raised: false, soloHint: false };
+    }
     this.hud.setQuests([]);
+    this.hud.actionBar.setPrompt(null);
   }
 
-  /** Runs the level's quests this step. */
+  /** Runs the level's quests this step, and shows them on the tracker. */
   private updateQuests(dt: number): void {
+    const lines = [this.updateFox(dt), this.updateKnight(dt), this.updateCamp(dt)].filter((l): l is { text: string; done: boolean } => !!l);
+    this.hud.setQuests(lines);
+  }
+
+  /** Q01 this step; returns its tracker line. */
+  private updateFox(dt: number): { text: string; done: boolean } | null {
     const f = this.fox;
-    if (!f) return;
+    if (!f) return null;
     const hero = this.player.position;
     const fam = this.net?.familiarConnected && this.companion.kind ? this.companion.position : null;
     const kit = { x: f.kit.x, z: f.kit.z };
@@ -540,8 +618,63 @@ export class Game {
       if (near(hero, f.plan.den, FOX.burrowRange)) this.throughBurrow('hero');
       if (fam && near(fam, f.plan.den, FOX.burrowRange)) this.throughBurrow('familiar');
     }
-    const line = foxTrackerLine(f.quest.state, Math.hypot(kit.x - f.plan.den.x, kit.z - f.plan.den.z));
-    this.hud.setQuests(line ? [line] : []);
+    return foxTrackerLine(f.quest.state, Math.hypot(kit.x - f.plan.den.x, kit.z - f.plan.den.z));
+  }
+
+  /** Q03 this step; returns its tracker line. */
+  private updateCamp(dt: number): { text: string; done: boolean } | null {
+    const c = this.camp;
+    if (!c) return null;
+    const hero = this.player.position;
+    const fam = this.net?.familiarConnected && this.companion.kind ? this.companion.position : null;
+    const near = (p: { x: number; z: number } | null, q: { x: number; z: number }, r: number) => !!p && Math.hypot(p.x - q.x, p.z - q.z) <= r;
+    const hornsDown = c.horns.filter((h) => !h.alive).length;
+    // An alarm reaches the cages if raised near them, or near a war horn still standing.
+    let alarm = false;
+    if (this.enemies.alarms > c.alarmsSeen) {
+      c.alarmsSeen = this.enemies.alarms;
+      const at = this.enemies.lastAlarm;
+      alarm = near(at, c.plan.centre, CAMP.earshot) || c.horns.some((h) => h.alive && near(at, h, CAMP.hornReach));
+    }
+    const unlatch = c.plan.cages.map((cage) => Math.max(near(fam, cage, CAMP.unlatchRange) ? 1 / CAMP.familiarSeconds : 0, near(hero, cage, CAMP.unlatchRange) ? 1 / CAMP.heroSeconds : 0)) as [number, number, number];
+    const found = c.plan.cages.some((cage) => near(hero, cage, CAMP.findRange) || near(fam, cage, CAMP.findRange));
+    for (const ev of c.quest.step(dt, { found, unlatch, alarm, hornsDown, guardianDown: !this.enemies.guardianAlive })) {
+      switch (ev.e) {
+        case 'found':
+          this.banner('🔓 Caravan folk in cages! Free them — keep the camp quiet');
+          break;
+        case 'unlatched': {
+          const at = c.plan.cages[ev.cage];
+          this.hud.toast('🔓 The cage swings open — they run for it!', 0xffd36b);
+          this.effects.burst(at.x, 1.2, at.z, new THREE.Color(0xffd36b), 20, 4, 0.1);
+          this.events.push({ e: 'ring', x: q(at.x), z: q(at.z), r: 1.6, c: 0xffd36b });
+          this.sfx.coin();
+          break;
+        }
+        case 'alarm':
+          this.banner(`📯 Guards are coming for the captives — ${ev.seconds} s!`);
+          break;
+        case 'moved':
+          this.banner(`The guards dragged ${ev.count === 1 ? 'one' : ev.count} to the keep`);
+          break;
+        case 'done': {
+          const xp = c.quest.claimXp();
+          if (xp) {
+            this.gainXp(xp);
+            this.hud.toast(`🔓 ${c.quest.freedDirect + c.quest.freedLate} caravan folk free · +${xp} XP`, 0xffd36b);
+          }
+          break;
+        }
+      }
+    }
+    // All three horns broken: the camp can't be raised any more.
+    if (hornsDown === 3 && !c.silenced) {
+      c.silenced = true;
+      this.enemies.alarmRadius = 0;
+      this.banner('📯 The war horns are silent — the camp can’t be raised');
+    }
+    c.site.update(c.quest.cages, c.quest.progress, dt, this.time);
+    return campTrackerLine(c.quest, hornsDown);
   }
 
   private foxHome(): void {
@@ -555,6 +688,170 @@ export class Game {
     this.effects.ring(f.plan.den.x, f.plan.den.z, 0xffc45a, 3);
     this.events.push({ e: 'ring', x: q(f.plan.den.x), z: q(f.plan.den.z), r: 3, c: 0xffc45a });
     this.sfx.powerUp();
+  }
+
+  /** Q02 this step; returns its tracker line. */
+  private updateKnight(dt: number): { text: string; done: boolean } | null {
+    const k = this.knight;
+    if (!k) return null;
+    const hero = this.player.position;
+    const fam = this.net?.familiarConnected && this.companion.kind ? this.companion.position : null;
+    const near = (p: { x: number; z: number } | null, q: { x: number; z: number }, r: number) => !!p && Math.hypot(p.x - q.x, p.z - q.z) <= r;
+    const boss = this.enemies.boss;
+    const bossFight = !!boss && boss.kind === 'necromancer';
+    const open = k.quest.state === 'bound' || k.quest.state === 'freeing';
+    // The familiar at a standing rune stone gets its riddle (it fades if the familiar walks off).
+    const at = open && fam && !this.riddle ? k.stones.findIndex((st, i) => st.alive && near(fam, k.plan.stones[i], KNIGHT.stoneRange)) : -1;
+    if (at !== k.stoneAt) {
+      k.stoneAt = at;
+      k.riddle = at >= 0 ? makeRiddle() : null;
+    }
+    // Taking the blade: the hero holds Interact at the lid.
+    const atLid = k.quest.state === 'bound' && near(hero, k.plan.tomb, KNIGHT.plunderRange);
+    const plunder = atLid && this.interactHeld ? dt : 0;
+    const ev = k.quest.step(dt, { playerNear: near(hero, k.plan.tomb, KNIGHT.findRange) || near(fam, k.plan.tomb, KNIGHT.findRange), runeBroken: k.broke, plunder, holding: this.interactHeld, bossFight });
+    k.broke = false;
+    switch (ev) {
+      case 'found':
+        this.banner('🔵 “I am Sir Aldric. Free me — or take my blade.”');
+        this.hud.toast('Breaking a rune frees him · opening the lid takes the blade · only one', 0x8fd8ff);
+        this.sfx.calm();
+        break;
+      case 'rune': {
+        this.hud.toast(`🔵 A rune stone breaks (${k.quest.runes}/3) — the dead stir!`, 0x8fd8ff);
+        this.raiseSkeletons();
+        break;
+      }
+      case 'freed': {
+        this.raiseSkeletons();
+        const r = k.quest.claim();
+        if (r) this.gainXp(r.xp);
+        this.banner('🔵 Sir Aldric is free! “I will be there.”');
+        this.effects.burst(k.plan.tomb.x, 1.5, k.plan.tomb.z, new THREE.Color(0xbfe6ff), 40, 5, 0.12);
+        this.events.push({ e: 'ring', x: q(k.plan.tomb.x), z: q(k.plan.tomb.z), r: 3, c: 0x8fd8ff });
+        this.sfx.powerUp();
+        k.riddle = null;
+        break;
+      }
+      case 'plundered': {
+        const r = k.quest.claim();
+        if (r) this.gainXp(r.xp);
+        const blade = makeItem(Math.random, 'epic', this.room + 2, 'weapon', 'onehand');
+        this.pickups.spawn('item_epic', k.plan.tomb.x + 1.6, k.plan.tomb.z + 1.6, undefined, 0, { ...blade, name: 'Aldric’s Oath', stats: { damage: 0.3, crit: 0.12 } });
+        this.banner('⚔️ You take Aldric’s Oath… the runes go dark');
+        this.sfx.chest();
+        break;
+      }
+      case 'left':
+        this.hud.toast('🔵 Too late — Sir Aldric sleeps on', 0x8fd8ff);
+        k.riddle = null;
+        break;
+    }
+    // The Necromancer fight: Sir Aldric stands with you — or is raised against you.
+    if (bossFight && !k.fought) {
+      k.fought = true;
+      if (k.quest.state === 'freed') {
+        this.aldric = new Ally('aldric', hero.x - 2, hero.z + 1, Infinity);
+        this.scene.add(this.aldric.group);
+        if (boss instanceof Monster) boss.summonCap = KNIGHT.skeletonCap;
+        this.banner('⚔️ Sir Aldric stands with you!');
+      }
+    }
+    if (bossFight && k.quest.state === 'plundered' && !k.raised && boss && boss.hp <= boss.maxHp * KNIGHT.raiseAt) {
+      k.raised = true;
+      this.enemies.spawnAwake(['knight'], boss.x + 3, boss.z + 2, this.dungeon.obstacles);
+      this.banner('💀 “You woke him for me!” The Necromancer raises Sir Aldric!');
+      this.sfx.wave();
+    }
+    this.updateAldric(dt);
+    // The prompt, the tomb's look.
+    this.hud.actionBar.setPrompt(atLid ? 'Hold — take Sir Aldric’s blade' : null, k.quest.plunderHeld / KNIGHT.plunderSeconds);
+    const solo = !fam && open ? k.stones.findIndex((st) => st.alive) : -1;
+    k.site.update(k.quest.state, k.quest.runes, solo, k.quest.plunderHeld / KNIGHT.plunderSeconds, dt, this.time);
+    return knightTrackerLine(k.quest);
+  }
+
+  /** Two skeletons crawl out near the tomb each time a rune stone breaks. */
+  private raiseSkeletons(): void {
+    const t = this.knight!.plan.tomb;
+    this.enemies.spawnAwake(Array(KNIGHT.skeletonsPerStone).fill('skeleton'), t.x + 2.5, t.z - 2, this.dungeon.obstacles);
+    this.effects.burst(t.x + 2.5, 0.4, t.z - 2, new THREE.Color(0xe0d6b8), 18, 4, 0.12);
+  }
+
+  /** Sir Aldric in the Necromancer fight; he goes when it's over. */
+  private updateAldric(dt: number): void {
+    const a = this.aldric;
+    if (!a) return;
+    if (!this.enemies.guardianAlive) a.dismiss();
+    const p = this.player.position;
+    const foe = this.enemies.all
+      .filter((s) => s.alive && !s.hidden && !s.inert && !this.enemies.isAsleep(s) && Math.hypot(s.x - p.x, s.z - p.z) < 18)
+      .sort((x, y) => Math.hypot(x.x - a.x, x.z - a.z) - Math.hypot(y.x - a.x, y.z - a.z))[0];
+    const hit = a.update(dt, p, foe ?? null, this.dungeon.obstacles, this.time);
+    if (hit) {
+      for (const s of [...this.enemies.all]) {
+        if (!s.alive || s.hidden || s.inert || Math.hypot(s.x - hit.x, s.z - hit.z) > KNIGHT.ally.radius + s.radius) continue;
+        this.damage(s, s.x - a.x, s.z - a.z, KNIGHT.ally.damage);
+      }
+      this.effects.burst(hit.x, 1, hit.z, new THREE.Color(0xbfe6ff), 12, 4, 0.08);
+    }
+    if (a.done) {
+      this.scene.remove(a.group);
+      this.aldric = null;
+    }
+  }
+
+  /** A blow on a rune stone: the familiar's riddles break them; playing solo, the hero's blows do (in order). */
+  private strikeRuneStone(stone: Enemy): void {
+    const k = this.knight;
+    if (!k) return;
+    const open = k.quest.state === 'bound' || k.quest.state === 'freeing';
+    if (!open) return;
+    const solo = !(this.net?.familiarConnected && this.companion.kind);
+    if (!solo) {
+      if (!k.soloHint) this.hud.toast('🔵 The runes answer to your familiar’s riddles', 0x8fd8ff);
+      k.soloHint = true;
+      return;
+    }
+    const next = k.stones.find((st) => st.alive);
+    if (stone !== next) {
+      this.hud.toast('🔵 Break the glowing one first', 0x8fd8ff);
+      return;
+    }
+    this.breakRuneStone(stone);
+  }
+
+  private breakRuneStone(stone: Enemy): void {
+    stone.hurt(1e9, 0, 1);
+    this.knight!.broke = true;
+    this.effects.burst(stone.x, 1.2, stone.z, new THREE.Color(0x8fd8ff), 30, 5, 0.12);
+    this.events.push({ e: 'ring', x: q(stone.x), z: q(stone.z), r: 1.6, c: 0x8fd8ff });
+    this.sfx.burst();
+  }
+
+  /** The familiar's answer to a rune stone's riddle. */
+  private answerKnightRiddle(value: number): void {
+    const k = this.knight;
+    if (!k?.riddle || k.stoneAt < 0) return;
+    if (value !== k.riddle.answer) {
+      k.riddle = makeRiddle(Math.random, k.riddle);
+      k.misses++;
+      this.events.push({ e: 'riddle', ok: 0 });
+      return;
+    }
+    const stone = k.stones[k.stoneAt];
+    k.riddle = null;
+    k.stoneAt = -1;
+    this.events.push({ e: 'riddle', ok: 1, ...(k.quest.runes + 1 >= 3 ? { done: 1 } : {}) });
+    if (stone?.alive) this.breakRuneStone(stone);
+  }
+
+  private campTuple(): number[] {
+    const c = this.camp!;
+    return [
+      CAMP_STATUSES.indexOf(c.quest.status), q(c.quest.alarmLeft), c.horns.filter((h) => !h.alive).length,
+      ...c.quest.cages.map((s) => CAGE_STATES.indexOf(s)), ...c.quest.progress.map(q),
+    ];
   }
 
   /** Through the foxes' burrow: from the oak to just outside the guardian's hall. */
@@ -986,7 +1283,8 @@ export class Game {
 
   private familiarCommand(cmd: FamiliarCommand): void {
     if (cmd.type === 'answer') {
-      this.answerRiddle(cmd.value);
+      if (this.riddle) this.answerRiddle(cmd.value);
+      else this.answerKnightRiddle(cmd.value);
       return;
     }
     if (cmd.type === 'riddle') {
@@ -1065,7 +1363,12 @@ export class Game {
       lvl: this.level.seed,
       phase: this.phase,
       card: this.phase === 'transition' && this.doorSwitched ? this.room : -1,
-      ...(this.riddle ? { rid: { a: this.riddle.a, op: this.riddle.op, b: this.riddle.b, c: this.riddle.choices, n: this.sealSolved, t: SEAL_RIDDLES, m: this.sealMisses } } : {}),
+      ...(this.riddle
+        ? { rid: { a: this.riddle.a, op: this.riddle.op, b: this.riddle.b, c: this.riddle.choices, n: this.sealSolved, t: SEAL_RIDDLES, m: this.sealMisses } }
+        : this.knight?.riddle
+          ? { rid: { a: this.knight.riddle.a, op: this.knight.riddle.op, b: this.knight.riddle.b, c: this.knight.riddle.choices, n: this.knight.quest.runes, t: 3, m: this.knight.misses, k: 1 } }
+          : {}),
+      ...(this.knight ? { knight: [KNIGHT_STATES.indexOf(this.knight.quest.state), this.knight.quest.runes, q(this.knight.quest.plunderHeld / KNIGHT.plunderSeconds)] } : {}),
       boss: this.bossState(),
       tels: this.telegraphTuples(),
       wave: this.wave,
@@ -1080,9 +1383,11 @@ export class Game {
       ...(this.pet ? { pet: this.pet.tuple() } : {}),
       lv: this.leveling.encode(),
       ...(this.fox ? { fox: [FOX_STATES.indexOf(this.fox.quest.state), ...this.fox.kit.tuple()] } : {}),
+      ...(this.camp ? { camp: this.campTuple() } : {}),
+      ...(this.shopNote && this.phase === 'shop' ? { note: this.shopNote } : {}),
       ...(this.decoy ? { decoy: [q(this.decoy.x), q(this.decoy.z), q(this.decoy.t)] } : {}),
       ...(this.mark ? { mark: this.mark.id } : {}),
-      ...(this.ally ? { ally: this.ally.tuple() } : {}),
+      ...(this.ally || this.aldric ? { allies: [this.ally, this.aldric].filter((a): a is Ally => !!a).map((a) => a.tuple()) } : {}),
       ...(this.ambushed.length ? { amb: this.ambushed } : {}),
       powers: this.powers.list().map((pw) => [POWER_CODES.indexOf(pw.type), q(pw.remaining)]),
       cds: c.kind ? FAMILIARS[c.kind].spells.map((id) => [SPELL_IDS.indexOf(id), q(c.cooldowns.remaining(id))]) : [],
@@ -1166,6 +1471,10 @@ export class Game {
 
   private damage(slime: Enemy, dirX: number, dirZ: number, amount = HERO.arrowDamage): void {
     if (this.phase === 'ready' && !this.practice) return; // monsters can't be hurt before the start
+    if (slime.kind === 'runestone') {
+      this.strikeRuneStone(slime); // Q02: broken by riddles (or, solo, blows in order)
+      return;
+    }
     if (this.mark?.id === slime.id) amount *= 1 + this.leveling.value('huntersmark'); // Hunter's Mark
     const hpBefore = slime.hp;
     const killed = slime.hurt(amount, dirX, dirZ);
@@ -1557,7 +1866,7 @@ export class Game {
       case 'callforest': {
         if (this.ally) this.scene.remove(this.ally.group);
         const back = this.player.aimDirection(this.aim);
-        this.ally = new TreantAlly(p.x - back.x * 2.5, p.z - back.z * 2.5, TREE_VALUES.callforest[this.leveling.rank('callforest') - 1]);
+        this.ally = new Ally('treant', p.x - back.x * 2.5, p.z - back.z * 2.5, TREE_VALUES.callforest[this.leveling.rank('callforest') - 1]);
         this.scene.add(this.ally.group);
         this.spellFx(this.ally.x, this.ally.z, 0x7dff8a, 2.4, 30);
         this.sfx.spring();
@@ -1959,16 +2268,48 @@ export class Game {
     }
     this.phase = 'shop';
     this.shop = makeStock(this.room + 1, Math.random);
-    this.bagPanel.update(this.inv.encode(), this.shop, this.gearSummary());
+    this.shopNote = this.merchantWord(this.shop);
+    this.bagPanel.update(this.inv.encode(), this.shop, this.gearSummary(), this.shopNote);
     this.bagPanel.open();
     if (document.pointerLockElement) document.exitPointerLock();
     this.banner('🛒 The merchant’s camp');
     this.sfx.door();
   }
 
+  /** What the merchant says this visit (Q03: the hook before the war camp, the thanks after), and what it changes. */
+  private merchantWord(stock: StockEntry[]): string {
+    const next = this.room + 1;
+    if (next === 3 && ROOMS[3]?.feature === 'throne') {
+      this.campHooked = true;
+      return 'Orcs took my brother Pip and the caravan folk — they’re caged in the war camp ahead. Bring them home and I’ll make it worth your while!';
+    }
+    const thanks = this.camp?.quest.thanks ?? 'none';
+    const off = (k: number) => stock.forEach((e) => (e.price = Math.max(1, Math.round(e.price * (1 - k)))));
+    switch (thanks) {
+      case 'all': {
+        off(CAMP.discountAll);
+        const gift = makeItem(Math.random, 'rare', next + 1);
+        stock.unshift({ what: gift, price: Math.round(gift.value * (1 - CAMP.discountAll)), sold: false });
+        return 'Pip! You’re home! — All of them, safe. Everything’s a quarter off for you, and I’ve brought out something special.';
+      }
+      case 'some':
+        off(CAMP.discountSome);
+        return 'Thank you — Pip says the rest got out after the battle. A little off everything, for you.';
+      case 'late': {
+        const potion = makePotion('health');
+        if (!this.inv.add(potion)) this.hud.toast('Bag full — the merchant keeps your potion', 0x9a9a9a);
+        else this.inv.version++;
+        return 'They’re safe, thank the stars. Take this potion, with my thanks.';
+      }
+      default:
+        return '';
+    }
+  }
+
   private leaveShop(): void {
     if (this.phase !== 'shop') return;
     this.shop = null;
+    this.shopNote = '';
     this.bagPanel.close();
     this.enterDoor();
     this.player.activate();

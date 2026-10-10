@@ -29,6 +29,8 @@ export class ActionBar {
   /** The bag and skill tree buttons at the end of the bar. */
   onBag?: () => void;
   onTree?: () => void;
+  /** The interact prompt is held (pressed with a finger or the mouse) or let go. */
+  onPromptHold?: (down: boolean) => void;
   private readonly bar: HTMLElement;
   private readonly slots: HTMLElement[];
   private readonly manaFill: HTMLElement;
@@ -41,6 +43,8 @@ export class ActionBar {
   /** The skills in the slots: the hero's in 1–3, the skill tree's actives after them. */
   private readonly abilityIds: (AbilityId | null)[] = [...DEFAULT_SLOTS];
   private readonly treeBadge: HTMLElement;
+  private readonly prompt: HTMLElement;
+  private promptKey = '';
 
 
   constructor(hudLeft: HTMLElement, root: HTMLElement, touch: boolean) {
@@ -62,6 +66,16 @@ export class ActionBar {
     this.bar = root.querySelector('.action-bar')!;
     this.slots = [...this.bar.querySelectorAll<HTMLElement>('.slot[data-slot]')];
     this.treeBadge = this.bar.querySelector('.tree-badge')!;
+    // The interact prompt (quests): "Hold F — …", over the bar; also held by touch / mouse.
+    root.insertAdjacentHTML('beforeend', '<button type="button" class="interact-prompt" hidden><kbd>F</kbd><span></span><i></i></button>');
+    this.prompt = root.querySelector('.interact-prompt')!;
+    const hold = (down: boolean) => (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.onPromptHold?.(down);
+    };
+    this.prompt.addEventListener('pointerdown', hold(true));
+    for (const type of ['pointerup', 'pointerleave', 'pointercancel']) this.prompt.addEventListener(type, hold(false));
     this.defs.forEach((_, i) => this.renderSlot(i));
     this.bar.addEventListener('pointerdown', (e) => {
       if ((e.target as HTMLElement).closest('[data-bag-open]')) {
@@ -161,6 +175,17 @@ export class ActionBar {
     this.abilityIds[i] = id;
     this.setSlotCharges(i, 0);
     this.setSlot(i, id ? abilitySlot(id) : null);
+  }
+
+  /** The interact prompt: what holding F (or the prompt itself) does here, and how far along (null hides it). */
+  setPrompt(text: string | null, progress = 0): void {
+    const key = text ? `${text}:${Math.round(progress * 50)}` : '';
+    if (key === this.promptKey) return;
+    this.promptKey = key;
+    this.prompt.hidden = !text;
+    if (!text) return;
+    this.prompt.querySelector('span')!.textContent = text;
+    (this.prompt.querySelector('i') as HTMLElement).style.width = `${Math.round(progress * 100)}%`;
   }
 
   /** The skill tree button's badge: points waiting to be spent (0 hides it). */

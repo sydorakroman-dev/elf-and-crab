@@ -945,3 +945,17 @@ kbd {
 .quest-list:empty { display: none; }
 .quest-line { padding: 5px 12px; border-radius: 999px; background: rgba(20, 14, 8, 0.72); border: 1px solid rgba(255, 196, 90, 0.55); color: #ffe6b8; font: 700 14px/1.2 system-ui, sans-serif; text-shadow: 0 1px 2px #000; box-shadow: 0 0 12px rgba(255, 196, 90, 0.25); }
 .quest-line.done { opacity: 0.75; border-color: rgba(143, 227, 154, 0.6); color: #c9f5cf; }
+.shop-note { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 211, 107, 0.1); border-left: 3px solid #ffd36b; font-style: italic; color: #fff0c8; }
+
+/* The interact prompt (quests): "Hold F — …" over the action bar. */
+.interact-prompt {
+  position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 13;
+  display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 999px; overflow: hidden; cursor: pointer;
+  background: rgba(20, 14, 8, 0.82); border: 2px solid #ffd36b; color: #fff0c8; font: 700 15px/1 system-ui, sans-serif;
+  box-shadow: 0 0 18px rgba(255, 211, 107, 0.4); touch-action: none; user-select: none;
+}
+.interact-prompt kbd { padding: 3px 8px; border-radius: 6px; background: #ffd36b; color: #2a1c08; font: 800 13px/1 system-ui, sans-serif; }
+.interact-prompt span { position: relative; z-index: 1; }
+.interact-prompt i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255, 211, 107, 0.28); }
+/* A boss bar is up: the tracker moves down out of its way. */
+body:has(.boss-bar:not([hidden])) .quest-list { margin-top: 38px; }

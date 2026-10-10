@@ -72,6 +72,8 @@ export class InventoryPanel {
   private shop: StockEntry[] | null = null;
   private sel: Selection = null;
   private statsLine = '';
+  /** A word from the merchant (quests: docs/quests.md), shown over the wares. */
+  private note = '';
   private key = '';
   /** A press that may become a drag, and the floating icon once it is one. */
   private press: { src: Selection; x: number; y: number; id: number } | null = null;
@@ -135,9 +137,10 @@ export class InventoryPanel {
   }
 
   /** New inventory / shop to show (redraws only when something changed). */
-  update(state: InvState | null, shop: StockEntry[] | null, statsLine = ''): void {
+  update(state: InvState | null, shop: StockEntry[] | null, statsLine = '', note = this.note): void {
     this.state = state;
     this.shop = shop;
+    this.note = shop ? note : '';
     this.statsLine = statsLine;
     if (!this.el.hidden && !this.ghost) this.render();
   }
@@ -391,7 +394,7 @@ export class InventoryPanel {
       })
       .join('');
     const shopHtml = this.shop
-      ? `<section class="shop" data-sell-zone><h3>🛒 The merchant <small>drag here to sell</small></h3><div class="shop-list">${this.shop
+      ? `<section class="shop" data-sell-zone><h3>🛒 The merchant <small>drag here to sell</small></h3>${this.note ? `<p class="shop-note">${esc(this.note)}</p>` : ''}<div class="shop-list">${this.shop
           .map((s, i) => {
             const on = this.sel?.from === 'shop' && this.sel.i === i;
             const poor = st.g < s.price;

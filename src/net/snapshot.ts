@@ -122,7 +122,9 @@ export interface Snapshot {
   /** Room whose intro card is up (-1: none). */
   card: number;
   /** Rune Seal on the exit door: the riddle to solve (a op b), the choices, solved so far / needed. */
-  rid?: { a: number; op: string; b: number; c: number[]; n: number; t: number; /** wrong answers so far */ m?: number };
+  rid?: { a: number; op: string; b: number; c: number[]; n: number; t: number; /** wrong answers so far */ m?: number; /** 1: Sir Aldric's rune stones (Q02), not the door's seal */ k?: number };
+  /** Q02 The Knight Who Would Not Rest: [state (KNIGHT_STATES), runes broken, blade taken 0..1]. */
+  knight?: number[];
   /** The current boss or mini-boss, while it lives. */
   boss: { hp: number; max: number; name: string } | null;
   /** Warning rings for attacks about to land. */
@@ -144,12 +146,17 @@ export interface Snapshot {
   pet?: number[];
   /** Q01 The Lantern Fox: [state (FOX_STATES index), kit x, z, yaw, speed]. */
   fox?: number[];
+  /** Q03 Cages of the War Camp: [status (CAMP_STATUSES), alarm seconds left, horns down, 3 × cage state (CAGE_STATES), 3 × unlatch progress]. */
+  camp?: number[];
+  /** A word from the merchant over the wares (quests). */
+  note?: string;
   /** The party's experience and the hero's skill tree ranks (Leveling.encode). */
   lv?: number[];
-  /** Skill-tree effects: Tumble's decoy [x, z, secondsLeft], the foe under Hunter's Mark (id), the treant [x, z, yaw, speed, mode, grow]. */
+  /** Skill-tree effects: Tumble's decoy [x, z, secondsLeft], and the foe under Hunter's Mark (id). */
   decoy?: number[];
   mark?: number;
-  ally?: number[];
+  /** Allies beside the hero (the treant, Sir Aldric): [kind (ALLY_KINDS), x, z, yaw, speed, mode, grow] each. */
+  allies?: number[][];
   /** The party's gear and bag (sent when it changes). */
   inv?: InvState;
   /** The merchant's wares (while at the merchant's camp). */
@@ -237,8 +244,11 @@ export function interpolate(a: Snapshot, b: Snapshot, t: number): Snapshot {
   // The wolf glides too (unless it leapt far).
   const pet = a.pet && b.pet && Math.hypot(a.pet[0] - b.pet[0], a.pet[1] - b.pet[1]) <= TELEPORT ? [lerp(a.pet[0], b.pet[0], k), lerp(a.pet[1], b.pet[1], k), lerpAngle(a.pet[2], b.pet[2], k), ...b.pet.slice(3)] : b.pet;
 
-  const ally = a.ally && b.ally && Math.hypot(a.ally[0] - b.ally[0], a.ally[1] - b.ally[1]) <= TELEPORT ? [lerp(a.ally[0], b.ally[0], k), lerp(a.ally[1], b.ally[1], k), lerpAngle(a.ally[2], b.ally[2], k), ...b.ally.slice(3)] : b.ally;
-  return { ...b, t: lerp(a.t, b.t, k), hero, fam, slimes, arrows, globs, ev: [], ...(pet ? { pet } : {}), ...(ally ? { ally } : {}) };
+  const allies = b.allies?.map((n) => {
+    const o = a.allies?.find((m) => m[0] === n[0]);
+    return o && Math.hypot(o[1] - n[1], o[2] - n[2]) <= TELEPORT ? [n[0], lerp(o[1], n[1], k), lerp(o[2], n[2], k), lerpAngle(o[3], n[3], k), ...n.slice(4)] : n;
+  });
+  return { ...b, t: lerp(a.t, b.t, k), hero, fam, slimes, arrows, globs, ev: [], ...(pet ? { pet } : {}), ...(allies ? { allies } : {}) };
 }
 
 /**
