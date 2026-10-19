@@ -12,6 +12,56 @@ export function hpBarHtml(health: number, max: number): string {
   return `<div class="hp ${tone}"><span class="hp-heart">♥</span><div class="hp-track"><div class="hp-fill" style="width:${pct}%"></div></div><b>${hp}</b></div>`;
 }
 
+/** Team play on screen (both screens): the "Combo ×N" pop and the familiar's highlights card. */
+export class TeamPops {
+  private readonly comboEl: HTMLElement;
+  private readonly cardEl: HTMLElement;
+  private cardTimer = 0;
+
+  constructor(root: HTMLElement) {
+    root.insertAdjacentHTML('beforeend', '<div class="combo-pop" hidden></div><div class="hl-overlay" hidden></div>');
+    this.comboEl = root.querySelector('.combo-pop')!;
+    this.cardEl = root.querySelector('.hl-overlay')!;
+    const close = (e: Event) => {
+      e.stopPropagation();
+      this.cardEl.hidden = true;
+    };
+    this.cardEl.addEventListener('pointerdown', close);
+  }
+
+  combo(chain: number): void {
+    const el = this.comboEl;
+    el.textContent = chain > 1 ? `⚡ Combo ×${chain}!` : '⚡ Combo!';
+    el.classList.toggle('big', chain >= 3);
+    el.hidden = false;
+    el.classList.remove('pop');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('pop');
+  }
+
+  card(c: Parameters<typeof highlightsHtml>[0]): void {
+    this.cardEl.innerHTML = highlightsHtml(c);
+    this.cardEl.hidden = false;
+    clearTimeout(this.cardTimer);
+    this.cardTimer = window.setTimeout(() => (this.cardEl.hidden = true), 9000);
+  }
+}
+
+/** The familiar's highlights card (both screens). */
+export function highlightsHtml(c: { name: string; emoji: string; heading: string; title: string; icon: string; stuns: number; saves: number; combos: number; gold: number; ultimates: number }): string {
+  const row = (icon: string, label: string, n: number) => `<div class="hl-row${n ? '' : ' none'}"><span>${icon}</span><span>${label}</span><b>${n}</b></div>`;
+  return `<div class="hl-card">
+      <div class="hl-head"><span class="hl-emoji">${c.emoji}</span><div><small>${c.heading}</small><h3>${c.name}’s highlights</h3></div></div>
+      <div class="hl-title">${c.icon} ${c.title}</div>
+      ${row('💫', 'Foes stunned, calmed or slowed', c.stuns)}
+      ${row('🛡️', 'Saves', c.saves)}
+      ${row('⚡', 'Combos', c.combos)}
+      ${row('🪙', 'Gold picked up', c.gold)}
+      ${row('🌟', 'Ultimates', c.ultimates)}
+      <div class="hl-hint">tap to close</div>
+    </div>`;
+}
+
 /** Seconds a finished quest's line stays on the tracker. */
 const DONE_SHOWN = 10;
 const doneSince = new Map<string, number>();

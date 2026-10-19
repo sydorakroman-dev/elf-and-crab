@@ -98,7 +98,27 @@ export type GameEvent =
   /** Chest `i` (in the level's list) was opened. */
   | { e: 'chest'; i: number }
   /** A Rune Seal answer: right (1) or wrong (0); done 1 when the seal breaks. */
-  | { e: 'riddle'; ok: number; done?: number };
+  | { e: 'riddle'; ok: number; done?: number }
+  /** Team play (teamplay.ts): a combo (n: the chain), a shout-out, a ping (k: PING_KINDS), the familiar's ultimate (k: FAMILIAR_KINDS), its highlights card. */
+  | { e: 'combo'; x: number; z: number; n: number }
+  | { e: 'toast'; t: string; c: number }
+  | { e: 'ping'; k: number; x: number; z: number }
+  | { e: 'ult'; k: number; x: number; z: number; h: number }
+  | ({ e: 'card' } & HighlightsCard);
+
+/** The familiar's highlights (a level's or the run's), as shown on both screens. */
+export interface HighlightsCard {
+  name: string;
+  emoji: string;
+  heading: string;
+  title: string;
+  icon: string;
+  stuns: number;
+  saves: number;
+  combos: number;
+  gold: number;
+  ultimates: number;
+}
 
 export interface Snapshot {
   /** Hero simulation time, seconds. */
@@ -144,6 +164,9 @@ export interface Snapshot {
   amb?: number[];
   /** The beast master's wolf: [x, z, yaw, speed, mode, y]. */
   pet?: number[];
+  /** The familiar's power meter (0–100), and its ultimate while it lasts: [kind (FAMILIAR_KINDS), size]. */
+  pw?: number;
+  ult?: [number, number];
   /** Q01 The Lantern Fox: [state (FOX_STATES index), kit x, z, yaw, speed]. */
   fox?: number[];
   /** Q03 Cages of the War Camp: [status (CAMP_STATUSES), alarm seconds left, horns down, 3 × cage state (CAGE_STATES), 3 × unlatch progress]. */

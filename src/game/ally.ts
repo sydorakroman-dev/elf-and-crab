@@ -2,17 +2,20 @@ import * as THREE from 'three';
 import type { BeastPose } from './beastVisual';
 import { clampToArena, pushOutOfCircles, type Circle, type Point } from './combat';
 import { ElementalVisual } from './elementalVisual';
+import { BeastVisual } from './beastVisual';
 import { MonsterVisual } from './monsterVisual';
 import { TREANT_ALLY } from './progression';
 import { KNIGHT } from './quests';
+import { ULT } from './teamplay';
 
 /**
  * Who fights beside the hero:
  * - **treant:** Call of the Forest, the elf's skill tree.
  * - **aldric:** Sir Aldric's spirit, freed in the Crypt (Q02, docs/quests.md).
+ * - **spiritwolf:** the wolf familiar's Moon Pack ultimate (three at once).
  */
-export type AllyKind = 'treant' | 'aldric';
-export const ALLY_KINDS: AllyKind[] = ['treant', 'aldric']; // index = wire code
+export type AllyKind = 'treant' | 'aldric' | 'spiritwolf';
+export const ALLY_KINDS: AllyKind[] = ['treant', 'aldric', 'spiritwolf']; // index = wire code
 
 interface AllyLook {
   /** Builds its visual. */
@@ -34,6 +37,7 @@ interface AllyLook {
 const LOOKS: Record<AllyKind, AllyLook> = {
   treant: { make: () => new ElementalVisual('treant', 2.7), height: 2.7, speed: 5.5, every: TREANT_ALLY.every, reach: TREANT_ALLY.reach, radius: TREANT_ALLY.radius, grow: 0.6, ghost: false, tint: [0x7fe08a, 0.3] },
   aldric: { make: () => new MonsterVisual('knight'), height: 2.4, speed: 6.5, every: KNIGHT.ally.every, reach: 1.8, radius: KNIGHT.ally.radius, grow: 0.9, ghost: true, tint: [0x8fc8ff, 0.65] },
+  spiritwolf: { make: () => new BeastVisual('direwolf'), height: 1.4, speed: 11, every: ULT.wolf.every, reach: 1.6, radius: 1.3, grow: 0.4, ghost: true, tint: [0xdfeaff, 0.7] },
 };
 
 /** Where it stands when there's nothing to fight: beside and behind the hero. */

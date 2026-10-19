@@ -10,6 +10,8 @@ import { makeDecoy, makeMarkRing, placeDecoy, placeMarkRing } from '../game/tree
 import { MAX_LEVEL, levelFor, levelProgress } from '../game/progression';
 import { CAGE_STATES, CAMP_STATUSES, FOX_STATES, KNIGHT_STATES, campTrackerLine, foxTrackerLine, knightTrackerLine, placeCampQuest, placeFoxQuest, placeKnightQuest, type CageState, type CampPlan, type FoxPlan, type KnightPlan } from '../game/quests';
 import { KnightSite } from '../game/knight';
+import { PING_KINDS, ULTIMATES } from '../game/teamplay';
+import { PingMarkers, TidalWave } from '../game/teamfx';
 import { CageSite } from '../game/cages';
 import { FoxKit, FoxSite } from '../game/fox';
 import { HERO_CLASSES } from '../game/heroes';
@@ -116,7 +118,8 @@ export class FamiliarGame {
   private beaconMoved = false;
   private pet: Pet | null = null;
   /** The elf's skill-tree effects: the treant, Tumble's decoy, Hunter's Mark. */
-  private readonly allies = new Map<AllyKind, Ally>();
+  /** Allies by kind and how many of that kind came before (three spirit wolves at once). */
+  private readonly allies = new Map<string, Ally>();
   private readonly decoyFx = makeDecoy();
   private readonly markRing = makeMarkRing();
   private readonly markBox = new THREE.Box3();
@@ -124,6 +127,9 @@ export class FamiliarGame {
   private fox: { plan: FoxPlan; kit: FoxKit; site: FoxSite } | null = null;
   /** Q03 Cages of the War Camp. */
   private camp: { plan: CampPlan; site: CageSite } | null = null;
+  /** Team play: the familiar's pings, and the goldfish's wave while it rolls. */
+  private readonly pings = new PingMarkers();
+  private wave: TidalWave | null = null;
   /** Q02 The Knight Who Would Not Rest. */
   private knight: { plan: KnightPlan; site: KnightSite } | null = null;
 
@@ -161,6 +167,7 @@ export class FamiliarGame {
     for (const m of [this.famRing, this.rangeRing, this.pounceMark]) m.position.y = 0.06;
     this.famRing.visible = this.rangeRing.visible = this.pounceMark.visible = false;
 
+    this.scene.add(this.pings.group);
     this.scene.add(
       elf.group,
       ...Object.values(bodies).map((b) => b.group),
@@ -189,6 +196,8 @@ export class FamiliarGame {
     this.hud.onParade = (kind) => this.session.send({ type: 'parade', kind });
     this.hud.onAnswer = (value) => this.session.send({ type: 'answer', value });
     this.hud.onRiddle = () => this.session.send({ type: 'riddle' });
+    this.hud.onUltimate = () => this.session.send({ type: 'ultimate' });
+    this.hud.onPing = (kind) => this.session.send({ type: 'ping', kind });
     bodies.crab.onStep = (s) => this.sfx.scuttle(s);
     bodies.wolf.onStep = (s) => this.sfx.scuttle(s * 0.6);
     bodies.capybara.onStep = (s) => this.sfx.footstep(s * 0.4);
@@ -306,6 +315,39 @@ export class FamiliarGame {
         case 'banner':
           this.hud.popups.banner(ev.text);
           break;
+        case 'combo':
+          this.hud.combo(ev.n);
+          this.effects.burst(ev.x, 2, ev.z, new THREE.Color(0xffe066), 26, 6, 0.12);
+          this.effects.ring(ev.x, ev.z, new THREE.Color(0xffe066), 2);
+          this.sfx.coin();
+          break;
+        case 'toast':
+          this.hud.popups.toast(ev.t, ev.c);
+          this.sfx.powerUp();
+          break;
+        case 'ping': {
+          const kind = PING_KINDS[ev.k];
+          if (!kind) break;
+          this.pings.add(kind, ev.x, ev.z);
+          this.sfx.calm();
+          break;
+        }
+        case 'ult': {
+          const kind = FAMILIAR_KINDS[ev.k];
+          if (kind === 'goldfish') {
+            this.wave?.group.removeFromParent();
+            this.wave = new TidalWave(ev.x, ev.z, ev.h, ULTIMATES.goldfish.seconds);
+            this.scene.add(this.wave.group);
+          }
+          this.effects.burst(ev.x, 1, ev.z, new THREE.Color(kind ? FAMILIARS[kind].color : 0xffffff), 50, 8, 0.16);
+          this.sfx.wave();
+          break;
+        }
+        case 'card': {
+          const { e: _e, ...card } = ev;
+          this.hud.showHighlights(card);
+          break;
+        }
         case 'slam': {
           const red = new THREE.Color(0xc0303a);
           this.effects.ring(ev.x, ev.z, red, ev.r);
@@ -480,6 +522,14 @@ export class FamiliarGame {
     if (s) this.apply(s, dt);
     this.effects.update(dt);
     this.numbers.update(dt);
+    this.pings.update(dt, this.time);
+    if (this.wave) {
+      this.wave.update(dt);
+      if (this.wave.done) {
+        this.wave.group.removeFromParent();
+        this.wave = null;
+      }
+    }
     (this.quality ??= new AutoQuality(this.renderer)).frame(dt);
     // The tablet plays the same music as the hero.
     const latest = this.buffer.latest;
@@ -508,23 +558,27 @@ export class FamiliarGame {
       this.scene.remove(this.pet.group);
       this.pet = null;
     }
-    const here = new Set<AllyKind>();
+    const here = new Set<string>();
+    const counted = new Map<AllyKind, number>();
     for (const t of s.allies ?? []) {
       const kind = ALLY_KINDS[t[0]];
       if (!kind) continue;
-      here.add(kind);
-      let a = this.allies.get(kind);
+      const n = counted.get(kind) ?? 0;
+      counted.set(kind, n + 1);
+      const key = `${kind}#${n}`;
+      here.add(key);
+      let a = this.allies.get(key);
       if (!a) {
         a = new Ally(kind, t[1], t[2], 1);
-        this.allies.set(kind, a);
+        this.allies.set(key, a);
         this.scene.add(a.group);
       }
       a.show(t, dt, this.time);
     }
-    for (const [kind, a] of this.allies)
-      if (!here.has(kind)) {
+    for (const [key, a] of this.allies)
+      if (!here.has(key)) {
         this.scene.remove(a.group);
-        this.allies.delete(kind);
+        this.allies.delete(key);
       }
     if (!this.decoyFx.parent) this.scene.add(this.decoyFx, this.markRing);
     placeDecoy(this.decoyFx, s.decoy ? { x: s.decoy[0], z: s.decoy[1], left: s.decoy[2] } : null, this.time);
@@ -562,6 +616,10 @@ export class FamiliarGame {
       if (line) lines.push(line);
     }
     this.hud.setQuests(lines);
+    // Team play: the power meter on the ultimate button, and the King Crab's size.
+    this.hud.setMeter(s.pw ?? 0, this.shownKind);
+    const crab = s.ult && FAMILIAR_KINDS[s.ult[0]] === 'crab' ? s.ult[1] : 1;
+    this.currentBody()?.group.scale.setScalar(crab);
     // The party's level (shared with the elf).
     const xp = s.lv?.[0] ?? 0;
     this.hud.setXp(levelFor(xp), levelProgress(xp), MAX_LEVEL);
@@ -592,6 +650,7 @@ export class FamiliarGame {
       boss: bossHall && s.phase === 'fight' ? bossHall : null,
       landmarks: this.dungeon.level.landmarks,
       goal: s.phase === 'cleared' && e ? e : bossHall ?? null,
+      pings: this.pings.list(),
     });
     if (s.phase === 'cleared' && !this.beaconMoved) {
       this.beaconMoved = true;

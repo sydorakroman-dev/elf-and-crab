@@ -160,6 +160,49 @@ Through the exit door you reach the **merchant's camp**: four pieces of gear, tw
 and anything in the bag sells for 30% of its worth. Both players can buy from the shared purse; the elf decides when
 to move on. The bag pauses a solo game; with a familiar along, the game keeps going.
 
+## Team play: the familiar's power meter, combos and pings
+
+Rules in `src/game/teamplay.ts` (unit tested); visuals in `src/game/teamfx.ts`.
+
+**The power meter** is a glowing ring round the familiar's **ultimate button** on the tablet (and round its badge on
+the hero's screen). It fills as the familiar helps and never drains; it carries over between levels.
+
+| The familiar… | Fills |
+| --- | --- |
+| lands a spell that reaches someone (stun, slow, calm, yank, shield, heal) | +8, +2 per extra foe (up to +16) |
+| bites | +1 per 10 damage |
+| **saves the elf** (its shield blocks a hit, or its heal / ward lands while the elf is below 30%) | +15, and **"Saved by the …!"** on both screens |
+| sets up a combo | +10 |
+| picks up loot | +1 |
+
+When it's full the button glows. Tap it for the creature's **ultimate**. An ultimate's own hits don't refill the
+meter.
+
+| Creature | Ultimate |
+| --- | --- |
+| 🦀 Crab | 👑 **King Crab**: grows giant for 6 s; a claw slam every second stuns and hits (25) every foe within 6 m |
+| 🦫 Capybara | 🌊 **Hot Spring Flood**: a 10 m warm pool for 8 s; foes in it are slowed and calmed, the elf heals 4 HP/s in it |
+| 🐺 Wolf | 🌕 **Moon Pack**: three spirit wolves hunt nearby foes for 8 s (12 a bite), and the elf gets Rapid fire |
+| 🐠 Goldfish | 🌊 **Tidal Wave**: a wave rolls 20 m ahead, 8 m wide: 30 damage, a big shove, slowed for 3 s |
+| 🦎 Iguana | 🐉 **Jade Dragon**: roots every foe within 9 m for 3 s, and the elf gets a 3-hit jade shield |
+
+**Combos:** when the hero hits a foe within 2.5 s of the familiar's spell reaching it (stunned, slowed, yanked,
+knocked back, calmed, or standing in its pool or ward), it's a **Combo!** The hit does +30% damage, with a pop on
+both screens. Combos within 4 s chain (×2, ×3…), and the fifth is a **Super combo** that drops gold.
+
+**Pings:** the tablet's 📣 button sends 👀 *Look here!*, ⚠️ *Danger!* (on the nearest awake foes), 🎁 *Loot here!* or
+❤️ hearts. Each shows as a big marker in the world and on the minimap for 4 s, at most one every 1.5 s.
+
+**Highlights:** at each merchant's camp (and at the end of a run), both screens show the familiar's card:
+- foes stunned, calmed or slowed;
+- saves;
+- combos;
+- gold picked up;
+- ultimates.
+
+It also gets a title for its best work: Shield Hero, Combo Master, Stun Star, Treasure Hunter, Big Moment or Best
+Buddy.
+
 ## Quests
 
 Optional stories inside a level, designed in [`docs/quests.md`](docs/quests.md), are shown by a tracker under the

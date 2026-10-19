@@ -44,6 +44,8 @@ import { SkillTreePanel, type TreeView } from '../ui/skilltree';
 import { makeDecoy, makeMarkRing, placeDecoy, placeMarkRing } from './treefx';
 import { CAGE_STATES, CAMP, CAMP_STATUSES, CampQuest, FOX, FOX_STATES, FoxQuest, KNIGHT, KNIGHT_STATES, KnightQuest, campTrackerLine, foxTrackerLine, knightTrackerLine, placeCampQuest, placeFoxQuest, placeKnightQuest, type CampPlan, type FoxPlan, type KnightPlan } from './quests';
 import { KnightSite } from './knight';
+import { COMBO, ComboTracker, METER, PING_KINDS, PINGS, PingLimiter, PowerMeter, SAVE_HEALTH, ULT, ULTIMATES, emptyStats, highlightTitle, type FamiliarStats, type PingKind } from './teamplay';
+import { PingMarkers, TidalWave } from './teamfx';
 import { CageSite } from './cages';
 import { FoxKit, FoxSite } from './fox';
 import { POTIONS, RARITY_INFO, WEAPON_TYPES, makeItem, makePotion, type BagEntry, type WeaponType } from './items';
@@ -232,6 +234,19 @@ export class Game {
   private aldric: Ally | null = null;
   /** Interact (F, or holding the prompt) is held down. */
   private interactHeld = false;
+  /** Team play (teamplay.ts): the familiar's power meter, combos, pings, and what it did (this level, this run). */
+  private readonly meter = new PowerMeter();
+  private readonly combos = new ComboTracker();
+  private readonly pingLimit = new PingLimiter();
+  private readonly pings = new PingMarkers();
+  private famStats: FamiliarStats = emptyStats();
+  private runStats: FamiliarStats = emptyStats();
+  /** The shield up now came from the familiar (a block counts as its save). */
+  private shieldByFam = false;
+  /** This Jade Ward has already counted as a save. */
+  private wardSaved = false;
+  /** The familiar's ultimate while it lasts: which, seconds left, the next pulse, and its pieces. */
+  private ult: { kind: FamiliarKind; left: number; tick: number; wolves: Ally[]; wave: TidalWave | null; waveHit: Set<number> } | null = null;
   /** The merchant told you about the captives (before the war camp, this run). */
   private campHooked = false;
   /** The merchant's word over the wares, this visit. */
@@ -294,7 +309,7 @@ export class Game {
     );
     this.shieldBubble.visible = false;
     this.wardRing = jadeRing(SPELLS.ward.radius);
-    this.scene.add(this.wardRing, this.numbers.group, this.markRing, this.decoyFx);
+    this.scene.add(this.wardRing, this.numbers.group, this.markRing, this.decoyFx, this.pings.group);
     this.scene.add(...Object.values(familiars).map((b) => b.group));
     this.scene.add(elf.group, this.springPools.group, this.enemies.group, this.arrows.group, this.globs.group, this.pickups.group, this.shieldBubble, this.effects.mesh, this.effects.rings, this.telegraph.group);
 
@@ -442,6 +457,10 @@ export class Game {
   private newGame(start = 0): void {
     const room = Math.max(0, Math.min(ROOMS.length - 1, start));
     this.campHooked = false; // the merchant hasn't told this run's party anything yet
+    this.meter.reset();
+    this.famStats = emptyStats();
+    this.runStats = emptyStats();
+    this.shieldByFam = false;
     this.loadRoom(room); // a freshly generated level every run
     this.resetWorld();
     this.state = 'playing';
@@ -513,6 +532,217 @@ export class Game {
     this.enemies.alarms = 0;
     this.minimap?.setLevel(this.level.map);
     this.setupQuests();
+    this.nextLevelStats();
+  }
+
+  // ── Team play: the familiar's meter, ultimates, combos, pings, highlights (teamplay.ts) ───────
+
+  /** A combo: the hero hit what the familiar set up. */
+  private comboFx(foe: Enemy, chain: number, isSuper: boolean): void {
+    this.meter.add(METER.combo);
+    this.famStats.combos++;
+    const y = foe.radius * 1.8 + 1.2;
+    this.effects.burst(foe.x, y, foe.z, new THREE.Color(0xffe066), 26, 6, 0.12);
+    this.effects.ring(foe.x, foe.z, 0xffe066, foe.radius + 1.2);
+    this.events.push({ e: 'combo', x: q(foe.x), z: q(foe.z), n: chain });
+    this.hud.combo(chain);
+    if (isSuper) {
+      this.banner('⚡ Super combo!');
+      this.dropLoot(foe.x, foe.z, [{ kind: 'gold', amount: COMBO.superGold }]);
+      this.sfx.coin();
+    }
+  }
+
+  /** The familiar saved the elf: a shout-out on both screens. */
+  private famSave(icon: string): void {
+    const kind = this.companion.kind;
+    if (!kind) return;
+    this.meter.add(METER.save);
+    this.famStats.saves++;
+    const text = `${icon} Saved by the ${FAMILIARS[kind].name}!`;
+    this.hud.toast(text, FAMILIARS[kind].color);
+    this.events.push({ e: 'toast', t: text, c: FAMILIARS[kind].color });
+  }
+
+  /** The familiar's ultimate (its meter full). */
+  private startUltimate(): void {
+    const kind = this.companion.kind;
+    if (!kind || this.ult || this.state !== 'playing' || !this.meter.use()) return;
+    const def = ULTIMATES[kind];
+    const c = this.companion.position;
+    this.ult = { kind, left: def.seconds, tick: 0, wolves: [], wave: null, waveHit: new Set() };
+    this.famStats.ultimates++;
+    this.banner(`${def.icon} ${def.name.toUpperCase()}!`);
+    this.shake = Math.max(this.shake, 0.4);
+    this.sfx.wave();
+    this.events.push({ e: 'ult', k: FAMILIAR_KINDS.indexOf(kind), x: q(c.x), z: q(c.z), h: q(this.companion.facing) });
+    const color = FAMILIARS[kind].color;
+    this.effects.ring(c.x, c.z, color, 6);
+    this.effects.burst(c.x, 1, c.z, new THREE.Color(color), 50, 8, 0.16);
+    switch (kind) {
+      case 'capybara':
+        // The pool itself (it shows on the tablet too); the healing and calming are below.
+        this.zones.push({ id: this.nextZoneId++, kind: ZONE_SPRING, x: c.x, z: c.z, r: ULT.capybara.radius, t: def.seconds, healed: true });
+        break;
+      case 'wolf':
+        for (let i = 0; i < ULT.wolf.wolves; i++) {
+          const a = (i / ULT.wolf.wolves) * Math.PI * 2;
+          const w = new Ally('spiritwolf', c.x + Math.cos(a) * 1.5, c.z + Math.sin(a) * 1.5, def.seconds);
+          this.ult.wolves.push(w);
+          this.scene.add(w.group);
+        }
+        this.powers.add('rapid', def.seconds);
+        break;
+      case 'goldfish':
+        this.ult.wave = new TidalWave(c.x, c.z, this.companion.facing, def.seconds);
+        this.scene.add(this.ult.wave.group);
+        break;
+      case 'iguana': {
+        const hit = this.enemies.stunAround(c.x, c.z, ULT.iguana.radius, ULT.iguana.root).filter((s) => !s.inert);
+        this.spellLanded(hit, false, false);
+        this.powers.add('shield');
+        this.shieldHits = Math.max(this.shieldHits, ULT.iguana.shieldHits);
+        this.shieldByFam = true;
+        this.effects.ring(c.x, c.z, JADE, ULT.iguana.radius);
+        this.events.push({ e: 'ring', x: q(c.x), z: q(c.z), r: ULT.iguana.radius, c: JADE });
+        break;
+      }
+    }
+  }
+
+  /** The ultimate while it lasts. */
+  private updateUltimate(dt: number): void {
+    const u = this.ult;
+    if (!u) return;
+    u.left -= dt;
+    u.tick -= dt;
+    const c = this.companion.position;
+    const p = this.player.position;
+    const power = 1 + this.famGear.famPower;
+    switch (u.kind) {
+      case 'crab':
+        // Giant: a claw slam every second.
+        if (u.tick <= 0) {
+          u.tick = ULT.crab.every;
+          const hit = this.enemies.stunAround(c.x, c.z, ULT.crab.radius, ULT.crab.stun).filter((s) => !s.inert);
+          for (const s of hit) this.damage(s, s.x - c.x, s.z - c.z, ULT.crab.damage * power);
+          this.spellLanded(hit, false, false);
+          this.effects.ring(c.x, c.z, FAMILIARS.crab.color, ULT.crab.radius);
+          this.events.push({ e: 'slam', x: q(c.x), z: q(c.z), r: ULT.crab.radius });
+          this.shake = Math.max(this.shake, 0.25);
+          this.sfx.land();
+        }
+        break;
+      case 'capybara': {
+        const r = ULT.capybara.radius;
+        for (const s of this.enemies.all) {
+          if (!s.alive || s.inert || Math.hypot(s.x - c.x, s.z - c.z) > r + s.radius * 0.5) continue;
+          s.slow = Math.min(s.slow, ULT.capybara.slow);
+          if (!s.bossName) s.calm(0.6);
+          this.combos.mark([s.id], this.time);
+        }
+        if (Math.hypot(p.x - c.x, p.z - c.z) <= r && this.health < this.maxHealth) {
+          this.health = Math.min(this.maxHealth, this.health + ULT.capybara.heal * dt);
+          this.hud.setHealth(this.health);
+        }
+        break;
+      }
+      case 'wolf':
+        for (const w of u.wolves) {
+          const foe = this.enemies.all
+            .filter((s) => s.alive && !s.hidden && !s.inert && !this.enemies.isAsleep(s) && Math.hypot(s.x - p.x, s.z - p.z) < 18)
+            .sort((a, b) => Math.hypot(a.x - w.x, a.z - w.z) - Math.hypot(b.x - w.x, b.z - w.z))[0];
+          const bite = w.update(dt, p, foe ?? null, this.dungeon.obstacles, this.time);
+          if (bite && foe) {
+            this.damage(foe, foe.x - w.x, foe.z - w.z, ULT.wolf.damage * power);
+            this.combos.mark([foe.id], this.time);
+          }
+        }
+        break;
+      case 'goldfish': {
+        const wave = u.wave!;
+        wave.update(dt);
+        // Everything the wave's front passes over: hurt, thrown back, slowed (once each).
+        const h = wave.group.rotation.y;
+        const dx = Math.sin(h);
+        const dz = Math.cos(h);
+        const o = wave.group.position;
+        for (const s of [...this.enemies.all]) {
+          if (!s.alive || s.hidden || s.inert || u.waveHit.has(s.id)) continue;
+          const along = (s.x - o.x) * dx + (s.z - o.z) * dz;
+          const side = Math.abs((s.x - o.x) * dz - (s.z - o.z) * dx);
+          if (along < 0 || along > wave.front + s.radius || side > ULT.goldfish.width / 2 + s.radius) continue;
+          u.waveHit.add(s.id);
+          this.damage(s, dx, dz, ULT.goldfish.damage * power);
+          s.shove(dx, dz, ULT.goldfish.shove);
+          s.soak(ULT.goldfish.slowSeconds, ULT.goldfish.slow);
+          this.spellLanded([s], false, false);
+          this.effects.burst(s.x, s.radius, s.z, WATER_BLUE, 10, 4, 0.1);
+        }
+        break;
+      }
+    }
+    const done = u.kind === 'goldfish' ? u.wave!.done : u.left <= 0 && u.wolves.every((w) => w.done);
+    if (u.kind === 'wolf') {
+      for (const w of u.wolves) if (w.done) this.scene.remove(w.group);
+      u.wolves = u.wolves.filter((w) => !w.done);
+    }
+    if (done || (u.left <= -3 && u.kind !== 'goldfish')) this.endUltimate();
+  }
+
+  private endUltimate(): void {
+    const u = this.ult;
+    if (!u) return;
+    for (const w of u.wolves) this.scene.remove(w.group);
+    if (u.wave) this.scene.remove(u.wave.group);
+    this.ult = null;
+  }
+
+  /** The King Crab's size now (1 normally). */
+  private get crabScale(): number {
+    const u = this.ult;
+    if (!u || u.kind !== 'crab') return 1;
+    const t = ULTIMATES.crab.seconds - u.left;
+    const grow = Math.min(1, t / 0.4) * Math.min(1, Math.max(0, u.left) / 0.4);
+    return 1 + (ULT.crab.scale - 1) * grow;
+  }
+
+  /** A ping from the familiar's tablet. */
+  private familiarPing(kind: PingKind): void {
+    if (!this.companion.kind || !this.pingLimit.allow(this.time)) return;
+    const c = this.companion.position;
+    let at = { x: c.x, z: c.z };
+    if (kind === 'danger') {
+      // On the nearest awake foes (or the familiar, if none).
+      const foe = this.enemies.all
+        .filter((s) => s.alive && !s.inert && !this.enemies.isAsleep(s) && Math.hypot(s.x - c.x, s.z - c.z) < 30)
+        .sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z))[0];
+      if (foe) at = { x: foe.x, z: foe.z };
+    }
+    this.pings.add(kind, at.x, at.z);
+    const def = PINGS[kind];
+    if (def.label) this.hud.toast(`${FAMILIARS[this.companion.kind].emoji} ${def.icon} ${def.label}`, def.color);
+    this.sfx.calm();
+    this.events.push({ e: 'ping', k: PING_KINDS.indexOf(kind), x: q(at.x), z: q(at.z) });
+  }
+
+  /** The familiar's highlights for this level (at the merchant's camp) or the run (at its end). */
+  private showHighlights(stats: FamiliarStats, heading: string): void {
+    const kind = this.companion.kind;
+    if (!kind || !this.net?.familiarConnected) return;
+    const t = highlightTitle(stats);
+    const card = { name: FAMILIARS[kind].name, emoji: FAMILIARS[kind].emoji, heading, title: t.title, icon: t.icon, ...stats };
+    this.hud.showHighlights(card);
+    this.events.push({ e: 'card', ...card });
+  }
+
+  /** A new level: the familiar's per-level tally starts over (the run's keeps adding up). */
+  private nextLevelStats(): void {
+    for (const k of Object.keys(this.famStats) as (keyof FamiliarStats)[]) this.runStats[k] += this.famStats[k];
+    this.famStats = emptyStats();
+    this.combos.reset();
+    this.endUltimate();
+    this.pings.clear();
   }
 
   // ── Quests (docs/quests.md) ───────────────────────────────────────────────────────────────
@@ -956,11 +1186,17 @@ export class Game {
     this.updateGlobs(dt);
 
     for (const hit of this.arrows.update(dt, this.enemies.all, this.dungeon.obstacles)) {
-      this.damage(hit.slime, hit.dirX, hit.dirZ, hit.damage ?? this.arrowDamage());
+      this.damage(hit.slime, hit.dirX, hit.dirZ, hit.damage ?? this.arrowDamage(), true);
       if (hit.enchant) this.enchantHit(hit);
     }
 
     this.updateFamiliar(dt);
+    this.updateUltimate(dt);
+    this.pings.update(dt, this.time);
+    if (this.steps % 60 === 0) this.combos.prune(this.time);
+    this.hud.setFamiliarMeter(this.companion.kind ? this.meter.value / METER.max : 0);
+    // The King Crab: the familiar grows giant while it lasts.
+    this.companion.body?.group.scale.setScalar(this.crabScale);
     this.rest(dt);
     this.updateBlessings(dt);
     this.shieldWall = Math.max(0, this.shieldWall - dt);
@@ -1044,7 +1280,7 @@ export class Game {
     for (const s of [...this.enemies.all]) {
       if (!s.alive || s.hidden || !inSwing(p.x, p.z, dir.x, dir.z, range, arc, s)) continue;
       this.enemies.wake(s);
-      this.damage(s, s.x - p.x, s.z - p.z, this.arrowDamage());
+      this.damage(s, s.x - p.x, s.z - p.z, this.arrowDamage(), true);
       if (enchant) this.enchantHit({ slime: s, dirX: dir.x, dirZ: dir.z, enchant });
       hits++;
     }
@@ -1070,9 +1306,11 @@ export class Game {
     };
     if (r.bitten) {
       push(r.bitten, r.biteDamage);
+      this.meter.bite(r.biteDamage);
       this.events.push({ e: 'bite' });
     }
     for (const s of r.pounceHits) push(s, POUNCE_DAMAGE);
+    if (r.pounceHits.length) this.spellLanded(r.pounceHits, false);
     if (r.landed) {
       this.effects.ring(c.x, c.z, 0xd9cbb0, 2.2);
       this.effects.burst(c.x, 0.3, c.z, new THREE.Color(0xb8a98f), 16, 4, 0.12);
@@ -1088,9 +1326,13 @@ export class Game {
     const p = this.player.position;
     const spell = SPELLS[id];
     const color = new THREE.Color(this.companion.kind ? FAMILIARS[this.companion.kind].color : 0xffffff);
+    // Who it reached (foes: for combos and the meter), or whether it helped the elf instead.
+    let affected: Enemy[] = [];
+    let helps = false;
     switch (id) {
       case 'burst': {
         const hit = this.enemies.stunAround(c.x, c.z, spell.radius, spell.duration);
+        affected = hit;
         this.effects.ring(c.x, c.z, color, spell.radius);
         this.effects.burst(c.x, 0.8, c.z, color, 30, 7, 0.14);
         for (const s of hit) this.effects.burst(s.x, s.radius * 1.6, s.z, STUN_STAR, 6, 3, 0.1);
@@ -1100,12 +1342,14 @@ export class Game {
       case 'shell':
         this.powers.add('shield');
         this.shieldHits = Math.max(this.shieldHits, 1);
+        this.shieldByFam = helps = true;
         this.effects.burst(p.x, 1.2, p.z, new THREE.Color(POWER_UPS.shield.color), 24, 5, 0.12);
         this.effects.ring(p.x, p.z, POWER_UPS.shield.color, 1.8);
         this.hud.toast('🐚 Shell Shield!', POWER_UPS.shield.color);
         this.sfx.powerUp();
         break;
       case 'spring':
+        helps = true;
         this.zones.push({ id: this.nextZoneId++, kind: ZONE_SPRING, x: c.x, z: c.z, r: spell.radius, t: spell.duration, healed: false });
         this.effects.ring(c.x, c.z, SPRING_BLUE, spell.radius);
         this.effects.burst(c.x, 0.4, c.z, SPRING_BLUE, 20, 4, 0.1);
@@ -1113,6 +1357,7 @@ export class Game {
         break;
       case 'calm': {
         const hit = this.enemies.calmAround(c.x, c.z, spell.radius, spell.duration);
+        affected = hit;
         this.effects.ring(c.x, c.z, CALM_PINK, spell.radius);
         this.effects.burst(c.x, 1, c.z, CALM_PINK, 30, 5, 0.12);
         for (const s of hit) this.effects.burst(s.x, s.radius * 1.6, s.z, CALM_PINK, 5, 2, 0.1);
@@ -1126,6 +1371,7 @@ export class Game {
       case 'bubble':
         this.powers.add('shield');
         this.shieldHits = BUBBLE_HITS;
+        this.shieldByFam = helps = true;
         this.effects.burst(p.x, 1.2, p.z, WATER_BLUE, 28, 5, 0.12);
         this.effects.ring(p.x, p.z, WATER_BLUE, 1.8);
         this.hud.toast(`🫧 Bubble Shield! (${BUBBLE_HITS} hits)`, 0x8fd4ff);
@@ -1138,6 +1384,7 @@ export class Game {
         const dz = Math.cos(h);
         for (const s of [...this.enemies.all]) {
           if (!s.alive || s.hidden || !inJet(c, h, s, s.radius)) continue;
+          affected.push(s);
           this.damage(s, dx, dz, JET.damage * (1 + this.famGear.famPower));
           s.shove(dx, dz, JET.shove);
           s.soak(spell.duration, JET.slow);
@@ -1169,13 +1416,17 @@ export class Game {
             prey.stun(spell.duration);
           }
           this.effects.burst(prey.x, prey.radius, prey.z, TONGUE_PINK, 10, 3, 0.1);
+          affected = [prey];
         }
         this.sfx.whoosh();
+        this.spellLanded(affected, false);
         this.events.push({ e: 'spell', id: SPELL_IDS.indexOf(id), x: q(c.x), z: q(c.z), h: q(h), d: q(reach) });
         return;
       }
       case 'ward':
         this.ward = spell.duration;
+        this.wardSaved = false;
+        helps = true;
         this.effects.ring(p.x, p.z, JADE, spell.radius);
         this.effects.burst(p.x, 1, p.z, new THREE.Color(JADE), 24, 4, 0.1);
         this.hud.toast('💚 Jade Ward!', JADE);
@@ -1183,7 +1434,8 @@ export class Game {
         break;
       case 'howl': {
         // Enemies around panic and run off (calmed: harmless, wandering away); bosses only flinch.
-        const near = this.enemies.all.filter((s) => s.alive && !s.hidden && Math.hypot(s.x - c.x, s.z - c.z) <= spell.radius + s.radius);
+        const near = this.enemies.all.filter((s) => s.alive && !s.hidden && !s.inert && Math.hypot(s.x - c.x, s.z - c.z) <= spell.radius + s.radius);
+        affected = near;
         for (const s of near) {
           if (s.bossName) s.stun(HOWL_BOSS_FLINCH);
           else s.calm(spell.duration);
@@ -1200,7 +1452,21 @@ export class Game {
         break;
       }
     }
+    this.spellLanded(affected, helps);
     this.events.push({ e: 'spell', id: SPELL_IDS.indexOf(id), x: q(c.x), z: q(c.z), h: q(this.companion.facing) });
+  }
+
+  /**
+   * A familiar spell went off: it fills the meter if it reached someone, and sets foes up for combos.
+   * `fills` false for the ultimate's own hits (they'd refill the meter it was just spent from).
+   */
+  private spellLanded(affected: readonly Enemy[], helps: boolean, fills = true): void {
+    const foes = affected.filter((s) => !s.inert);
+    if (foes.length) {
+      if (fills) this.meter.spell(foes.length);
+      this.combos.mark(foes.map((s) => s.id), this.time);
+      this.famStats.stuns += foes.length;
+    } else if (helps && fills) this.meter.spell(1);
   }
 
   /** Soothing Spring pools slow enemies and heal the elf once; burning ground hurts while the elf stands in it. */
@@ -1222,10 +1488,14 @@ export class Game {
         continue;
       }
       for (const s of this.enemies.all) {
-        if (Math.hypot(s.x - z.x, s.z - z.z) <= z.r + s.radius * 0.5) s.slow = Math.min(s.slow, SPRING_SLOW);
+        if (Math.hypot(s.x - z.x, s.z - z.z) <= z.r + s.radius * 0.5) {
+          s.slow = Math.min(s.slow, SPRING_SLOW);
+          if (!s.inert) this.combos.mark([s.id], this.time); // slowed in the familiar's pool: set up for a combo
+        }
       }
       if (!z.healed && this.health < this.maxHealth && Math.hypot(p.x - z.x, p.z - z.z) <= z.r) {
         z.healed = true;
+        if (this.health < this.maxHealth * SAVE_HEALTH) this.famSave('♨️');
         this.heal(HEALING.spring);
         this.hud.toast(`♨️ +${HEALING.spring} HP`, 0x8fe8f5);
         this.effects.burst(p.x, 1.2, p.z, new THREE.Color(0xff4d5e), 14, 4, 0.12);
@@ -1282,6 +1552,14 @@ export class Game {
   }
 
   private familiarCommand(cmd: FamiliarCommand): void {
+    if (cmd.type === 'ultimate') {
+      this.startUltimate();
+      return;
+    }
+    if (cmd.type === 'ping') {
+      this.familiarPing(cmd.kind);
+      return;
+    }
     if (cmd.type === 'answer') {
       if (this.riddle) this.answerRiddle(cmd.value);
       else this.answerKnightRiddle(cmd.value);
@@ -1382,6 +1660,8 @@ export class Game {
       ...(this.sealPending ? { seal: 1 } : {}),
       ...(this.pet ? { pet: this.pet.tuple() } : {}),
       lv: this.leveling.encode(),
+      pw: Math.round(this.meter.value),
+      ...(this.ult ? { ult: [FAMILIAR_KINDS.indexOf(this.ult.kind), q(this.crabScale)] as [number, number] } : {}),
       ...(this.fox ? { fox: [FOX_STATES.indexOf(this.fox.quest.state), ...this.fox.kit.tuple()] } : {}),
       ...(this.camp ? { camp: this.campTuple() } : {}),
       ...(this.shopNote && this.phase === 'shop' ? { note: this.shopNote } : {}),
@@ -1421,6 +1701,7 @@ export class Game {
       boss: bossHall && this.enemies.guardianAlive ? bossHall : null,
       landmarks: this.level.landmarks,
       goal: this.phase === 'cleared' && e ? e : bossHall ?? null,
+      pings: this.pings.list(),
     });
     this.spotLandmarks();
   }
@@ -1469,13 +1750,21 @@ export class Game {
     this.events.push({ e: 'banner', text });
   }
 
-  private damage(slime: Enemy, dirX: number, dirZ: number, amount = HERO.arrowDamage): void {
+  /** `fromHero`: the hero's own blow (arrows, swings, skills, spells) — a combo if the familiar just set the foe up. */
+  private damage(slime: Enemy, dirX: number, dirZ: number, amount = HERO.arrowDamage, fromHero = false): void {
     if (this.phase === 'ready' && !this.practice) return; // monsters can't be hurt before the start
     if (slime.kind === 'runestone') {
       this.strikeRuneStone(slime); // Q02: broken by riddles (or, solo, blows in order)
       return;
     }
     if (this.mark?.id === slime.id) amount *= 1 + this.leveling.value('huntersmark'); // Hunter's Mark
+    if (fromHero && !slime.inert && slime.alive) {
+      const c = this.combos.hit(slime.id, this.time);
+      if (c.combo) {
+        amount *= 1 + COMBO.bonus;
+        this.comboFx(slime, c.chain, c.super);
+      }
+    }
     const hpBefore = slime.hp;
     const killed = slime.hurt(amount, dirX, dirZ);
     const y = slime.radius;
@@ -1584,6 +1873,7 @@ export class Game {
       this.hud.setScore(this.score);
     } else {
       this.powers.add(type);
+      if (type === 'shield') this.shieldByFam = false; // a power-up's shield, not the familiar's
     }
     const who = byFamiliar && this.companion.kind ? `${FAMILIARS[this.companion.kind].emoji} ` : '';
     this.hud.toast(`${who}${def.icon} ${def.label}!`, def.color);
@@ -1656,6 +1946,7 @@ export class Game {
     this.sinceHurt = 0;
     if (this.powers.has('shield')) {
       // The shield takes the hit instead (a Bubble Shield holds for a second one).
+      if (this.shieldByFam) this.famSave('🐚');
       this.shieldHits--;
       if (this.shieldHits <= 0) this.powers.end('shield');
       this.invulnerable = 0.8;
@@ -1692,10 +1983,18 @@ export class Game {
     this.wardRing.position.set(p.x, 0, p.z);
     this.wardRing.rotation.y += dt * 0.6;
     const before = Math.ceil(this.health);
+    if (!this.wardSaved && this.health < this.maxHealth * SAVE_HEALTH) {
+      this.wardSaved = true;
+      this.famSave('💚');
+    }
     this.health = Math.min(this.maxHealth, this.health + WARD.heal * dt);
     if (Math.ceil(this.health) !== before) this.hud.setHealth(this.health);
     const r = SPELLS.ward.radius;
-    for (const s of this.enemies.all) if (Math.hypot(s.x - p.x, s.z - p.z) <= r + s.radius * 0.5) s.slow = Math.min(s.slow, WARD.slow);
+    for (const s of this.enemies.all)
+      if (Math.hypot(s.x - p.x, s.z - p.z) <= r + s.radius * 0.5) {
+        s.slow = Math.min(s.slow, WARD.slow);
+        if (!s.inert) this.combos.mark([s.id], this.time);
+      }
   }
 
   /** Uses whatever's in action slot `slot` (keys 1-9 by default, or a tap on the bar). */
@@ -1753,7 +2052,7 @@ export class Game {
         for (const s of [...this.enemies.all]) {
           if (!s.alive || s.hidden || !inSwing(p.x, p.z, dir.x, dir.z, 3.4, 0.9, s)) continue;
           this.enemies.wake(s);
-          this.damage(s, s.x - p.x, s.z - p.z, 15);
+          this.damage(s, s.x - p.x, s.z - p.z, 15, true);
           s.stun(1.5);
           s.shove(s.x - p.x, s.z - p.z, 2.5);
         }
@@ -1788,7 +2087,7 @@ export class Game {
         }
         for (const s of foesWithin(land.x, land.z, 3.5)) {
           this.enemies.wake(s);
-          this.damage(s, s.x - land.x || dir.x, s.z - land.z || dir.z, 32);
+          this.damage(s, s.x - land.x || dir.x, s.z - land.z || dir.z, 32, true);
         }
         this.spellFx(land.x, land.z, 0xff7a2a, 3.5, 40);
         this.sfx.burst();
@@ -1796,14 +2095,14 @@ export class Game {
         break;
       }
       case 'frostring':
-        for (const s of this.enemies.stunAround(p.x, p.z, 5, 2)) this.damage(s, s.x - p.x, s.z - p.z, 8);
+        for (const s of this.enemies.stunAround(p.x, p.z, 5, 2)) this.damage(s, s.x - p.x, s.z - p.z, 8, true);
         this.spellFx(p.x, p.z, 0xbff0ff, 5, 40);
         this.sfx.burst();
         break;
       case 'whirlwind':
         for (const s of foesWithin(p.x, p.z, 3.6)) {
           this.enemies.wake(s);
-          this.damage(s, s.x - p.x, s.z - p.z, 26);
+          this.damage(s, s.x - p.x, s.z - p.z, 26, true);
         }
         this.elf.shoot();
         this.spellFx(p.x, p.z, 0xffd0a0, 3.6, 36);
@@ -1824,7 +2123,7 @@ export class Game {
         }
         pet.leapTo(target.x, target.z);
         this.enemies.wake(target);
-        this.damage(target, target.x - pet.x, target.z - pet.z, 30);
+        this.damage(target, target.x - pet.x, target.z - pet.z, 30, true);
         this.spellFx(target.x, target.z, 0xd9cbb0, 1.6, 18);
         break;
       }
@@ -1893,7 +2192,7 @@ export class Game {
       .filter((s) => s.alive && !s.hidden && !this.enemies.isAsleep(s) && Math.hypot(s.x - p.x, s.z - p.z) < 14)
       .sort((a, b) => Math.hypot(a.x - pet.x, a.z - pet.z) - Math.hypot(b.x - pet.x, b.z - pet.z))[0];
     const bitten = pet.update(dt, p, foe ?? null, this.dungeon.obstacles, this.time);
-    if (bitten && foe) this.damage(foe, foe.x - pet.x, foe.z - pet.z, 7 * (1 + this.heroGear.damage));
+    if (bitten && foe) this.damage(foe, foe.x - pet.x, foe.z - pet.z, 7 * (1 + this.heroGear.damage), true);
   }
 
   // ── Levels and the skill tree ─────────────────────────────────────────────────────────────
@@ -2062,7 +2361,7 @@ export class Game {
       const dmg = TREANT_ALLY.damage[Math.max(0, this.leveling.rank('callforest') - 1)];
       for (const s of [...this.enemies.all]) {
         if (!s.alive || s.hidden || Math.hypot(s.x - slam.x, s.z - slam.z) > TREANT_ALLY.radius + s.radius) continue;
-        this.damage(s, s.x - ally.x, s.z - ally.z, dmg);
+        this.damage(s, s.x - ally.x, s.z - ally.z, dmg, true);
       }
       this.effects.ring(slam.x, slam.z, 0x9ccf5a, TREANT_ALLY.radius);
       this.effects.burst(slam.x, 0.3, slam.z, new THREE.Color(0x8a6a3a), 14, 4, 0.1);
@@ -2089,7 +2388,7 @@ export class Game {
   private springTrap(z: { x: number; z: number; r: number; t: number; dmg?: number; root?: number }): void {
     const inside = this.enemies.all.some((s) => s.alive && !s.hidden && !this.enemies.isAsleep(s) && Math.hypot(s.x - z.x, s.z - z.z) <= z.r + s.radius * 0.5);
     if (!inside) return;
-    for (const s of this.enemies.stunAround(z.x, z.z, z.r, z.root ?? 2)) this.damage(s, s.x - z.x, s.z - z.z, z.dmg ?? 15);
+    for (const s of this.enemies.stunAround(z.x, z.z, z.r, z.root ?? 2)) this.damage(s, s.x - z.x, s.z - z.z, z.dmg ?? 15, true);
     this.spellFx(z.x, z.z, 0x9ccf5a, z.r + 0.6, 26);
     this.sfx.calm();
     z.t = 0;
@@ -2103,7 +2402,7 @@ export class Game {
     for (const s of [...this.enemies.all]) {
       if (!s.alive || s.hidden || Math.hypot(s.x - z.x, s.z - z.z) > z.r + s.radius * 0.5) continue;
       this.enemies.wake(s);
-      this.damage(s, s.x - z.x, s.z - z.z, z.dmg ?? 4);
+      this.damage(s, s.x - z.x, s.z - z.z, z.dmg ?? 4, true);
     }
     for (let i = 0; i < 3; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -2269,6 +2568,7 @@ export class Game {
     this.phase = 'shop';
     this.shop = makeStock(this.room + 1, Math.random);
     this.shopNote = this.merchantWord(this.shop);
+    this.showHighlights(this.famStats, `Level ${this.room + 1} · ${ROOMS[this.room].name}`);
     this.bagPanel.update(this.inv.encode(), this.shop, this.gearSummary(), this.shopNote);
     this.bagPanel.open();
     if (document.pointerLockElement) document.exitPointerLock();
@@ -2346,6 +2646,10 @@ export class Game {
 
   /** Something picked up by the elf (by 0) or the familiar (by 1): it all goes to the party. */
   private collect(c: Collected): void {
+    if (c.by === 1) {
+      this.meter.add(METER.loot);
+      if (c.type === 'gold') this.famStats.gold += c.amount;
+    }
     if (c.type === 'gold') {
       this.inv.addGold(c.amount);
       this.hud.setGold(this.inv.gold);
@@ -2435,7 +2739,7 @@ export class Game {
       const r = this.enchants.fire.rank - 1;
       const radius = SPELL_POWER.fire.radius[r];
       const near = this.enemies.all.filter((s) => s.alive && !s.hidden && Math.hypot(s.x - t.x, s.z - t.z) <= radius + s.radius);
-      for (const s of near) this.damage(s, s.x - t.x || hit.dirX, s.z - t.z || hit.dirZ, SPELL_POWER.fire.damage[r]);
+      for (const s of near) this.damage(s, s.x - t.x || hit.dirX, s.z - t.z || hit.dirZ, SPELL_POWER.fire.damage[r], true);
       this.spellFx(t.x, t.z, ELF_SPELLS.fire.color, radius, 26);
       this.sfx.burst();
     }
@@ -2457,7 +2761,7 @@ export class Game {
         struck.add(next);
         // Sparks along the arc, then the zap.
         for (let k = 1; k <= 4; k++) this.effects.burst(from.x + ((next.x - from.x) * k) / 5, 1.3, from.z + ((next.z - from.z) * k) / 5, new THREE.Color(ELF_SPELLS.chain.color), 3, 1.5, 0.08);
-        this.damage(next, next.x - from.x, next.z - from.z, Math.round(HERO.arrowDamage * SPELL_POWER.chain.share[r] * 10) / 10);
+        this.damage(next, next.x - from.x, next.z - from.z, Math.round(HERO.arrowDamage * SPELL_POWER.chain.share[r] * 10) / 10, true);
         this.spellFx(next.x, next.z, ELF_SPELLS.chain.color, 0, 10);
         from = { x: next.x, z: next.z };
       }
@@ -2534,7 +2838,7 @@ export class Game {
       }
       case 'nova': {
         const P = SPELL_POWER.nova;
-        for (const s of this.enemies.stunAround(p.x, p.z, P.radius[r], P.seconds[r])) this.damage(s, s.x - p.x, s.z - p.z, P.damage[r]);
+        for (const s of this.enemies.stunAround(p.x, p.z, P.radius[r], P.seconds[r])) this.damage(s, s.x - p.x, s.z - p.z, P.damage[r], true);
         this.spellFx(p.x, p.z, def.color, P.radius[r], 40);
         this.sfx.burst();
         break;
@@ -2794,6 +3098,13 @@ export class Game {
     this.telegraph.sync(this.telegraphTuples(), this.time);
   }
 
+  /** The familiar's tally for the whole run so far. */
+  private runTotals(): FamiliarStats {
+    const t = { ...this.runStats };
+    for (const k of Object.keys(t) as (keyof FamiliarStats)[]) t[k] += this.famStats[k];
+    return t;
+  }
+
   private victory(): void {
     this.victoryPending = false;
     this.state = 'won';
@@ -2806,6 +3117,7 @@ export class Game {
     this.hud.setProgress(recordWin(difficulty()));
     this.hud.bossBar.set(null);
     this.hud.showVictory(this.score, this.playTime, isBest);
+    this.showHighlights(this.runTotals(), 'The whole run · victory!');
     this.hud.setBest(loadBest() ?? run);
     this.sfx.wave();
     this.events.push({ e: 'banner', text: '👑 Victory!' });
@@ -2828,6 +3140,7 @@ export class Game {
     const run = { score: this.score, wave: this.wave };
     const isBest = recordRun(run);
     this.hud.showGameOver(this.wave, this.score, isBest);
+    this.showHighlights(this.runTotals(), 'The whole run');
     this.hud.setBest(loadBest() ?? run);
     this.player.deactivate();
   }

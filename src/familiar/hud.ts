@@ -2,7 +2,8 @@ import { POWER_CODES } from '../net/snapshot';
 import type { Snapshot } from '../net/snapshot';
 import { normalizeCode } from '../net/protocol';
 import { fullscreenSupported, isAppleTouch, isFullscreen, isStandalone, onFullscreenChange, toggleFullscreen } from '../ui/fullscreen';
-import { BossBar, Fade, Popups, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey, questTrackerHtml, xpBarHtml } from '../ui/shared';
+import { BossBar, Fade, Popups, TeamPops, cssColor, hpBarHtml, powerChipsHtml, powerChipsKey, questTrackerHtml, xpBarHtml } from '../ui/shared';
+import { PINGS, PING_KINDS, ULTIMATES, type PingKind } from '../game/teamplay';
 import { ROOMS, runLabel } from '../world/rooms';
 import { enemyName, type EnemyKind } from '../game/enemies';
 import type { PowerUpType } from '../game/powerups';
@@ -36,6 +37,9 @@ export class FamiliarHud {
   onStart?: () => void;
   onChoose?: (kind: FamiliarKind) => void;
   onSpell?: (id: SpellId) => void;
+  /** The power meter's ultimate, and a ping for the hero. */
+  onUltimate?: () => void;
+  onPing?: (kind: PingKind) => void;
   /** Rune Seal: an answer was picked; practice room: start a seal to try. */
   onAnswer?: (value: number) => void;
   onRiddle?: () => void;
@@ -50,6 +54,9 @@ export class FamiliarHud {
   private readonly hearts: HTMLElement;
   private readonly xp: HTMLElement;
   private xpKey = '';
+  private readonly team: TeamPops;
+  private readonly ultBtn: HTMLElement;
+  private meterKey = '';
   private readonly quests: HTMLElement;
   private questsKey = '';
   private readonly powers: HTMLElement;
@@ -105,6 +112,9 @@ export class FamiliarHud {
        </div>
        <div class="fam-status" data-f-status hidden></div>
        <div class="spell-bar" data-f-spells></div>
+       <button type="button" class="ult-btn" data-f-ult hidden aria-label="Ultimate"><span class="ult-icon"></span><span class="ult-label"></span></button>
+       <button type="button" class="ping-btn" data-f-ping-open aria-label="Ping the hero">📣</button>
+       <div class="ping-menu" data-f-ping-menu hidden>${PING_KINDS.map((k) => `<button type="button" data-ping="${k}"><span>${PINGS[k].icon}</span><small>${PINGS[k].label || 'Hearts'}</small></button>`).join('')}</div>
        <div class="overlay fam-overlay">
          <div class="card" data-f-card>
            <h1 data-f-title>You're the familiar</h1>
@@ -135,6 +145,27 @@ export class FamiliarHud {
     this.gold = root.querySelector('[data-f-gold]')!;
     this.status = root.querySelector('[data-f-status]')!;
     this.spellBar = root.querySelector('[data-f-spells]')!;
+    this.team = new TeamPops(root);
+    this.ultBtn = root.querySelector('[data-f-ult]')!;
+    this.ultBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!this.isBlocked && this.ultBtn.classList.contains('full')) this.onUltimate?.();
+    });
+    const pingMenu = root.querySelector<HTMLElement>('[data-f-ping-menu]')!;
+    root.querySelector('[data-f-ping-open]')!.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      pingMenu.hidden = !pingMenu.hidden;
+    });
+    pingMenu.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ping]');
+      if (!b) return;
+      this.onPing?.(b.dataset.ping as PingKind);
+      pingMenu.hidden = true;
+    });
     this.changeBtn = root.querySelector('[data-f-change]')!;
     this.overlay = root.querySelector('.fam-overlay')!;
     this.card = root.querySelector('[data-f-card]')!;
@@ -340,6 +371,31 @@ export class FamiliarHud {
     this.seal.classList.remove('wrong');
     void this.seal.offsetWidth; // restart the shake
     this.seal.classList.add('wrong');
+  }
+
+  /** The power meter round the ultimate button (0..100): a full one glows, says its name and can be tapped. */
+  setMeter(value: number, kind: FamiliarKind | null): void {
+    const key = `${kind}:${Math.round(value)}`;
+    if (key === this.meterKey) return;
+    this.meterKey = key;
+    this.ultBtn.hidden = !kind;
+    if (!kind) return;
+    const full = value >= 100;
+    const u = ULTIMATES[kind];
+    this.ultBtn.style.setProperty('--p', String(Math.min(1, value / 100)));
+    this.ultBtn.style.setProperty('--c', cssColor(FAMILIARS[kind].color));
+    this.ultBtn.classList.toggle('full', full);
+    this.ultBtn.querySelector('.ult-icon')!.textContent = u.icon;
+    this.ultBtn.querySelector('.ult-label')!.textContent = full ? u.name : `${Math.round(value)}%`;
+    this.ultBtn.title = `${u.name}: ${u.description}`;
+  }
+
+  combo(chain: number): void {
+    this.team.combo(chain);
+  }
+
+  showHighlights(card: Parameters<TeamPops['card']>[0]): void {
+    this.team.card(card);
   }
 
   /** The quest tracker lines (docs/quests.md). */

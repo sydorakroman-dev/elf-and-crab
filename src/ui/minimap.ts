@@ -20,6 +20,8 @@ export interface MinimapMarks {
   landmarks?: readonly { x: number; z: number }[];
   /** Where to head (the guardian, then the exit): an arrow on the map's edge while it's off the map. */
   goal?: { x: number; z: number } | null;
+  /** The familiar's pings: a pulsing ring in their colour, with their icon. */
+  pings?: readonly { x: number; z: number; color: string; icon: string }[];
 }
 
 /**
@@ -141,6 +143,20 @@ export class Minimap {
     if (marks.exit && (marks.exit.open || this.explored(marks.exit.x, marks.exit.z + 2))) dot(marks.exit.x, marks.exit.z, 4, marks.exit.open ? '#fff1c0' : '#8a7a5a');
     if (marks.boss && this.explored(marks.boss.x, marks.boss.z)) dot(marks.boss.x, marks.boss.z, 4, '#ff4d5e');
     if (marks.familiar) dot(marks.familiar.x, marks.familiar.z, 3, '#7dffcf');
+    for (const ping of marks.pings ?? []) {
+      const pulse = (performance.now() / 600) % 1;
+      ctx.beginPath();
+      ctx.arc(sx(ping.x), sz(ping.z), 5 + pulse * 9, 0, Math.PI * 2);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = ping.color;
+      ctx.globalAlpha = 1 - pulse;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.font = '13px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(ping.icon, sx(ping.x), sz(ping.z));
+    }
     const h = marks.hero;
     if (h.facing !== undefined) {
       // A little arrow for the elf, pointing where it faces.

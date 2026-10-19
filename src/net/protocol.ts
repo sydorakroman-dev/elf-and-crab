@@ -1,5 +1,6 @@
 import { FAMILIAR_KINDS, SPELL_IDS, type FamiliarKind, type SpellId } from '../game/familiars';
 import { MAX_ANSWER } from '../game/riddles';
+import { PING_KINDS, type PingKind } from '../game/teamplay';
 import { GEAR_SLOTS, type GearSlot } from '../game/items';
 import type { InvOp } from '../game/inventory';
 
@@ -114,7 +115,11 @@ export type FamiliarCommand =
   /** Pick (or switch) creature. */
   | { type: 'choose'; kind: FamiliarKind }
   /** Something with the shared bag (equip, drink, buy…). */
-  | { type: 'inv'; req: InvOp };
+  | { type: 'inv'; req: InvOp }
+  /** The power meter is full: the creature's ultimate. */
+  | { type: 'ultimate' }
+  /** A ping for the hero ('look', 'danger', 'loot', 'hearts'). */
+  | { type: 'ping'; kind: PingKind };
 
 /** Validates a familiar command; null if malformed. */
 export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
@@ -123,6 +128,8 @@ export function parseFamiliarCommand(v: unknown): FamiliarCommand | null {
   if (v.type === 'choose' && (FAMILIAR_KINDS as unknown[]).includes(v.kind)) return { type: 'choose', kind: v.kind as FamiliarKind };
   if (v.type === 'answer' && Number.isInteger(v.value) && (v.value as number) >= 0 && (v.value as number) <= MAX_ANSWER) return { type: 'answer', value: v.value as number };
   if (v.type === 'riddle') return { type: 'riddle' };
+  if (v.type === 'ultimate') return { type: 'ultimate' };
+  if (v.type === 'ping' && (PING_KINDS as unknown[]).includes(v.kind)) return { type: 'ping', kind: v.kind as PingKind };
   if (v.type === 'inv' && isObject(v.req)) {
     const r = v.req;
     const index = Number.isInteger(r.i) && (r.i as number) >= 0 && (r.i as number) < 32 ? (r.i as number) : -1;

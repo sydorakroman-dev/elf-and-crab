@@ -1,7 +1,7 @@
 import type { Best } from '../game/highscore';
 import type { InputMode } from '../player/controls';
 import type { PowerUpType } from '../game/powerups';
-import { BossBar, Fade, Popups, hpBarHtml, powerChipsHtml, powerChipsKey, questTrackerHtml, xpBarHtml } from './shared';
+import { BossBar, Fade, Popups, TeamPops, hpBarHtml, powerChipsHtml, powerChipsKey, questTrackerHtml, xpBarHtml } from './shared';
 import { normalizeCode } from '../net/protocol';
 import { ActionBar } from './actionbar';
 import { DIFFICULTIES, DIFFICULTY_LIST, difficulty, setDifficulty, type Difficulty } from '../game/difficulty';
@@ -41,6 +41,8 @@ export class Hud {
   private readonly button: HTMLButtonElement;
   private readonly best: HTMLElement;
   private readonly familiarBadge: HTMLElement;
+  private readonly team: TeamPops;
+  private meterKey = -1;
   private readonly qr: HTMLCanvasElement;
   private readonly codeEl: HTMLElement;
   private readonly linkEl: HTMLElement;
@@ -60,7 +62,7 @@ export class Hud {
          </div>
          <div class="mid"><div class="wave" data-wave></div><div class="quest-list" data-quests></div></div>
          <div class="right">
-           <span class="familiar-badge" data-familiar hidden title="Familiar connected">🦀</span>
+           <span class="familiar-badge fam-meter" data-familiar hidden title="Familiar connected"><span>🦀</span></span>
            <span class="muted" data-muted hidden>🔇</span>
            <div class="gold" data-gold title="Gold">🪙 0</div>
            <div class="score" data-score>0</div>
@@ -162,6 +164,7 @@ export class Hud {
     this.button = root.querySelector('[data-play]')!;
     this.best = root.querySelector('[data-best]')!;
     this.familiarBadge = root.querySelector('[data-familiar]')!;
+    this.team = new TeamPops(root);
     this.qr = root.querySelector('[data-qr]')!;
     this.codeEl = root.querySelector('[data-code]')!;
     this.linkEl = root.querySelector('[data-link]')!;
@@ -291,6 +294,23 @@ export class Hud {
     }
   }
 
+  /** The familiar's power meter (0..1) round its badge; it glows when full. */
+  setFamiliarMeter(fill: number): void {
+    const k = Math.round(fill * 100);
+    if (k === this.meterKey) return;
+    this.meterKey = k;
+    this.familiarBadge.style.setProperty('--p', String(fill));
+    this.familiarBadge.classList.toggle('full', fill >= 1);
+  }
+
+  combo(chain: number): void {
+    this.team.combo(chain);
+  }
+
+  showHighlights(card: Parameters<TeamPops['card']>[0]): void {
+    this.team.card(card);
+  }
+
   /** The quest tracker lines (docs/quests.md). */
   setQuests(lines: readonly { text: string; done: boolean }[]): void {
     const html = questTrackerHtml(lines);
@@ -336,8 +356,8 @@ export class Hud {
     const def = kind ? FAMILIARS[kind] : null;
     this.familiarBadge.hidden = !def;
     if (def) {
-      this.familiarBadge.textContent = def.emoji;
-      this.familiarBadge.title = `${def.name} familiar`;
+      this.familiarBadge.querySelector('span')!.textContent = def.emoji;
+      this.familiarBadge.title = `${def.name} familiar — its power meter`;
     }
     this.inviteStatus.classList.toggle('ok', familiarConnected);
     this.inviteStatus.textContent = familiarConnected

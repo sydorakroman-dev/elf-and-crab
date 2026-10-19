@@ -189,18 +189,17 @@ describe('monsters', () => {
     const e = new Monster('necromancer', 0, 3);
     const hero = new THREE.Vector3();
     let souls = 0;
-    let jump = 0;
+    let away = 0;
     for (let i = 0; i < 60 * 4 && !souls; i++) {
       hero.set(e.x, 0, e.z - 3); // the hero keeps on its heels
-      const before = { x: e.x, z: e.z };
       const s = e.update(1 / 60, hero, [e], []);
       if (s.length === 8) {
         souls = s.length;
-        jump = Math.hypot(e.x - before.x, e.z - before.z);
+        away = Math.hypot(e.x - hero.x, e.z - hero.z); // it reappears ~13 m from the hero (±20%)
       }
     }
     expect(souls).toBe(8);
-    expect(jump).toBeGreaterThan(8);
+    expect(away).toBeGreaterThan(10);
   });
 
   it.each(Object.keys(MONSTERS) as MonsterKind[])('%s runs without errors', (k) => {
